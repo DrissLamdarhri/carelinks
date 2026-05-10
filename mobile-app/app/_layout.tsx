@@ -41,13 +41,13 @@ export default function RootLayout() {
               headerShown: false,
             }}
           >
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(patient)" options={{ headerShown: false }} />
-            <Stack.Screen name="(pro)" options={{ headerShown: false }} />
-            <Stack.Screen name="(admin)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth" options={{ headerShown: false }} />
+            <Stack.Screen name="patient" options={{ headerShown: false }} />
+            <Stack.Screen name="pro" options={{ headerShown: false }} />
+            <Stack.Screen name="admin" options={{ headerShown: false }} />
           </Stack>
         ) : (
-          <View className="flex-1 items-center justify-center bg-primary">
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0D0870" }}>
             <ActivityIndicator size="large" color="#EDE5CC" />
           </View>
         )}
