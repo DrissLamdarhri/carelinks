@@ -9,7 +9,7 @@ export default function AuthLayout() {
   return (
     <Stack>
       <Stack.Screen
-        name="onboarding"
+        name="index"
         options={{
           headerShown: false,
         }}

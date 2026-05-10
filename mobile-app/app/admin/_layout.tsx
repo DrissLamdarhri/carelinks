@@ -11,8 +11,7 @@ export default function AdminLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="index" />
     </Stack>
   );
 }

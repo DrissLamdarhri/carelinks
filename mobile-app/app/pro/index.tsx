@@ -1,227 +1,374 @@
-import { View, Text, TouchableOpacity, ScrollView, FlatList } from "react-native";
-import { useRouter } from "expo-router";
-import { Wifi, WifiOff, TrendingUp, Star, Activity, Calendar, Check, Banknote, X } from "lucide-react-native";
 import { useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Image,
+  TextInput,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  Wifi,
+  WifiOff,
+  TrendingUp,
+  Star,
+  Activity,
+  Calendar,
+  Check,
+  X,
+  Banknote,
+  MapPin,
+} from "lucide-react-native";
+import { Colors, Gradients } from "@/lib/colors";
+import {
+  mockProProfile,
+  mockPendingRequests,
+  mockProAppointments,
+  mockCompletedStats,
+} from "@/lib/mock-data";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function ProHomeScreen() {
-  const router = useRouter();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
-
-  const requests = [
-    {
-      id: "1",
-      name: "Fatima",
-      service: "Infirmier",
-      price: 120,
-      time: "14:30 - 15:00",
-      address: "Fès, Maroc",
-    },
-    {
-      id: "2",
-      name: "Ahmed",
-      service: "Kiné",
-      price: 150,
-      time: "16:00 - 17:00",
-      address: "Fès, Maroc",
-    },
-  ];
+  const [counterFor, setCounterFor] = useState<string | null>(null);
+  const [counterPrice, setCounterPrice] = useState(0);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#EDE5CC" }} contentContainerStyle={{ flexGrow: 1 }}>
-      {/* Header */}
-      <View style={{ backgroundColor: "#0D0870", paddingHorizontal: 20, paddingTop: 40, paddingBottom: 16 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 20, backgroundColor: "rgba(91,184,212,0.3)", justifyContent: "center", alignItems: "center" }}>
-              <Text style={{ color: "white", fontSize: 18, fontWeight: "700" }}>K</Text>
-            </View>
+    <View style={styles.root}>
+      <LinearGradient colors={Gradients.nurse} style={styles.header}>
+        <View style={styles.headerTop}>
+          <View style={styles.userWrap}>
+            <Image source={{ uri: mockProProfile.avatar }} style={styles.avatar} />
             <View>
-              <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Bonjour 👋</Text>
-              <Text style={{ color: "white", fontSize: 16, fontWeight: "700" }}>Karim</Text>
+              <Text style={styles.greeting}>Bonjour 👋</Text>
+              <Text style={styles.userName}>{mockProProfile.name}</Text>
             </View>
           </View>
-
-          {/* Online toggle */}
-          <TouchableOpacity
-            onPress={() => setIsOnline(!isOnline)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              borderRadius: 20,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              backgroundColor: isOnline ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.1)",
-            }}
-          >
-            {isOnline ? (
-              <Wifi size={14} color="#4ade80" />
-            ) : (
-              <WifiOff size={14} color="rgba(255,255,255,0.5)" />
-            )}
-            <Text style={{ fontSize: 11, color: isOnline ? "#4ade80" : "rgba(255,255,255,0.5)", fontWeight: "500" }}>
-              {isOnline ? "En ligne" : "Hors ligne"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Stats */}
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          {[
-            { icon: TrendingUp, label: "Aujourd'hui", value: "450 MAD" },
-            { icon: Star, label: "Note", value: "4.8" },
-            { icon: Activity, label: "Ce mois", value: "12 missions" },
-          ].map((stat, i) => {
-            const Icon = stat.icon;
-            return (
-              <View key={i} style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12, padding: 12 }}>
-                <Icon size={14} color="rgba(255,255,255,0.6)" />
-                <Text style={{ color: "white", fontSize: 14, fontWeight: "700", marginTop: 8 }}>
-                  {stat.value}
-                </Text>
-                <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>
-                  {stat.label}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Tabs */}
-      <View style={{ backgroundColor: "white", flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F0F0F0" }}>
-        {(["requests", "schedule"] as const).map((t) => (
-          <TouchableOpacity
-            key={t}
-            onPress={() => setTab(t)}
-            style={{
-              flex: 1,
-              paddingVertical: 12,
-              borderBottomWidth: tab === t ? 2 : 0,
-              borderBottomColor: tab === t ? "#0D0870" : "transparent",
-            }}
-          >
-            <Text
-              style={{
-                textAlign: "center",
-                fontSize: 14,
-                color: tab === t ? "#0D0870" : "#888780",
-                fontWeight: tab === t ? "600" : "400",
-              }}
+          <View style={styles.rightTop}>
+            <TouchableOpacity
+              onPress={() => setIsOnline((v) => !v)}
+              style={[
+                styles.onlineToggle,
+                isOnline ? styles.onlineToggleOn : undefined,
+              ]}
             >
-              {t === "requests" ? `Demandes (${requests.length})` : "Mon planning"}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              {isOnline ? (
+                <Wifi size={14} color="#4ADE80" />
+              ) : (
+                <WifiOff size={14} color="rgba(255,255,255,0.6)" />
+              )}
+              <Text
+                style={[
+                  styles.onlineText,
+                  isOnline ? { color: "#4ADE80" } : undefined,
+                ]}
+              >
+                {isOnline ? "En ligne" : "Hors ligne"}
+              </Text>
+            </TouchableOpacity>
+            <LocaleSwitcher compact />
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <StatCard icon={TrendingUp} label="Aujourd'hui" value={`${mockCompletedStats.todayEarnings} MAD`} />
+          <StatCard icon={Star} label="Note" value={mockCompletedStats.rating.toFixed(1)} />
+          <StatCard icon={Activity} label="Ce mois" value={`${mockCompletedStats.monthMissions} missions`} />
+        </View>
+      </LinearGradient>
+
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]}
+          onPress={() => setTab("requests")}
+        >
+          <Text style={[styles.tabText, tab === "requests" && styles.tabTextActive]}>
+            Demandes ({mockPendingRequests.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]}
+          onPress={() => setTab("schedule")}
+        >
+          <Text style={[styles.tabText, tab === "schedule" && styles.tabTextActive]}>
+            Mon planning
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
+      <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 26 }}>
         {tab === "requests" ? (
-          <FlatList
-            data={requests}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <View style={{ backgroundColor: "white", borderRadius: 16, overflow: "hidden", marginBottom: 12 }}>
-                {/* Badge */}
-                <View style={{ backgroundColor: "#6BB8C8", paddingVertical: 8, paddingHorizontal: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 11, color: "white", fontWeight: "600" }}>
-                    Nouvelle demande
-                  </Text>
-                  <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.7)" }}>
-                    14:00
-                  </Text>
+          <View style={{ gap: 10 }}>
+            {mockPendingRequests.map((r) => (
+              <View key={r.id} style={styles.requestCard}>
+                <View style={styles.newBar}>
+                  <Text style={styles.newBarText}>Nouvelle demande</Text>
+                  <Text style={styles.newBarSub}>à l’instant</Text>
                 </View>
 
-                {/* Content */}
-                <View style={{ padding: 16 }}>
-                  {/* Patient info */}
-                  <View style={{ flexDirection: "row", gap: 12, marginBottom: 12, alignItems: "center" }}>
-                    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#EDE5CC", justifyContent: "center", alignItems: "center" }}>
-                      <Text style={{ color: "#0D0870", fontSize: 16, fontWeight: "700" }}>
-                        {item.name[0]}
+                <View style={styles.requestBody}>
+                  <View style={styles.reqHeader}>
+                    <View style={styles.reqPatientBadge}>
+                      <Text style={styles.reqPatientInitials}>
+                        {r.patientName
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .slice(0, 2)}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 15, color: "#1A1A1A", fontWeight: "600", marginBottom: 4 }}>
-                        {item.name}
-                      </Text>
-                      <View style={{ backgroundColor: "#EDE5CC", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: "flex-start" }}>
-                        <Text style={{ fontSize: 11, color: "#0D0870", fontWeight: "500" }}>
-                          {item.service}
-                        </Text>
-                      </View>
+                      <Text style={styles.reqPatient}>{r.patientName}</Text>
+                      <Text style={styles.reqCare}>{r.careType}</Text>
                     </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={{ fontSize: 22, color: "#0D0870", fontWeight: "800" }}>
-                        {item.price}
-                      </Text>
-                      <Text style={{ fontSize: 10, color: "#888780" }}>
-                        MAD proposé
-                      </Text>
-                    </View>
+                    <Text style={styles.reqPrice}>{r.proposedPrice} MAD</Text>
                   </View>
 
-                  {/* Time and location */}
-                  <View style={{ flexDirection: "row", gap: 16, marginBottom: 12 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                      <Calendar size={12} color="#888780" />
-                      <Text style={{ fontSize: 12, color: "#888780" }}>
-                        {item.time}
-                      </Text>
-                    </View>
+                  <View style={styles.reqInfoRow}>
+                    <Calendar size={12} color={Colors.textMuted} />
+                    <Text style={styles.reqInfoText}>
+                      {r.dateStr} · {r.timeStr}
+                    </Text>
+                  </View>
+                  <View style={styles.reqInfoRow}>
+                    <MapPin size={12} color={Colors.textMuted} />
+                    <Text style={styles.reqInfoText}>{r.address}</Text>
                   </View>
 
-                  {/* Actions */}
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 12, backgroundColor: "#0D0870", borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}
-                    >
+                  {counterFor === r.id ? (
+                    <View style={styles.counterRow}>
+                      <TextInput
+                        style={styles.counterInput}
+                        keyboardType="numeric"
+                        value={String(counterPrice)}
+                        onChangeText={(v) => setCounterPrice(Number(v || 0))}
+                      />
+                      <Text style={{ color: Colors.textMuted, fontSize: 13 }}>MAD</Text>
+                      <TouchableOpacity
+                        style={styles.sendCounter}
+                        onPress={() => setCounterFor(null)}
+                      >
+                        <Text style={styles.sendCounterText}>Envoyer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.reqActions}>
+                    <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]}>
                       <Check size={16} color="white" />
-                      <Text style={{ fontSize: 13, color: "white", fontWeight: "600" }}>
-                        Accepter
-                      </Text>
+                      <Text style={styles.acceptText}>Accepter</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={{
-                        flex: 1,
-                        paddingVertical: 12,
-                        backgroundColor: "white",
-                        borderRadius: 12,
-                        borderWidth: 2,
-                        borderColor: "#0D0870",
-                        flexDirection: "row",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        gap: 8,
+                      style={[styles.actionBtn, styles.counterBtn]}
+                      onPress={() => {
+                        setCounterFor(r.id);
+                        setCounterPrice(r.proposedPrice + 20);
                       }}
                     >
-                      <Banknote size={16} color="#0D0870" />
-                      <Text style={{ fontSize: 13, color: "#0D0870", fontWeight: "600" }}>
-                        Contre-offre
-                      </Text>
+                      <Banknote size={16} color={Colors.primary} />
+                      <Text style={styles.counterText}>Contre-offre</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ width: 48, paddingVertical: 12, backgroundColor: "white", borderRadius: 12, borderWidth: 1, borderColor: "#E0E0E0", justifyContent: "center", alignItems: "center" }}
-                    >
-                      <X size={18} color="#888780" />
+                    <TouchableOpacity style={styles.rejectBtn}>
+                      <X size={16} color={Colors.textMuted} />
                     </TouchableOpacity>
                   </View>
                 </View>
               </View>
-            )}
-          />
+            ))}
+          </View>
         ) : (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <Calendar size={48} color="#D0D0D0" />
-            <Text style={{ fontSize: 15, color: "#888780", fontWeight: "500", marginTop: 16 }}>
-              Aucun rendez-vous
-            </Text>
+          <View style={{ gap: 10 }}>
+            {mockProAppointments.map((b) => (
+              <View key={b.id} style={styles.bookingCard}>
+                <View style={styles.bookingTimeCol}>
+                  <Text style={styles.bookingTime}>{b.timeStr}</Text>
+                  <Text style={styles.bookingDate}>{b.dateStr}</Text>
+                </View>
+                <View style={styles.sep} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bookingPatient}>{b.patientName}</Text>
+                  <Text style={styles.bookingCare}>{b.careType}</Text>
+                  <Text style={styles.bookingAddr}>{b.address}</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text
+                    style={[
+                      styles.statusPill,
+                      b.status === "completed"
+                        ? styles.statusCompleted
+                        : styles.statusComing,
+                    ]}
+                  >
+                    {b.status === "completed" ? "Terminé" : "À venir"}
+                  </Text>
+                  <Text style={styles.bookingPrice}>{b.price} MAD</Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.statCard}>
+      <Icon size={14} color="rgba(255,255,255,0.65)" />
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
+  header: { paddingHorizontal: 20, paddingTop: 42, paddingBottom: 16 },
+  headerTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  userWrap: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: "rgba(255,255,255,0.35)" },
+  greeting: { color: "rgba(255,255,255,0.62)", fontSize: 12 },
+  userName: { color: "white", fontSize: 17, fontWeight: "600" },
+  rightTop: { alignItems: "flex-end", gap: 6 },
+  onlineToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  onlineToggleOn: { backgroundColor: "rgba(34,197,94,0.16)" },
+  onlineText: { color: "rgba(255,255,255,0.62)", fontSize: 11, fontWeight: "500" },
+  statsRow: { flexDirection: "row", gap: 8 },
+  statCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    padding: 10,
+  },
+  statValue: { color: "white", fontSize: 14, fontWeight: "700", marginTop: 4 },
+  statLabel: { color: "rgba(255,255,255,0.54)", fontSize: 10, marginTop: 2 },
+  tabs: { flexDirection: "row", backgroundColor: "white", borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  tabBtn: { flex: 1, height: 46, justifyContent: "center", alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtnActive: { borderBottomColor: Colors.primary },
+  tabText: { color: Colors.textMuted, fontSize: 14 },
+  tabTextActive: { color: Colors.primary, fontWeight: "600" },
+  body: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
+  requestCard: {
+    borderRadius: 16,
+    backgroundColor: "white",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  newBar: {
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  newBarText: { color: "white", fontSize: 11, fontWeight: "600" },
+  newBarSub: { color: "rgba(255,255,255,0.75)", fontSize: 10 },
+  requestBody: { padding: 12 },
+  reqHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 10 },
+  reqPatientBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surfaceWarm,
+  },
+  reqPatientInitials: { color: Colors.primary, fontSize: 14, fontWeight: "700" },
+  reqPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
+  reqCare: { color: Colors.textMuted, fontSize: 12 },
+  reqPrice: { color: Colors.primary, fontSize: 14, fontWeight: "700" },
+  reqInfoRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 5 },
+  reqInfoText: { color: Colors.textMuted, fontSize: 12 },
+  counterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8 },
+  counterInput: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: Colors.input,
+    paddingHorizontal: 12,
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  sendCounter: {
+    height: 42,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendCounterText: { color: "white", fontSize: 12, fontWeight: "600" },
+  reqActions: { flexDirection: "row", gap: 8, marginTop: 8 },
+  actionBtn: {
+    height: 42,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  acceptBtn: { flex: 1, backgroundColor: Colors.primary },
+  acceptText: { color: "white", fontSize: 12, fontWeight: "600" },
+  counterBtn: { flex: 1, borderWidth: 2, borderColor: Colors.primary, backgroundColor: "white" },
+  counterText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
+  rejectBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bookingCard: {
+    borderRadius: 16,
+    backgroundColor: "white",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bookingTimeCol: { minWidth: 58, alignItems: "center" },
+  bookingTime: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
+  bookingDate: { color: Colors.textMuted, fontSize: 10 },
+  sep: { width: 1, height: 40, backgroundColor: Colors.border },
+  bookingPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
+  bookingCare: { color: Colors.textMuted, fontSize: 12 },
+  bookingAddr: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
+  statusPill: {
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  statusCompleted: { backgroundColor: "#F3F3F5", color: Colors.textMuted },
+  statusComing: { backgroundColor: Colors.surfaceWarm, color: Colors.primary },
+  bookingPrice: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
+});

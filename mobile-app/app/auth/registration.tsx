@@ -1,223 +1,327 @@
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, User, MapPin, ChevronRight, CheckCircle2 } from "lucide-react-native";
-import { useState } from "react";
-
-const MOROCCAN_CITIES = ["Fès", "Casablanca", "Rabat", "Marrakech", "Agadir"];
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  MapPin,
+  Lock,
+  CheckCircle2,
+  ChevronRight,
+} from "lucide-react-native";
+import { Colors } from "@/lib/colors";
+import { MOROCCAN_CITIES } from "@/lib/mock-data";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function RegistrationScreen() {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [city, setCity] = useState("Fès");
   const [email, setEmail] = useState("");
+  const [city, setCity] = useState("Fès");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [confirm, setConfirm] = useState("");
   const [agreed, setAgreed] = useState(false);
 
+  const passwordLevel = useMemo(() => {
+    if (password.length >= 10) return 4;
+    if (password.length >= 8) return 3;
+    if (password.length >= 6) return 2;
+    if (password.length > 0) return 1;
+    return 0;
+  }, [password]);
+
+  const valid =
+    firstName &&
+    lastName &&
+    phone &&
+    email &&
+    city &&
+    password.length >= 6 &&
+    password === confirm &&
+    agreed;
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "white" }} contentContainerStyle={{ flexGrow: 1 }}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
-        {/* Back button */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#F3F3F5", justifyContent: "center", alignItems: "center", marginBottom: 24 }}
-        >
-          <ArrowLeft size={20} color="#1A1A1A" />
+    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
+          <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
+        <LocaleSwitcher />
+      </View>
 
-        {/* Title */}
-        <Text style={{ fontSize: 28, color: "#1A1A1A", fontWeight: "700", fontFamily: "DMSerifDisplay_400Regular", marginBottom: 8 }}>
-          Créer un compte
-        </Text>
-        <Text style={{ fontSize: 14, color: "#888780", marginBottom: 24 }}>
-          Inscrivez-vous pour commencer à utiliser CareLink
-        </Text>
+      <Text style={styles.title}>Créer un compte</Text>
+      <Text style={styles.subtitle}>
+        Inscrivez-vous pour commencer à utiliser CareLink
+      </Text>
 
-        {/* Name fields */}
-        <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-              Prénom
-            </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 8 }}>
-              <User size={16} color="#888780" />
-              <TextInput
-                placeholder="Driss"
-                value={firstName}
-                onChangeText={setFirstName}
-                style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-                placeholderTextColor="#B0B0B0"
-              />
-            </View>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-              Nom
-            </Text>
+      <View style={styles.row}>
+        <View style={styles.col}>
+          <Text style={styles.label}>Prénom</Text>
+          <View style={styles.inputWrap}>
+            <User size={16} color={Colors.textMuted} />
             <TextInput
-              placeholder="Alaoui"
-              value={lastName}
-              onChangeText={setLastName}
-              style={{ flex: 1, height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Driss"
+              placeholderTextColor={Colors.textSubtle}
+              style={styles.input}
             />
           </View>
         </View>
-
-        {/* Phone input */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Téléphone
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, overflow: "hidden" }}>
-            <Text style={{ paddingHorizontal: 12, fontSize: 13, color: "#888780", borderRightWidth: 1, borderRightColor: "#E0E0E0" }}>
-              +212
-            </Text>
-            <TextInput
-              placeholder="6 12 34 56 78"
-              value={phone}
-              onChangeText={setPhone}
-              style={{ flex: 1, paddingHorizontal: 12, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
-            />
-          </View>
+        <View style={styles.col}>
+          <Text style={styles.label}>Nom</Text>
+          <TextInput
+            value={lastName}
+            onChangeText={setLastName}
+            placeholder="Alaoui"
+            placeholderTextColor={Colors.textSubtle}
+            style={styles.simpleInput}
+          />
         </View>
+      </View>
 
-        {/* Email input */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Email
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <Mail size={16} color="#888780" />
-            <TextInput
-              placeholder="driss@email.com"
-              value={email}
-              onChangeText={setEmail}
-              style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
-            />
-          </View>
-        </View>
+      <Text style={styles.label}>Téléphone</Text>
+      <View style={styles.phoneWrap}>
+        <Text style={styles.country}>+212</Text>
+        <TextInput
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="6 12 34 56 78"
+          keyboardType="phone-pad"
+          style={styles.phoneInput}
+          placeholderTextColor={Colors.textSubtle}
+        />
+      </View>
 
-        {/* City picker (simplified) */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Ville
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <MapPin size={16} color="#888780" />
-            <ScrollView horizontal style={{ flex: 1 }}>
-              {MOROCCAN_CITIES.map((c) => (
+      <Text style={styles.label}>Email</Text>
+      <View style={styles.inputWrap}>
+        <Mail size={16} color={Colors.textMuted} />
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="driss@email.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          style={styles.input}
+          placeholderTextColor={Colors.textSubtle}
+        />
+      </View>
+
+      <Text style={styles.label}>Ville</Text>
+      <View style={styles.inputWrap}>
+        <MapPin size={16} color={Colors.textMuted} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {MOROCCAN_CITIES.map((c) => {
+              const active = city === c;
+              return (
                 <TouchableOpacity
                   key={c}
                   onPress={() => setCity(c)}
-                  style={{ paddingRight: 8 }}
+                  style={[
+                    styles.cityChip,
+                    active && {
+                      backgroundColor: Colors.primary,
+                      borderColor: Colors.primary,
+                    },
+                  ]}
                 >
-                  <Text style={{ fontSize: 14, color: c === city ? "#0D0870" : "#888780", fontWeight: c === city ? "600" : "400" }}>
+                  <Text
+                    style={[
+                      styles.cityText,
+                      active && { color: "white", fontWeight: "600" },
+                    ]}
+                  >
                     {c}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              );
+            })}
           </View>
-        </View>
-
-        {/* Password input */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Mot de passe
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <Lock size={16} color="#888780" />
-            <TextInput
-              placeholder="Min. 6 caractères"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
-            />
-          </View>
-        </View>
-
-        {/* Confirm password */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Confirmer le mot de passe
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 50, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <Lock size={16} color="#888780" />
-            <TextInput
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
-            />
-            {confirmPassword && confirmPassword === password && (
-              <CheckCircle2 size={18} color="#0D0870" />
-            )}
-          </View>
-        </View>
-
-        {/* Terms checkbox */}
-        <TouchableOpacity
-          onPress={() => setAgreed(!agreed)}
-          style={{ flexDirection: "row", gap: 12, marginVertical: 16 }}
-        >
-          <View
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: 4,
-              backgroundColor: agreed ? "#0D0870" : "transparent",
-              borderWidth: agreed ? 0 : 2,
-              borderColor: agreed ? "transparent" : "#D0D0D0",
-              justifyContent: "center",
-              alignItems: "center",
-              marginTop: 4,
-            }}
-          >
-            {agreed && <CheckCircle2 size={12} color="white" />}
-          </View>
-          <Text style={{ flex: 1, fontSize: 12, color: "#888780", lineHeight: 18 }}>
-            J'accepte les{" "}
-            <Text style={{ color: "#0D0870", textDecorationLine: "underline" }}>
-              conditions d'utilisation
-            </Text>
-            {" "}et la{" "}
-            <Text style={{ color: "#0D0870", textDecorationLine: "underline" }}>
-              politique de confidentialité
-            </Text>
-          </Text>
-        </TouchableOpacity>
-
-        {/* Submit button */}
-        <TouchableOpacity
-          style={{
-            width: "100%",
-            paddingVertical: 16,
-            backgroundColor: firstName && lastName && phone && email && password && confirmPassword === password && agreed ? "#0D0870" : "#E0E0E0",
-            borderRadius: 16,
-            flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 20,
-          }}
-          disabled={!firstName || !lastName || !phone || !email || !password || confirmPassword !== password || !agreed}
-        >
-          <Text style={{ fontSize: 15, color: "white", fontWeight: "600", fontFamily: "DMSans_500Medium" }}>
-            Créer mon compte
-          </Text>
-          <ChevronRight size={18} color="white" />
-        </TouchableOpacity>
+        </ScrollView>
       </View>
+
+      <Text style={styles.label}>Mot de passe</Text>
+      <View style={styles.inputWrap}>
+        <Lock size={16} color={Colors.textMuted} />
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Min. 6 caractères"
+          secureTextEntry
+          style={styles.input}
+          placeholderTextColor={Colors.textSubtle}
+        />
+      </View>
+
+      {password.length > 0 && (
+        <View style={styles.strengthRow}>
+          {[1, 2, 3, 4].map((l) => (
+            <View
+              key={l}
+              style={[
+                styles.strengthBar,
+                {
+                  backgroundColor:
+                    passwordLevel >= l
+                      ? passwordLevel >= 4
+                        ? Colors.primary
+                        : passwordLevel >= 2
+                        ? Colors.accent
+                        : Colors.danger
+                      : "#E0E0E0",
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.label}>Confirmer le mot de passe</Text>
+      <View style={styles.inputWrap}>
+        <Lock size={16} color={Colors.textMuted} />
+        <TextInput
+          value={confirm}
+          onChangeText={setConfirm}
+          placeholder="••••••••"
+          secureTextEntry
+          style={styles.input}
+          placeholderTextColor={Colors.textSubtle}
+        />
+        {confirm.length > 0 && confirm === password ? (
+          <CheckCircle2 size={18} color={Colors.primary} />
+        ) : null}
+      </View>
+
+      {confirm.length > 0 && confirm !== password ? (
+        <Text style={styles.mismatch}>Les mots de passe ne correspondent pas</Text>
+      ) : null}
+
+      <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed((v) => !v)}>
+        <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
+          {agreed ? <CheckCircle2 size={12} color="white" /> : null}
+        </View>
+        <Text style={styles.termsText}>
+          J'accepte les <Text style={styles.link}>conditions d'utilisation</Text>{" "}
+          et la <Text style={styles.link}>politique de confidentialité</Text>
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        disabled={!valid}
+        onPress={() => router.push("/patient")}
+        style={[styles.submit, !valid && styles.submitDisabled]}
+      >
+        <Text style={styles.submitText}>Créer mon compte</Text>
+        <ChevronRight size={18} color="white" />
+      </TouchableOpacity>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "white" },
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.input,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 30,
+    color: Colors.textPrimary,
+    fontFamily: "DMSerifDisplay_400Regular",
+    marginBottom: 6,
+  },
+  subtitle: { fontSize: 14, color: Colors.textMuted, marginBottom: 18 },
+  row: { flexDirection: "row", gap: 12 },
+  col: { flex: 1 },
+  label: { fontSize: 11, color: Colors.textMuted, marginBottom: 7, marginTop: 10, fontWeight: "500" },
+  inputWrap: {
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: Colors.input,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  input: { flex: 1, fontSize: 14, color: Colors.textPrimary },
+  simpleInput: {
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: Colors.input,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: Colors.textPrimary,
+  },
+  phoneWrap: {
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: Colors.input,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  country: {
+    width: 62,
+    textAlign: "center",
+    color: Colors.textMuted,
+    fontSize: 13,
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+    paddingVertical: 15,
+  },
+  phoneInput: { flex: 1, fontSize: 14, color: Colors.textPrimary, paddingHorizontal: 12 },
+  cityChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: "white",
+  },
+  cityText: { fontSize: 12, color: Colors.textMuted },
+  strengthRow: { flexDirection: "row", gap: 5, marginTop: 8 },
+  strengthBar: { flex: 1, height: 4, borderRadius: 999 },
+  mismatch: { marginTop: 6, color: Colors.danger, fontSize: 11 },
+  termsRow: { flexDirection: "row", gap: 10, marginTop: 14, marginBottom: 16, alignItems: "flex-start" },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#D0D0D0",
+    marginTop: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  termsText: { flex: 1, fontSize: 12, lineHeight: 18, color: Colors.textMuted },
+  link: { color: Colors.primary, textDecorationLine: "underline" },
+  submit: {
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  submitDisabled: { backgroundColor: "#D9D9D9" },
+  submitText: { color: "white", fontSize: 15, fontWeight: "600", fontFamily: "DMSans_500Medium" },
+});

@@ -1,144 +1,241 @@
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from "react-native";
-import { useRouter } from "expo-router";
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, ChevronRight, Stethoscope } from "lucide-react-native";
 import { useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  ArrowLeft,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ChevronRight,
+  Stethoscope,
+  Shield,
+} from "lucide-react-native";
+import { Colors, Gradients } from "@/lib/colors";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function ProLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const valid = email.trim().length > 0 && password.trim().length > 0;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "white" }} contentContainerStyle={{ flexGrow: 1 }}>
-      {/* Header with background */}
-      <View style={{ backgroundColor: "#0D0870", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 }}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.1)", justifyContent: "center", alignItems: "center", marginBottom: 24 }}
-        >
-          <ArrowLeft size={20} color="white" />
-        </TouchableOpacity>
+    <ScrollView style={styles.root} contentContainerStyle={{ flexGrow: 1 }}>
+      <LinearGradient colors={Gradients.patientHeader} style={styles.header}>
+        <View style={styles.headerControls}>
+          <TouchableOpacity
+            onPress={() => router.push("/auth")}
+            style={styles.backBtn}
+          >
+            <ArrowLeft size={20} color="white" />
+          </TouchableOpacity>
+          <LocaleSwitcher compact />
+        </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center" }}>
+        <View style={styles.titleRow}>
+          <View style={styles.proIconWrap}>
             <Stethoscope size={24} color="white" />
           </View>
           <View>
-            <Text style={{ fontSize: 24, color: "white", fontWeight: "700", fontFamily: "DMSerifDisplay_400Regular" }}>
-              Espace Pro
-            </Text>
-            <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+            <Text style={styles.headerTitle}>Espace Pro</Text>
+            <Text style={styles.headerSubtitle}>
               Infirmier · Psychologue · Kiné · Yoga
             </Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
-      {/* Form */}
-      <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
-        <Text style={{ fontSize: 15, color: "#1A1A1A", fontWeight: "600", marginBottom: 20 }}>
+      <View style={styles.form}>
+        <Text style={styles.formLead}>
           Connectez-vous à votre compte professionnel
         </Text>
 
-        {/* Email input */}
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Email professionnel
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 52, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <Mail size={18} color="#888780" />
+        <TouchableOpacity style={styles.googleBtn}>
+          <Text style={styles.googleText}>Continuer avec Google</Text>
+        </TouchableOpacity>
+
+        <View style={styles.sepRow}>
+          <View style={styles.sepLine} />
+          <Text style={styles.sepText}>ou avec email</Text>
+          <View style={styles.sepLine} />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Email professionnel</Text>
+          <View style={styles.inputWrap}>
+            <Mail size={18} color={Colors.textMuted} />
             <TextInput
-              placeholder="karim@carelink.ma"
               value={email}
               onChangeText={setEmail}
-              style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
+              style={styles.input}
+              placeholder="karim@carelink.ma"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor={Colors.textSubtle}
             />
           </View>
         </View>
 
-        {/* Password input */}
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontSize: 11, color: "#888780", fontWeight: "500", marginBottom: 8 }}>
-            Mot de passe
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", height: 52, backgroundColor: "#F3F3F5", borderRadius: 12, paddingHorizontal: 12, gap: 12 }}>
-            <Lock size={18} color="#888780" />
+        <View style={styles.field}>
+          <Text style={styles.label}>Mot de passe</Text>
+          <View style={styles.inputWrap}>
+            <Lock size={18} color={Colors.textMuted} />
             <TextInput
-              placeholder="••••••••"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              style={{ flex: 1, fontSize: 14, color: "#1A1A1A" }}
-              placeholderTextColor="#B0B0B0"
+              secureTextEntry={!showPw}
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={Colors.textSubtle}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              {showPassword ? (
-                <EyeOff size={18} color="#888780" />
+            <TouchableOpacity onPress={() => setShowPw((v) => !v)}>
+              {showPw ? (
+                <EyeOff size={18} color={Colors.textMuted} />
               ) : (
-                <Eye size={18} color="#888780" />
+                <Eye size={18} color={Colors.textMuted} />
               )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Forgot password */}
-        <TouchableOpacity style={{ marginBottom: 24 }}>
-          <Text style={{ fontSize: 13, color: "#0D0870", fontWeight: "500", textAlign: "right" }}>
-            Mot de passe oublié ?
-          </Text>
+        <TouchableOpacity>
+          <Text style={styles.forgot}>Mot de passe oublié ?</Text>
         </TouchableOpacity>
 
-        {/* Sign in button */}
         <TouchableOpacity
-          style={{
-            width: "100%",
-            paddingVertical: 16,
-            backgroundColor: email && password ? "#0D0870" : "#E0E0E0",
-            borderRadius: 16,
-            flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 24,
-          }}
-          disabled={!email || !password}
+          disabled={!valid}
+          onPress={() => router.push("/pro")}
+          style={[styles.submit, !valid && styles.submitDisabled]}
         >
-          <Text style={{ fontSize: 15, color: "white", fontWeight: "600", fontFamily: "DMSans_500Medium" }}>
-            Se connecter
-          </Text>
+          <Text style={styles.submitText}>Se connecter</Text>
           <ChevronRight size={18} color="white" />
         </TouchableOpacity>
 
-        {/* Account verification notice */}
-        <View style={{ backgroundColor: "#EDE5CC", borderRadius: 16, padding: 16, marginBottom: 24 }}>
-          <Text style={{ fontSize: 13, color: "#0D0870", fontWeight: "600", marginBottom: 4 }}>
-            Compte vérifié requis
-          </Text>
-          <Text style={{ fontSize: 11, color: "rgba(13,8,112,0.7)" }}>
-            Seuls les professionnels approuvés peuvent se connecter
-          </Text>
+        <View style={styles.noticeCard}>
+          <Shield size={18} color={Colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.noticeTitle}>Compte vérifié requis</Text>
+            <Text style={styles.noticeBody}>
+              Seuls les professionnels approuvés peuvent se connecter.
+            </Text>
+          </View>
         </View>
 
-        {/* Register link */}
         <TouchableOpacity
           onPress={() => router.push("/auth/registration")}
-          style={{
-            width: "100%",
-            paddingVertical: 14,
-            borderRadius: 16,
-            borderWidth: 2,
-            borderColor: "#0D0870",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
+          style={styles.registerBtn}
         >
-          <Text style={{ fontSize: 14, color: "#0D0870", fontWeight: "600" }}>
-            Créer un compte professionnel
-          </Text>
+          <Text style={styles.registerText}>Créer un compte professionnel</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "white" },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 26 },
+  headerControls: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  proIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 24,
+    color: "white",
+    fontFamily: "DMSerifDisplay_400Regular",
+  },
+  headerSubtitle: { fontSize: 12, color: "rgba(255,255,255,0.65)" },
+  form: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 30, gap: 12 },
+  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 4 },
+  googleBtn: {
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  googleText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
+  sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
+  sepLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  sepText: { fontSize: 11, color: Colors.textMuted },
+  field: { marginTop: 2 },
+  label: { fontSize: 11, color: Colors.textMuted, marginBottom: 7, fontWeight: "500" },
+  inputWrap: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: Colors.input,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  input: { flex: 1, fontSize: 14, color: Colors.textPrimary },
+  forgot: { textAlign: "right", fontSize: 13, color: Colors.primary, fontWeight: "500" },
+  submit: {
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
+  },
+  submitDisabled: { backgroundColor: "#D9D9D9" },
+  submitText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    fontFamily: "DMSans_500Medium",
+  },
+  noticeCard: {
+    marginTop: 4,
+    backgroundColor: Colors.surfaceWarm,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+  noticeTitle: { color: Colors.primary, fontSize: 13, fontWeight: "600", marginBottom: 2 },
+  noticeBody: { color: "rgba(13,8,112,0.7)", fontSize: 11 },
+  registerBtn: {
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  registerText: { color: Colors.primary, fontSize: 14, fontWeight: "600" },
+});
