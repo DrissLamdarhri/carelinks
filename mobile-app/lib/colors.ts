@@ -3,8 +3,8 @@ export const Colors = {
   primary: "#0D0870",
   primaryLight: "#1A1585",
   primaryDark: "#090551",
-  accent: "#6BB8C8",
-  accentSoft: "#8ECDD8",
+  accent: "#5BB8D4",
+  accentSoft: "#8ECFDF",
   surfaceWarm: "#EDE5CC",
 
   // Surfaces

@@ -4,8 +4,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -13,10 +13,12 @@ import {
   MapPin,
   Shield,
   ChevronRight,
+  LocateFixed,
 } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
 import { onboardingSlides } from "@/lib/mock-data";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { geo } from "@/lib/db/geo";
 
 const iconMap = {
   stethoscope: Stethoscope,
@@ -27,12 +29,28 @@ const iconMap = {
 export default function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [cityHint, setCityHint] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const lastStep = onboardingSlides.length - 1;
   const slide = onboardingSlides[step];
   const Icon = iconMap[slide.icon];
 
   const next = () => {
     if (step < lastStep) setStep((s) => s + 1);
+  };
+
+  const handleLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const coords = await geo.getCurrentPosition();
+      const city = await geo.reverseGeocode(coords.lat, coords.lng);
+      setCityHint(city ?? "Position détectée");
+    } catch (error) {
+      setCityHint(error instanceof Error ? error.message : "Localisation indisponible");
+    } finally {
+      setLocating(false);
+    }
   };
 
   return (
@@ -98,6 +116,17 @@ export default function OnboardingScreen() {
 
               <TouchableOpacity onPress={() => router.push("/admin")}>
                 <Text style={styles.adminLink}>Admin Panel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleLocation} style={styles.geoBtn}>
+                <LocateFixed size={14} color={Colors.primary} />
+                <Text style={styles.geoText}>
+                  {locating
+                    ? "Détection GPS..."
+                    : cityHint
+                    ? `Localisation activée · ${cityHint}`
+                    : "Activer la géolocalisation"}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -201,6 +230,21 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.45)",
     textDecorationLine: "underline",
     fontSize: 11,
+  },
+  geoBtn: {
+    marginTop: 8,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceWarm,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  geoText: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: "600",
   },
   bgCircleTopRight: {
     position: "absolute",

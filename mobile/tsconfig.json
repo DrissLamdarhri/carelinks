@@ -4,10 +4,10 @@
     "strict": true,
     "paths": {
       "@carelink/shared": [
-        "../shared/index.ts"
+        "../shared/src/index.ts"
       ],
       "@carelink/shared/*": [
-        "../shared/*"
+        "../shared/src/*"
       ]
     }
   },

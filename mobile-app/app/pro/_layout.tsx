@@ -63,6 +63,20 @@ export default function ProLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="bids"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="documents"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
     </Tabs>
   );
 }

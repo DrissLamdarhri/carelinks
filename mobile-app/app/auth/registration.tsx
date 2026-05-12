@@ -1,28 +1,24 @@
 import { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  ArrowLeft,
-  User,
-  Mail,
-  MapPin,
-  Lock,
-  CheckCircle2,
-  ChevronRight,
-} from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, ChevronRight, Eye, EyeOff, Lock, Mail, MapPin, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { useAuth } from "@/lib/auth-context";
+import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 
 export default function RegistrationScreen() {
   const router = useRouter();
+  const { signUpWithEmail, signInWithGoogle } = useAuth();
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -30,8 +26,13 @@ export default function RegistrationScreen() {
   const [city, setCity] = useState("Fès");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const fullName = `${firstName} ${lastName}`.trim();
   const passwordLevel = useMemo(() => {
     if (password.length >= 10) return 4;
     if (password.length >= 8) return 3;
@@ -41,198 +42,234 @@ export default function RegistrationScreen() {
   }, [password]);
 
   const valid =
-    firstName &&
-    lastName &&
-    phone &&
-    email &&
-    city &&
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    phone.trim().length > 0 &&
+    email.trim().length > 0 &&
     password.length >= 6 &&
-    password === confirm &&
+    confirm === password &&
     agreed;
 
+  const handleGoogleSignUp = async () => {
+    if (googleLoading) return;
+    setErrorMessage(null);
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle("patient");
+      router.replace("/patient");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Inscription Google impossible.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleEmailSignUp = async () => {
+    if (!valid || submitting) return;
+    setErrorMessage(null);
+    setSubmitting(true);
+    try {
+      await signUpWithEmail(email.trim(), password, fullName, "patient");
+      router.replace("/patient");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Inscription impossible.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
-          <ArrowLeft size={20} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <LocaleSwitcher />
-      </View>
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
+            <ArrowLeft size={20} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Créer un compte</Text>
+          <Text style={styles.subtitle}>Inscrivez-vous pour commencer à utiliser CareLink</Text>
+        </View>
 
-      <Text style={styles.title}>Créer un compte</Text>
-      <Text style={styles.subtitle}>
-        Inscrivez-vous pour commencer à utiliser CareLink
-      </Text>
+        <View style={styles.tabWrap}>
+          <TouchableOpacity style={styles.tabBtn} onPress={() => router.push("/auth/patient-login")}>
+            <Text style={styles.tabText}>Connexion</Text>
+          </TouchableOpacity>
+          <View style={[styles.tabBtn, styles.tabActive]}>
+            <Text style={styles.tabActiveText}>Inscription</Text>
+          </View>
+        </View>
 
-      <View style={styles.row}>
-        <View style={styles.col}>
-          <Text style={styles.label}>Prénom</Text>
-          <View style={styles.inputWrap}>
-            <User size={16} color={Colors.textMuted} />
+        <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignUp} />
+
+        <View style={styles.sepRow}>
+          <View style={styles.sepLine} />
+          <Text style={styles.sepText}>ou avec email</Text>
+          <View style={styles.sepLine} />
+        </View>
+
+        <View style={styles.row}>
+          <View style={styles.col}>
+            <Text style={styles.label}>Prénom</Text>
+            <View style={styles.inputWrap}>
+              <User size={16} color={Colors.textMuted} />
+              <TextInput
+                value={firstName}
+                onChangeText={setFirstName}
+                style={styles.input}
+                placeholder="Driss"
+                placeholderTextColor={Colors.textSubtle}
+              />
+            </View>
+          </View>
+          <View style={styles.col}>
+            <Text style={styles.label}>Nom</Text>
             <TextInput
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder="Driss"
+              value={lastName}
+              onChangeText={setLastName}
+              style={styles.simpleInput}
+              placeholder="Alaoui"
               placeholderTextColor={Colors.textSubtle}
-              style={styles.input}
             />
           </View>
         </View>
-        <View style={styles.col}>
-          <Text style={styles.label}>Nom</Text>
+
+        <Text style={styles.label}>Téléphone</Text>
+        <View style={styles.phoneWrap}>
+          <Text style={styles.country}>+212</Text>
           <TextInput
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Alaoui"
+            value={phone}
+            onChangeText={setPhone}
+            style={styles.phoneInput}
+            placeholder="6 12 34 56 78"
+            keyboardType="phone-pad"
             placeholderTextColor={Colors.textSubtle}
-            style={styles.simpleInput}
           />
         </View>
-      </View>
 
-      <Text style={styles.label}>Téléphone</Text>
-      <View style={styles.phoneWrap}>
-        <Text style={styles.country}>+212</Text>
-        <TextInput
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="6 12 34 56 78"
-          keyboardType="phone-pad"
-          style={styles.phoneInput}
-          placeholderTextColor={Colors.textSubtle}
-        />
-      </View>
+        <Text style={styles.label}>Email</Text>
+        <View style={styles.inputWrap}>
+          <Mail size={16} color={Colors.textMuted} />
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            placeholder="driss@email.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor={Colors.textSubtle}
+          />
+        </View>
 
-      <Text style={styles.label}>Email</Text>
-      <View style={styles.inputWrap}>
-        <Mail size={16} color={Colors.textMuted} />
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="driss@email.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          style={styles.input}
-          placeholderTextColor={Colors.textSubtle}
-        />
-      </View>
-
-      <Text style={styles.label}>Ville</Text>
-      <View style={styles.inputWrap}>
-        <MapPin size={16} color={Colors.textMuted} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {MOROCCAN_CITIES.map((c) => {
-              const active = city === c;
-              return (
-                <TouchableOpacity
-                  key={c}
-                  onPress={() => setCity(c)}
-                  style={[
-                    styles.cityChip,
-                    active && {
-                      backgroundColor: Colors.primary,
-                      borderColor: Colors.primary,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.cityText,
-                      active && { color: "white", fontWeight: "600" },
-                    ]}
+        <Text style={styles.label}>Ville</Text>
+        <View style={styles.inputWrap}>
+          <MapPin size={16} color={Colors.textMuted} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.cityChips}>
+              {MOROCCAN_CITIES.map((item) => {
+                const active = item === city;
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    onPress={() => setCity(item)}
+                    style={[styles.cityChip, active && styles.cityChipActive]}
                   >
-                    {c}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text style={[styles.cityText, active && styles.cityTextActive]}>{item}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+
+        <Text style={styles.label}>Mot de passe</Text>
+        <View style={styles.inputWrap}>
+          <Lock size={16} color={Colors.textMuted} />
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            style={styles.input}
+            placeholder="Min. 6 caractères"
+            secureTextEntry={!showPassword}
+            placeholderTextColor={Colors.textSubtle}
+          />
+          <TouchableOpacity onPress={() => setShowPassword((s) => !s)}>
+            {showPassword ? <EyeOff size={16} color={Colors.textMuted} /> : <Eye size={16} color={Colors.textMuted} />}
+          </TouchableOpacity>
+        </View>
+
+        {password.length > 0 ? (
+          <View style={styles.strengthRow}>
+            {[1, 2, 3, 4].map((value) => (
+              <View
+                key={value}
+                style={[
+                  styles.strengthBar,
+                  {
+                    backgroundColor:
+                      passwordLevel >= value
+                        ? passwordLevel >= 4
+                          ? Colors.primary
+                          : passwordLevel >= 2
+                          ? Colors.accent
+                          : Colors.danger
+                        : "#E0E0E0",
+                  },
+                ]}
+              />
+            ))}
           </View>
-        </ScrollView>
-      </View>
-
-      <Text style={styles.label}>Mot de passe</Text>
-      <View style={styles.inputWrap}>
-        <Lock size={16} color={Colors.textMuted} />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Min. 6 caractères"
-          secureTextEntry
-          style={styles.input}
-          placeholderTextColor={Colors.textSubtle}
-        />
-      </View>
-
-      {password.length > 0 && (
-        <View style={styles.strengthRow}>
-          {[1, 2, 3, 4].map((l) => (
-            <View
-              key={l}
-              style={[
-                styles.strengthBar,
-                {
-                  backgroundColor:
-                    passwordLevel >= l
-                      ? passwordLevel >= 4
-                        ? Colors.primary
-                        : passwordLevel >= 2
-                        ? Colors.accent
-                        : Colors.danger
-                      : "#E0E0E0",
-                },
-              ]}
-            />
-          ))}
-        </View>
-      )}
-
-      <Text style={styles.label}>Confirmer le mot de passe</Text>
-      <View style={styles.inputWrap}>
-        <Lock size={16} color={Colors.textMuted} />
-        <TextInput
-          value={confirm}
-          onChangeText={setConfirm}
-          placeholder="••••••••"
-          secureTextEntry
-          style={styles.input}
-          placeholderTextColor={Colors.textSubtle}
-        />
-        {confirm.length > 0 && confirm === password ? (
-          <CheckCircle2 size={18} color={Colors.primary} />
         ) : null}
-      </View>
 
-      {confirm.length > 0 && confirm !== password ? (
-        <Text style={styles.mismatch}>Les mots de passe ne correspondent pas</Text>
-      ) : null}
-
-      <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed((v) => !v)}>
-        <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-          {agreed ? <CheckCircle2 size={12} color="white" /> : null}
+        <Text style={styles.label}>Confirmer le mot de passe</Text>
+        <View style={styles.inputWrap}>
+          <Lock size={16} color={Colors.textMuted} />
+          <TextInput
+            value={confirm}
+            onChangeText={setConfirm}
+            style={styles.input}
+            placeholder="••••••••"
+            secureTextEntry
+            placeholderTextColor={Colors.textSubtle}
+          />
+          {confirm.length > 0 && confirm === password ? <CheckCircle2 size={18} color={Colors.primary} /> : null}
         </View>
-        <Text style={styles.termsText}>
-          J'accepte les <Text style={styles.link}>conditions d'utilisation</Text>{" "}
-          et la <Text style={styles.link}>politique de confidentialité</Text>
-        </Text>
-      </TouchableOpacity>
 
-      <TouchableOpacity
-        disabled={!valid}
-        onPress={() => router.push("/patient")}
-        style={[styles.submit, !valid && styles.submitDisabled]}
-      >
-        <Text style={styles.submitText}>Créer mon compte</Text>
-        <ChevronRight size={18} color="white" />
-      </TouchableOpacity>
-    </ScrollView>
+        {confirm.length > 0 && confirm !== password ? <Text style={styles.mismatch}>Les mots de passe ne correspondent pas</Text> : null}
+
+        <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed((v) => !v)}>
+          <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
+            {agreed ? <CheckCircle2 size={12} color="white" /> : null}
+          </View>
+          <Text style={styles.termsText}>
+            J'accepte les <Text style={styles.link}>conditions d'utilisation</Text> et la{" "}
+            <Text style={styles.link}>politique de confidentialité</Text>.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          disabled={!valid || submitting}
+          onPress={handleEmailSignUp}
+          style={[styles.submit, (!valid || submitting) && styles.submitDisabled]}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <>
+              <Text style={styles.submitText}>Créer mon compte</Text>
+              <ChevronRight size={18} color="white" />
+            </>
+          )}
+        </TouchableOpacity>
+
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "white" },
-  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 28 },
+  header: { marginBottom: 12 },
   backBtn: {
     width: 40,
     height: 40,
@@ -240,14 +277,30 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.input,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 14,
   },
-  title: {
-    fontSize: 30,
-    color: Colors.textPrimary,
-    fontFamily: "DMSerifDisplay_400Regular",
-    marginBottom: 6,
+  title: { fontSize: 28, color: Colors.textPrimary, marginBottom: 4, fontFamily: "DMSerifDisplay_400Regular" },
+  subtitle: { fontSize: 14, color: Colors.textMuted },
+  tabWrap: {
+    flexDirection: "row",
+    backgroundColor: Colors.input,
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
   },
-  subtitle: { fontSize: 14, color: Colors.textMuted, marginBottom: 18 },
+  tabBtn: { flex: 1, height: 40, borderRadius: 9, justifyContent: "center", alignItems: "center" },
+  tabActive: {
+    backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  tabText: { fontSize: 14, color: Colors.textMuted },
+  tabActiveText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
+  sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 14 },
+  sepLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
+  sepText: { fontSize: 11, color: Colors.textMuted },
   row: { flexDirection: "row", gap: 12 },
   col: { flex: 1 },
   label: { fontSize: 11, color: Colors.textMuted, marginBottom: 7, marginTop: 10, fontWeight: "500" },
@@ -287,6 +340,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   phoneInput: { flex: 1, fontSize: 14, color: Colors.textPrimary, paddingHorizontal: 12 },
+  cityChips: { flexDirection: "row", gap: 8 },
   cityChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -295,7 +349,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     backgroundColor: "white",
   },
+  cityChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   cityText: { fontSize: 12, color: Colors.textMuted },
+  cityTextActive: { color: "white", fontWeight: "600" },
   strengthRow: { flexDirection: "row", gap: 5, marginTop: 8 },
   strengthBar: { flex: 1, height: 4, borderRadius: 999 },
   mismatch: { marginTop: 6, color: Colors.danger, fontSize: 11 },
@@ -324,4 +380,5 @@ const styles = StyleSheet.create({
   },
   submitDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600", fontFamily: "DMSans_500Medium" },
+  errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
 });

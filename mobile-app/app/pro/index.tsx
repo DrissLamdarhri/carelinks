@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Wifi,
@@ -20,6 +21,7 @@ import {
   X,
   Banknote,
   MapPin,
+  FileText,
 } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
 import {
@@ -31,6 +33,7 @@ import {
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function ProHomeScreen() {
+  const router = useRouter();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
   const [counterFor, setCounterFor] = useState<string | null>(null);
@@ -96,6 +99,17 @@ export default function ProHomeScreen() {
           <Text style={[styles.tabText, tab === "schedule" && styles.tabTextActive]}>
             Mon planning
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.quickActions}>
+        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/bids")}>
+          <Banknote size={16} color={Colors.primary} />
+          <Text style={styles.quickActionText}>Demandes proches</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/documents")}>
+          <FileText size={16} color={Colors.primary} />
+          <Text style={styles.quickActionText}>Documents KYC</Text>
         </TouchableOpacity>
       </View>
 
@@ -267,6 +281,24 @@ const styles = StyleSheet.create({
   tabBtnActive: { borderBottomColor: Colors.primary },
   tabText: { color: Colors.textMuted, fontSize: 14 },
   tabTextActive: { color: Colors.primary, fontWeight: "600" },
+  quickActions: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: Colors.surfaceWarm,
+  },
+  quickActionBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "white",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  quickActionText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
   body: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
   requestCard: {
     borderRadius: 16,

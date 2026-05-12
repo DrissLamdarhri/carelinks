@@ -64,7 +64,7 @@ interface AuthContextValue {
     email: string,
     password: string,
     intendedRole?: "patient" | "pro"
-  ) => Promise<void>;
+  ) => Promise<UserRole>;
   signUpWithEmail: (
     email: string,
     password: string,
@@ -82,7 +82,7 @@ const AuthContext = createContext<AuthContextValue>({
   refreshProfile: async () => {},
   signOut: async () => {},
   signInWithGoogle: async () => {},
-  signInWithEmail: async () => {},
+  signInWithEmail: async () => null,
   signUpWithEmail: async () => {},
 });
 
@@ -120,13 +120,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role: UserRole = profile?.role ?? null;
 
-  const fetchProfile = async (userId: string) => {
-    const p = await fetchProfileFromSupabase(userId);
+  const fetchProfile = async (authUser: User): Promise<UserProfile | null> => {
+    let p = await fetchProfileFromSupabase(authUser.id);
+    if (!p) {
+      const intendedRole = await AsyncStorage.getItem("carelink_intended_role");
+      const role = intendedRole === "pro" ? "professional" : "patient";
+      const fullName =
+        (authUser.user_metadata?.full_name as string | undefined) ??
+        (authUser.user_metadata?.name as string | undefined) ??
+        authUser.email?.split("@")[0] ??
+        "CareLink User";
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: authUser.id,
+        role,
+        full_name: fullName,
+        language: "fr",
+      });
+      if (profileError) throw profileError;
+
+      if (role === "patient") {
+        const { error: patientError } = await supabase
+          .from("patients")
+          .upsert({ id: authUser.id });
+        if (patientError) throw patientError;
+      } else {
+        const { error: professionalError } = await supabase
+          .from("professionals")
+          .upsert({ id: authUser.id, specialty: "nurse" });
+        if (professionalError) throw professionalError;
+      }
+
+      p = await fetchProfileFromSupabase(authUser.id);
+    }
     if (p) setProfile(p);
+    return p;
   };
 
   const refreshProfile = async () => {
-    if (user?.id) await fetchProfile(user.id);
+    if (user) await fetchProfile(user);
   };
 
   useEffect(() => {
@@ -134,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       if (data.session?.user) {
-        fetchProfile(data.session.user.id).finally(() => setLoading(false));
+        fetchProfile(data.session.user).finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -146,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
-        await fetchProfile(newSession.user.id);
+        await fetchProfile(newSession.user);
       } else {
         setProfile(null);
       }
@@ -204,11 +236,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     intendedRole: "patient" | "pro" = "patient"
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", intendedRole);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
+    if (!data.user) return null;
+    const p = await fetchProfile(data.user);
+    return p?.role ?? intendedRole;
   };
 
   // ── Email/password sign-up ──────────────────────────────────────────────────
@@ -218,16 +253,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     role: "patient" | "pro"
   ) => {
+    await AsyncStorage.setItem("carelink_intended_role", role);
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
     if (data.user) {
-      // Create profile row immediately
-      await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         role: role === "pro" ? "professional" : "patient",
         full_name: fullName,
         language: "fr",
       });
+      if (profileError) throw profileError;
+
+      if (role === "patient") {
+        const { error: patientError } = await supabase
+          .from("patients")
+          .upsert({ id: data.user.id });
+        if (patientError) throw patientError;
+      } else {
+        const { error: professionalError } = await supabase
+          .from("professionals")
+          .upsert({ id: data.user.id, specialty: "nurse" });
+        if (professionalError) throw professionalError;
+      }
     }
   };
 

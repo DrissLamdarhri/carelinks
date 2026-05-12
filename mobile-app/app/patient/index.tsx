@@ -118,6 +118,7 @@ export default function PatientHomeScreen() {
             <TouchableOpacity
               key={qs.id}
               style={[styles.quickBtn, { backgroundColor: qs.background }]}
+              onPress={() => router.push("/patient/request")}
             >
               <Icon size={14} color={qs.color} />
               <Text style={[styles.quickText, { color: qs.color }]}>{qs.label}</Text>
@@ -143,7 +144,15 @@ export default function PatientHomeScreen() {
               <TouchableOpacity
                 key={s.key}
                 style={styles.serviceCard}
-                onPress={() => router.push("/patient")}
+                onPress={() =>
+                  router.push(
+                    s.key === "psy"
+                      ? "/patient/psychologist"
+                      : s.key === "yoga"
+                      ? "/patient/yoga"
+                      : `/patient/request?service=${s.key}`
+                  )
+                }
               >
                 <Image source={{ uri: s.image }} style={styles.serviceImage} />
                 <LinearGradient
@@ -169,7 +178,7 @@ export default function PatientHomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.cta}>
+        <TouchableOpacity style={styles.cta} onPress={() => router.push("/patient/request")}>
           <View style={styles.ctaIconWrap}>
             <Zap size={16} color="white" />
           </View>
@@ -182,7 +191,11 @@ export default function PatientHomeScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
         {mockProfessionals.map((n) => (
-          <TouchableOpacity key={n.id} style={styles.proCard}>
+          <TouchableOpacity
+            key={n.id}
+            style={styles.proCard}
+            onPress={() => router.push(`/patient/provider/${n.id}`)}
+          >
             <Image source={{ uri: n.avatar }} style={styles.proAvatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.proName}>
@@ -203,7 +216,7 @@ export default function PatientHomeScreen() {
             <View style={{ alignItems: "flex-end" }}>
               <Text style={styles.proPrice}>Dès {n.minPrice} MAD</Text>
               <View style={styles.actionsRow}>
-                <TouchableOpacity style={styles.msgBtn}>
+                <TouchableOpacity style={styles.msgBtn} onPress={() => router.push("/patient/messages")}>
                   <MessageCircle size={13} color={Colors.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -220,7 +233,8 @@ export default function PatientHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Prochain rendez-vous</Text>
-        <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
+        <TouchableOpacity onPress={() => router.push("/patient/bookings")} activeOpacity={0.9}>
+          <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
           <View style={styles.bookingBadgeRow}>
             <Text style={styles.bookingBadge}>{mockPatientBooking.careType}</Text>
             <Text style={styles.bookingStatus}>Confirmé</Text>
@@ -235,7 +249,8 @@ export default function PatientHomeScreen() {
           <View style={styles.bookingArrow}>
             <ChevronRight size={20} color="white" />
           </View>
-        </LinearGradient>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );

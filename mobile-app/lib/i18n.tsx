@@ -9,6 +9,7 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -187,29 +188,32 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const setLocale = async (l: Locale) => {
-    const wasRTL = locale === "ar";
-    const willBeRTL = l === "ar";
+  const setLocale = useCallback(
+    async (l: Locale) => {
+      const wasRTL = locale === "ar";
+      const willBeRTL = l === "ar";
 
-    setLocaleState(l);
-    await AsyncStorage.setItem(STORAGE_KEY, l);
+      setLocaleState(l);
+      await AsyncStorage.setItem(STORAGE_KEY, l);
 
-    // Update RTL
-    if (willBeRTL !== wasRTL) {
-      I18nManager.forceRTL(willBeRTL);
-      // App needs reload for RTL change to fully apply
-      // Caller should trigger expo-updates reload if needed
-    }
+      // Update RTL
+      if (willBeRTL !== wasRTL) {
+        I18nManager.forceRTL(willBeRTL);
+        // App needs reload for RTL change to fully apply
+        // Caller should trigger expo-updates reload if needed
+      }
 
-    // Persist to Supabase profile
-    const { data } = await supabase.auth.getUser();
-    if (data.user) {
-      await supabase
-        .from("profiles")
-        .update({ language: l })
-        .eq("id", data.user.id);
-    }
-  };
+      // Persist to Supabase profile
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        await supabase
+          .from("profiles")
+          .update({ language: l })
+          .eq("id", data.user.id);
+      }
+    },
+    [locale]
+  );
 
   const dir = locale === "ar" ? "rtl" : "ltr";
 
@@ -220,7 +224,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       dir,
       t: (k: string) => DICT[locale][k] ?? DICT.fr[k] ?? k,
     }),
-    [locale, dir]
+    [locale, dir, setLocale]
   );
 
   if (!ready) return <>{children}</>;

@@ -20,13 +20,9 @@ import { useFonts } from "expo-font";
 import { AuthProvider } from "../../shared/auth-context";
 import { I18nProvider } from "../../shared/i18n";
 import { supabase } from "../../shared/supabase";
-import { configureNotifications } from "../../shared/push-native";
 
 // Prevent the splash screen from auto-hiding before fonts load
 SplashScreen.preventAutoHideAsync();
-
-// Configure Expo Notifications behaviour
-configureNotifications();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({

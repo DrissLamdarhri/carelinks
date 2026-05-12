@@ -1,68 +1,90 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
-import {
-  ArrowLeft,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ChevronRight,
-  Stethoscope,
-  Shield,
-} from "lucide-react-native";
-import { Colors, Gradients } from "@/lib/colors";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { ArrowLeft, ChevronRight, Eye, EyeOff, Lock, Mail, Shield, Stethoscope } from "lucide-react-native";
+import { Colors } from "@/lib/colors";
+import { useAuth } from "@/lib/auth-context";
+import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 
 export default function ProLoginScreen() {
   const router = useRouter();
+  const { signInWithEmail, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const valid = email.trim().length > 0 && password.trim().length > 0;
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={{ flexGrow: 1 }}>
-      <LinearGradient colors={Gradients.patientHeader} style={styles.header}>
-        <View style={styles.headerControls}>
-          <TouchableOpacity
-            onPress={() => router.push("/auth")}
-            style={styles.backBtn}
-          >
-            <ArrowLeft size={20} color="white" />
-          </TouchableOpacity>
-          <LocaleSwitcher compact />
-        </View>
+  const handleEmailSignIn = async () => {
+    if (!valid || submitting) return;
+    setErrorMessage(null);
+    setSubmitting(true);
+    try {
+      const role = await signInWithEmail(email.trim(), password, "pro");
+      if (role === "patient") {
+        router.replace("/patient");
+      } else if (role === "admin") {
+        router.replace("/admin");
+      } else {
+        router.replace("/pro");
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-        <View style={styles.titleRow}>
+  const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
+    setErrorMessage(null);
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle("pro");
+      router.replace("/pro");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.hero}>
+        <View style={styles.bubbleTop} />
+        <View style={styles.bubbleBottom} />
+
+        <TouchableOpacity onPress={() => router.push("/auth")} style={styles.backBtn}>
+          <ArrowLeft size={20} color="white" />
+        </TouchableOpacity>
+
+        <View style={styles.heroRow}>
           <View style={styles.proIconWrap}>
             <Stethoscope size={24} color="white" />
           </View>
           <View>
-            <Text style={styles.headerTitle}>Espace Pro</Text>
-            <Text style={styles.headerSubtitle}>
-              Infirmier · Psychologue · Kiné · Yoga
-            </Text>
+            <Text style={styles.heroTitle}>Espace Pro</Text>
+            <Text style={styles.heroSubtitle}>Infirmier · Psychologue · Kiné · Yoga</Text>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
-      <View style={styles.form}>
-        <Text style={styles.formLead}>
-          Connectez-vous à votre compte professionnel
-        </Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.formLead}>Connectez-vous à votre compte professionnel</Text>
 
-        <TouchableOpacity style={styles.googleBtn}>
-          <Text style={styles.googleText}>Continuer avec Google</Text>
-        </TouchableOpacity>
+        <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignIn} />
 
         <View style={styles.sepRow}>
           <View style={styles.sepLine} />
@@ -93,17 +115,13 @@ export default function ProLoginScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPw}
               style={styles.input}
               placeholder="••••••••"
+              secureTextEntry={!showPw}
               placeholderTextColor={Colors.textSubtle}
             />
-            <TouchableOpacity onPress={() => setShowPw((v) => !v)}>
-              {showPw ? (
-                <EyeOff size={18} color={Colors.textMuted} />
-              ) : (
-                <Eye size={18} color={Colors.textMuted} />
-              )}
+            <TouchableOpacity onPress={() => setShowPw((s) => !s)}>
+              {showPw ? <EyeOff size={18} color={Colors.textMuted} /> : <Eye size={18} color={Colors.textMuted} />}
             </TouchableOpacity>
           </View>
         </View>
@@ -113,82 +131,98 @@ export default function ProLoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          disabled={!valid}
-          onPress={() => router.push("/pro")}
-          style={[styles.submit, !valid && styles.submitDisabled]}
+          disabled={!valid || submitting}
+          onPress={handleEmailSignIn}
+          style={[styles.submit, (!valid || submitting) && styles.submitDisabled]}
         >
-          <Text style={styles.submitText}>Se connecter</Text>
-          <ChevronRight size={18} color="white" />
+          {submitting ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <>
+              <Text style={styles.submitText}>Se connecter</Text>
+              <ChevronRight size={18} color="white" />
+            </>
+          )}
         </TouchableOpacity>
 
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
         <View style={styles.noticeCard}>
-          <Shield size={18} color={Colors.primary} />
+          <Shield size={20} color={Colors.primary} />
           <View style={{ flex: 1 }}>
             <Text style={styles.noticeTitle}>Compte vérifié requis</Text>
-            <Text style={styles.noticeBody}>
-              Seuls les professionnels approuvés peuvent se connecter.
-            </Text>
+            <Text style={styles.noticeBody}>Seuls les professionnels approuvés peuvent se connecter</Text>
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push("/auth/registration")}
-          style={styles.registerBtn}
-        >
-          <Text style={styles.registerText}>Créer un compte professionnel</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        <View style={styles.registerWrap}>
+          <Text style={styles.registerHint}>Pas encore inscrit ?</Text>
+          <TouchableOpacity onPress={() => router.push("/auth/pro-registration")} style={styles.registerBtn}>
+            <Text style={styles.registerText}>Créer un compte professionnel</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "white" },
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 26 },
-  headerControls: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 18,
+  hero: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingTop: 46,
+    paddingBottom: 26,
+    overflow: "hidden",
+  },
+  bubbleTop: {
+    position: "absolute",
+    top: -34,
+    right: -34,
+    width: 130,
+    height: 130,
+    borderRadius: 70,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  bubbleBottom: {
+    position: "absolute",
+    left: -26,
+    bottom: -20,
+    width: 90,
+    height: 90,
+    borderRadius: 50,
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
     justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
   },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heroRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   proIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: {
-    fontSize: 24,
+  heroTitle: {
     color: "white",
+    fontSize: 24,
     fontFamily: "DMSerifDisplay_400Regular",
   },
-  headerSubtitle: { fontSize: 12, color: "rgba(255,255,255,0.65)" },
-  form: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 30, gap: 12 },
-  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 4 },
-  googleBtn: {
-    height: 52,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  googleText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
-  sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
-  sepLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  heroSubtitle: { color: "rgba(255,255,255,0.65)", fontSize: 13, marginTop: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 28 },
+  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 14 },
+  sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 14 },
+  sepLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
   sepText: { fontSize: 11, color: Colors.textMuted },
-  field: { marginTop: 2 },
+  field: { marginBottom: 12 },
   label: { fontSize: 11, color: Colors.textMuted, marginBottom: 7, fontWeight: "500" },
   inputWrap: {
     height: 52,
@@ -200,7 +234,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   input: { flex: 1, fontSize: 14, color: Colors.textPrimary },
-  forgot: { textAlign: "right", fontSize: 13, color: Colors.primary, fontWeight: "500" },
+  forgot: { textAlign: "right", marginBottom: 14, color: Colors.primary, fontSize: 13, fontWeight: "500" },
   submit: {
     height: 54,
     borderRadius: 16,
@@ -209,33 +243,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    marginTop: 2,
   },
   submitDisabled: { backgroundColor: "#D9D9D9" },
-  submitText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    fontFamily: "DMSans_500Medium",
-  },
+  submitText: { color: "white", fontSize: 15, fontWeight: "600", fontFamily: "DMSans_500Medium" },
+  errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
   noticeCard: {
-    marginTop: 4,
+    marginTop: 14,
     backgroundColor: Colors.surfaceWarm,
     borderRadius: 14,
     padding: 14,
     flexDirection: "row",
+    alignItems: "flex-start",
     gap: 10,
   },
-  noticeTitle: { color: Colors.primary, fontSize: 13, fontWeight: "600", marginBottom: 2 },
-  noticeBody: { color: "rgba(13,8,112,0.7)", fontSize: 11 },
+  noticeTitle: { color: Colors.primary, fontSize: 13, fontWeight: "600" },
+  noticeBody: { color: "rgba(13,8,112,0.74)", fontSize: 11, marginTop: 2 },
+  registerWrap: { marginTop: 16, alignItems: "center", gap: 10 },
+  registerHint: { color: Colors.textMuted, fontSize: 12 },
   registerBtn: {
+    width: "100%",
     height: 50,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: Colors.primary,
-    justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
+    justifyContent: "center",
   },
   registerText: { color: Colors.primary, fontSize: 14, fontWeight: "600" },
 });

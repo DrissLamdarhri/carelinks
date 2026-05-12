@@ -1,6 +1,5 @@
 /**
- * Authentication flows — onboarding, login, registration
- * Mirrors web routes: /auth/patient, /auth/pro, /register
+ * Authentication flows — onboarding, patient/pro login, split registration
  */
 
 import { Stack } from "expo-router";
@@ -28,6 +27,12 @@ export default function AuthLayout() {
       />
       <Stack.Screen
         name="registration"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="pro-registration"
         options={{
           headerShown: false,
         }}

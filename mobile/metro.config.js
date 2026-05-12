@@ -16,8 +16,10 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
-// Explicitly map packages that need to be resolved from workspace root
+// Pin core React packages to mobile/node_modules to avoid duplicate React instances
 config.resolver.extraNodeModules = {
+  react: path.resolve(projectRoot, "node_modules/react"),
+  "react-native": path.resolve(projectRoot, "node_modules/react-native"),
   "@expo/metro-runtime": path.resolve(
     workspaceRoot,
     "node_modules/@expo/metro-runtime"

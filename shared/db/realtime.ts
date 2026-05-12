@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useFocusEffect } from "expo-router";
 import { supabase } from "../supabase";
 import { db } from "./dal";
 import type {
@@ -65,39 +66,43 @@ export function useBookingBids(bookingId: UUID | null) {
     [bookingId]
   );
 
-  useEffect(() => {
-    if (!bookingId) return;
-    const channel = supabase
-      .channel(`bids:booking:${bookingId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bids",
-          filter: `booking_id=eq.${bookingId}`,
-        },
-        (payload) => {
-          setData((prev) => {
-            if (payload.eventType === "INSERT")
-              return [...prev, payload.new as Bid].sort(
-                (a, b) => a.price_mad - b.price_mad
-              );
-            if (payload.eventType === "UPDATE")
-              return prev
-                .map((b) =>
-                  b.id === (payload.new as Bid).id ? (payload.new as Bid) : b
-                )
-                .sort((a, b) => a.price_mad - b.price_mad);
-            if (payload.eventType === "DELETE")
-              return prev.filter((b) => b.id !== (payload.old as Bid).id);
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [bookingId, setData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!bookingId) return;
+      const channel = supabase
+        .channel(`bids:booking:${bookingId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bids",
+            filter: `booking_id=eq.${bookingId}`,
+          },
+          (payload) => {
+            setData((prev) => {
+              if (payload.eventType === "INSERT")
+                return [...prev, payload.new as Bid].sort(
+                  (a, b) => a.price_mad - b.price_mad
+                );
+              if (payload.eventType === "UPDATE")
+                return prev
+                  .map((b) =>
+                    b.id === (payload.new as Bid).id ? (payload.new as Bid) : b
+                  )
+                  .sort((a, b) => a.price_mad - b.price_mad);
+              if (payload.eventType === "DELETE")
+                return prev.filter((b) => b.id !== (payload.old as Bid).id);
+              return prev;
+            });
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [bookingId, setData])
+  );
 
   const pendingBids = data.filter((b) => b.status === "pending");
   return { bids: data, pendingBids, loading, error, refresh };
@@ -113,37 +118,41 @@ export function usePatientBookings(patientId: UUID | null) {
     [patientId]
   );
 
-  useEffect(() => {
-    if (!patientId) return;
-    const channel = supabase
-      .channel(`bookings:patient:${patientId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookings",
-          filter: `patient_id=eq.${patientId}`,
-        },
-        (payload) => {
-          setData((prev) => {
-            if (payload.eventType === "INSERT")
-              return [payload.new as Booking, ...prev];
-            if (payload.eventType === "UPDATE")
-              return prev.map((b) =>
-                b.id === (payload.new as Booking).id
-                  ? (payload.new as Booking)
-                  : b
-              );
-            if (payload.eventType === "DELETE")
-              return prev.filter((b) => b.id !== (payload.old as Booking).id);
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [patientId, setData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!patientId) return;
+      const channel = supabase
+        .channel(`bookings:patient:${patientId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bookings",
+            filter: `patient_id=eq.${patientId}`,
+          },
+          (payload) => {
+            setData((prev) => {
+              if (payload.eventType === "INSERT")
+                return [payload.new as Booking, ...prev];
+              if (payload.eventType === "UPDATE")
+                return prev.map((b) =>
+                  b.id === (payload.new as Booking).id
+                    ? (payload.new as Booking)
+                    : b
+                );
+              if (payload.eventType === "DELETE")
+                return prev.filter((b) => b.id !== (payload.old as Booking).id);
+              return prev;
+            });
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [patientId, setData])
+  );
 
   const upcoming = data.filter((b) =>
     ["open", "matched", "in_progress"].includes(b.status)
@@ -165,42 +174,46 @@ export function useOpenBookingsBySpecialty(specialty: ProSpecialty | null) {
     [specialty]
   );
 
-  useEffect(() => {
-    if (!specialty) return;
-    const channel = supabase
-      .channel(`bookings:specialty:${specialty}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookings",
-          filter: `specialty=eq.${specialty}`,
-        },
-        (payload) => {
-          setData((prev) => {
-            const isOpen = (b: Booking) => b.status === "open";
-            if (payload.eventType === "INSERT") {
-              const row = payload.new as Booking;
-              return isOpen(row) ? [row, ...prev] : prev;
-            }
-            if (payload.eventType === "UPDATE") {
-              const row = payload.new as Booking;
-              const exists = prev.some((b) => b.id === row.id);
-              if (!isOpen(row)) return prev.filter((b) => b.id !== row.id);
-              return exists
-                ? prev.map((b) => (b.id === row.id ? row : b))
-                : [row, ...prev];
-            }
-            if (payload.eventType === "DELETE")
-              return prev.filter((b) => b.id !== (payload.old as Booking).id);
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [specialty, setData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!specialty) return;
+      const channel = supabase
+        .channel(`bookings:specialty:${specialty}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bookings",
+            filter: `specialty=eq.${specialty}`,
+          },
+          (payload) => {
+            setData((prev) => {
+              const isOpen = (b: Booking) => b.status === "open";
+              if (payload.eventType === "INSERT") {
+                const row = payload.new as Booking;
+                return isOpen(row) ? [row, ...prev] : prev;
+              }
+              if (payload.eventType === "UPDATE") {
+                const row = payload.new as Booking;
+                const exists = prev.some((b) => b.id === row.id);
+                if (!isOpen(row)) return prev.filter((b) => b.id !== row.id);
+                return exists
+                  ? prev.map((b) => (b.id === row.id ? row : b))
+                  : [row, ...prev];
+              }
+              if (payload.eventType === "DELETE")
+                return prev.filter((b) => b.id !== (payload.old as Booking).id);
+              return prev;
+            });
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [specialty, setData])
+  );
 
   return { bookings: data, loading, error, refresh };
 }
@@ -215,29 +228,33 @@ export function useBookingMessages(bookingId: UUID | null) {
     [bookingId]
   );
 
-  useEffect(() => {
-    if (!bookingId) return;
-    const channel = supabase
-      .channel(`messages:booking:${bookingId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `booking_id=eq.${bookingId}`,
-        },
-        (payload) => {
-          setData((prev) => {
-            const msg = payload.new as Message;
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [bookingId, setData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!bookingId) return;
+      const channel = supabase
+        .channel(`messages:booking:${bookingId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `booking_id=eq.${bookingId}`,
+          },
+          (payload) => {
+            setData((prev) => {
+              const msg = payload.new as Message;
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [bookingId, setData])
+  );
 
   return { messages: data, setMessages: setData, loading, error, refresh };
 }
@@ -253,39 +270,43 @@ export function useUserNotifications(userId: UUID | null) {
       [userId]
     );
 
-  useEffect(() => {
-    if (!userId) return;
-    const channel = supabase
-      .channel(`notifications:user:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          setData((prev) => {
-            if (payload.eventType === "INSERT")
-              return [payload.new as Notification, ...prev];
-            if (payload.eventType === "UPDATE")
-              return prev.map((n) =>
-                n.id === (payload.new as Notification).id
-                  ? (payload.new as Notification)
-                  : n
-              );
-            if (payload.eventType === "DELETE")
-              return prev.filter(
-                (n) => n.id !== (payload.old as Notification).id
-              );
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [userId, setData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      const channel = supabase
+        .channel(`notifications:user:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            setData((prev) => {
+              if (payload.eventType === "INSERT")
+                return [payload.new as Notification, ...prev];
+              if (payload.eventType === "UPDATE")
+                return prev.map((n) =>
+                  n.id === (payload.new as Notification).id
+                    ? (payload.new as Notification)
+                    : n
+                );
+              if (payload.eventType === "DELETE")
+                return prev.filter(
+                  (n) => n.id !== (payload.old as Notification).id
+                );
+              return prev;
+            });
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [userId, setData])
+  );
 
   const unreadCount = data.filter((n) => !n.is_read).length;
   return { notifications: data, unreadCount, loading, error, refresh };

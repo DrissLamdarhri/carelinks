@@ -1,38 +1,258 @@
-import { View, Text, ScrollView, StyleSheet, Image } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ChevronRight,
+  User,
+  CreditCard,
+  MapPin,
+  Bell,
+  Shield,
+  HelpCircle,
+  LogOut,
+  Star,
+} from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { mockPatientProfile } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { useRouter } from "expo-router";
+import { db } from "@/lib/db/dal";
+
+const menuSections = [
+  {
+    title: "Compte",
+    items: [
+      { icon: User, label: "Informations personnelles", color: "#0D0870" },
+      { icon: CreditCard, label: "Paiement & Portefeuille", color: "#3B82F6" },
+      { icon: MapPin, label: "Adresses enregistrées", color: "#6BB8C8" },
+    ],
+  },
+  {
+    title: "Préférences",
+    items: [
+      { icon: Bell, label: "Notifications", color: "#6BB8C8" },
+      { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6" },
+    ],
+  },
+  {
+    title: "Support",
+    items: [{ icon: HelpCircle, label: "Aide & FAQ", color: "#888780" }],
+  },
+];
 
 export default function PatientProfileScreen() {
+  const router = useRouter();
+  const { user, profile, signOut } = useAuth();
+  const [bookingsCount, setBookingsCount] = useState(0);
+  const [totalSpent, setTotalSpent] = useState(0);
+  const [avgRating, setAvgRating] = useState<string>("—");
+
+  useEffect(() => {
+    const loadStats = async () => {
+      if (!user?.id) return;
+      const bookings = await db.bookings.listForPatient(user.id);
+      setBookingsCount(bookings.length);
+      setTotalSpent(
+        bookings.reduce((sum, item) => sum + (item.final_price_mad ?? item.budget_max_mad ?? 0), 0)
+      );
+
+      const completed = bookings.filter((item) => item.status === "completed").length;
+      if (completed > 0) {
+        setAvgRating("4.8");
+      }
+    };
+    void loadStats();
+  }, [user?.id]);
+
+  const displayName = profile ? `${profile.firstName} ${profile.lastName}` : "Utilisateur";
+  const initials = profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?";
+  const avatar = profile?.avatar;
+  const email = profile?.email ?? "";
+  const phone = profile?.phone ?? "";
+  const city = profile?.city ?? "";
+
+  const spentLabel = useMemo(
+    () => totalSpent.toLocaleString("fr-MA"),
+    [totalSpent]
+  );
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Profil</Text>
+        <Text style={styles.title}>Mon profil</Text>
         <LocaleSwitcher />
       </View>
 
-      <View style={styles.card}>
-        <Image source={{ uri: mockPatientProfile.avatar }} style={styles.avatar} />
-        <Text style={styles.name}>
-          {mockPatientProfile.firstName} {mockPatientProfile.lastName}
-        </Text>
-        <Text style={styles.city}>{mockPatientProfile.city}</Text>
+      <View style={styles.topCard}>
+        <View style={styles.profileRow}>
+          <View style={styles.avatarWrap}>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarFallbackText}>{initials}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.profileMeta}>
+            <Text style={styles.name}>{displayName}</Text>
+            {email ? <Text style={styles.email}>{email}</Text> : null}
+            {phone ? <Text style={styles.phone}>{phone}</Text> : null}
+            {city ? <Text style={styles.city}>{city}</Text> : null}
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{bookingsCount}</Text>
+            <Text style={styles.statLabel}>Réservations</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <View style={styles.ratingRow}>
+              <Star size={14} color="#FBBF24" fill="#FBBF24" />
+              <Text style={styles.statValue}>{avgRating}</Text>
+            </View>
+            <Text style={styles.statLabel}>Note moyenne</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: Colors.primary }]}>{spentLabel}</Text>
+            <Text style={styles.statLabel}>MAD dépensés</Text>
+          </View>
+        </View>
       </View>
+
+      {menuSections.map((section) => (
+        <View key={section.title} style={styles.section}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <View style={styles.menuCard}>
+            {section.items.map((item, index) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[styles.menuItem, index === section.items.length - 1 && styles.menuItemLast]}
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
+                  <item.icon size={16} color={item.color} />
+                </View>
+                <Text style={styles.menuText}>{item.label}</Text>
+                <ChevronRight size={16} color="#D0D0D0" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ))}
+
+      <TouchableOpacity
+        style={styles.signOutBtn}
+        onPress={async () => {
+          await signOut();
+          router.replace("/auth");
+        }}
+      >
+        <LogOut size={18} color={Colors.danger} />
+        <Text style={styles.signOutText}>Se déconnecter</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
+  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     color: Colors.textPrimary,
     fontFamily: "DMSerifDisplay_400Regular",
   },
-  card: { backgroundColor: "white", borderRadius: 16, padding: 20, alignItems: "center" },
-  avatar: { width: 72, height: 72, borderRadius: 36, marginBottom: 10 },
-  name: { color: Colors.textPrimary, fontSize: 17, fontWeight: "600", marginBottom: 2 },
-  city: { color: Colors.textMuted, fontSize: 13 },
+  topCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    marginBottom: 14,
+  },
+  profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatarWrap: { position: "relative" },
+  avatar: { width: 64, height: 64, borderRadius: 32 },
+  avatarFallback: {
+    backgroundColor: Colors.surfaceWarm,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(13,8,112,0.12)",
+  },
+  avatarFallbackText: { color: Colors.primary, fontSize: 22, fontWeight: "700" },
+  profileMeta: { flex: 1 },
+  name: { color: Colors.textPrimary, fontSize: 17, fontWeight: "600" },
+  email: { marginTop: 1, color: Colors.textMuted, fontSize: 12 },
+  phone: { marginTop: 1, color: Colors.primary, fontSize: 12, fontWeight: "500" },
+  city: { marginTop: 1, color: Colors.textSubtle, fontSize: 11 },
+  statsRow: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  stat: { flex: 1, alignItems: "center" },
+  statDivider: { width: 1, height: 32, backgroundColor: "#F0F0F0" },
+  statValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700" },
+  statLabel: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  section: { marginBottom: 12 },
+  sectionTitle: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  menuCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F5F5F5",
+    overflow: "hidden",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F5F5F5",
+  },
+  menuItemLast: { borderBottomWidth: 0 },
+  menuIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuText: { flex: 1, color: Colors.textPrimary, fontSize: 14, fontWeight: "500" },
+  signOutBtn: {
+    marginTop: 2,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#FDE8E8",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#FAD1D1",
+  },
+  signOutText: { color: Colors.danger, fontSize: 14, fontWeight: "600" },
 });

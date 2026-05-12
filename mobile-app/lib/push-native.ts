@@ -3,32 +3,40 @@
  * Handles push tokens, permissions, notification configuration
  */
 
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { supabase } from "./supabase";
 
 type NotificationsModule = typeof import("expo-notifications");
 type DeviceModule = typeof import("expo-device");
 
-let Notifications: NotificationsModule | null = null;
-let Device: DeviceModule | null = null;
+const isExpoGo =
+  Constants.appOwnership === "expo" ||
+  Constants.executionEnvironment === "storeClient";
 
-try {
-  Notifications = require("expo-notifications");
-  Device = require("expo-device");
-} catch (error) {
-  console.warn(
-    "[push-native] Notifications not available:",
-    error instanceof Error ? error.message : String(error)
-  );
+async function loadNotificationsModules() {
+  if (isExpoGo) {
+    return null;
+  }
+
+  try {
+    const Notifications = require("expo-notifications") as NotificationsModule;
+    const Device = require("expo-device") as DeviceModule;
+    return { Notifications, Device };
+  } catch (error) {
+    console.warn(
+      "[push-native] Notifications not available:",
+      error instanceof Error ? error.message : String(error)
+    );
+    return null;
+  }
 }
 
-const isExpoGo =
-  typeof global !== "undefined" &&
-  global.navigator &&
-  typeof global.navigator.userAgent === "string";
-
 export async function registerExpoPushToken(userId: string): Promise<void> {
-  if (isExpoGo || !Notifications || !Device) return;
+  const modules = await loadNotificationsModules();
+  if (!modules) return;
+
+  const { Notifications, Device } = modules;
   if (!Device.isDevice) {
     console.log("Push notifications only work on physical devices.");
     return;
@@ -63,19 +71,23 @@ export async function registerExpoPushToken(userId: string): Promise<void> {
 }
 
 export function configureNotifications() {
-  if (isExpoGo || !Notifications) return;
+  if (isExpoGo) return;
 
-  try {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowAlert: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
-  } catch (error) {
-    console.warn("Failed to configure notifications:", error);
-  }
+  void loadNotificationsModules().then((modules) => {
+    if (!modules) return;
+
+    try {
+      modules.Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowAlert: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+    } catch (error) {
+      console.warn("Failed to configure notifications:", error);
+    }
+  });
 }
