@@ -30,7 +30,7 @@ import {
   mockProAppointments,
   mockCompletedStats,
 } from "@/lib/mock-data";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export default function ProHomeScreen() {
   const router = useRouter();
@@ -72,7 +72,9 @@ export default function ProHomeScreen() {
                 {isOnline ? "En ligne" : "Hors ligne"}
               </Text>
             </TouchableOpacity>
-            <LocaleSwitcher compact />
+            <View style={styles.rightActions}>
+              <NotificationBell />
+            </View>
           </View>
         </View>
 
@@ -107,7 +109,7 @@ export default function ProHomeScreen() {
           <Banknote size={16} color={Colors.primary} />
           <Text style={styles.quickActionText}>Demandes proches</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/documents")}>
+        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/kyc")}>
           <FileText size={16} color={Colors.primary} />
           <Text style={styles.quickActionText}>Documents KYC</Text>
         </TouchableOpacity>
@@ -256,6 +258,11 @@ const styles = StyleSheet.create({
   greeting: { color: "rgba(255,255,255,0.62)", fontSize: 12 },
   userName: { color: "white", fontSize: 17, fontWeight: "600" },
   rightTop: { alignItems: "flex-end", gap: 6 },
+  rightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   onlineToggle: {
     flexDirection: "row",
     alignItems: "center",

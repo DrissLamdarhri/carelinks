@@ -12,6 +12,9 @@ export default function AdminLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="metrics" />
+      <Stack.Screen name="kyc" />
     </Stack>
   );
 }

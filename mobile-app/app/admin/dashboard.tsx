@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Users, Briefcase, CalendarClock, Star, AlertTriangle } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
@@ -17,6 +18,8 @@ const alerts = [
 ];
 
 export default function AdminDashboardScreen() {
+  const router = useRouter();
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <LinearGradient colors={[Colors.primary, "#1A1585"]} style={styles.header}>
@@ -47,6 +50,14 @@ export default function AdminDashboardScreen() {
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Configuration</Text>
         <Text style={styles.panelText}>Tarification, zones géographiques, validation KYC et gestion des litiges sont disponibles ici dans la version mobile.</Text>
+        <View style={styles.ctaRow}>
+          <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/metrics")}>
+            <Text style={styles.ctaText}>Voir les métriques</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/kyc")}>
+            <Text style={styles.ctaText}>File KYC</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </ScrollView>
   );
@@ -89,4 +100,22 @@ const styles = StyleSheet.create({
   alertRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   alertText: { color: Colors.textPrimary, fontSize: 13, flex: 1 },
   panelText: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
+  ctaRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  ctaBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ctaText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

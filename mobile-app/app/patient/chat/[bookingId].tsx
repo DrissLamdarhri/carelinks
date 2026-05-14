@@ -1,66 +1,57 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Send } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
-import { useBookingMessages } from "@/lib/db/realtime";
+import { LiveChat } from "@/components/LiveChat";
 
 export default function BookingChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId: string }>();
   const bookingId = params.bookingId;
-  const { user } = useAuth();
+  const { user, role } = useAuth();
 
-  const { messages, setMessages, loading, error } = useBookingMessages(bookingId);
-  const [value, setValue] = useState("");
-  const [sending, setSending] = useState(false);
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const sortedMessages = useMemo(
-    () => [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [messages]
-  );
-
-  const handleSend = async () => {
-    if (!value.trim().length || !user?.id || sending) return;
-    setErrorMessage(null);
-    setSending(true);
-    const optimisticId = `optimistic-${Date.now()}`;
-    const optimistic = {
-      id: optimisticId,
-      booking_id: bookingId,
-      sender_id: user.id,
-      body: value.trim(),
-      created_at: new Date().toISOString(),
+  useEffect(() => {
+    let active = true;
+    const loadRecipient = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setErrorMessage(null);
+      try {
+        const booking = await db.bookings.get(bookingId);
+        if (!active) return;
+        const counterpart =
+          role === "pro" ? booking.patient_id : booking.professional_id ?? booking.patient_id;
+        setRecipientId(counterpart);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(error instanceof Error ? error.message : "Conversation indisponible.");
+      } finally {
+        if (active) setLoading(false);
+      }
     };
-    setMessages((prev) => [...prev, optimistic]);
-    setValue("");
-    try {
-      await db.messages.send({
-        booking_id: bookingId,
-        sender_id: user.id,
-        body: optimistic.body,
-      });
-      setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
-    } catch (error) {
-      setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
-      setErrorMessage(error instanceof Error ? error.message : "Le message n'a pas pu être envoyé.");
-    } finally {
-      setSending(false);
-    }
-  };
+    void loadRecipient();
+    return () => {
+      active = false;
+    };
+  }, [bookingId, role, user?.id]);
 
   return (
     <KeyboardAvoidingView
@@ -78,61 +69,17 @@ export default function BookingChatScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.messagesList} contentContainerStyle={styles.messagesContent}>
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-          </View>
-        ) : null}
-
-        {!loading && sortedMessages.length === 0 ? (
-          <View style={styles.center}>
-            <Text style={styles.emptyText}>Commencez la conversation avec votre professionnel.</Text>
-          </View>
-        ) : null}
-
-        {sortedMessages.map((message) => {
-          const mine = message.sender_id === user?.id;
-          return (
-            <View key={message.id} style={[styles.bubbleRow, mine ? styles.bubbleRight : styles.bubbleLeft]}>
-              <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.body}</Text>
-                <Text style={[styles.timestamp, mine && styles.timestampMine]}>
-                  {new Date(message.created_at).toLocaleTimeString("fr-MA", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      {(error || errorMessage) && (
-        <Text style={styles.errorText}>{error?.message ?? errorMessage}</Text>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : recipientId ? (
+        <LiveChat bookingId={bookingId} recipientId={recipientId} />
+      ) : (
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{errorMessage ?? "Destinataire introuvable."}</Text>
+        </View>
       )}
-
-      <View style={styles.inputRow}>
-        <TextInput
-          value={value}
-          onChangeText={setValue}
-          style={styles.input}
-          placeholder="Votre message..."
-          placeholderTextColor={Colors.textSubtle}
-        />
-        <TouchableOpacity
-          disabled={!value.trim().length || sending}
-          onPress={handleSend}
-          style={[styles.sendBtn, (!value.trim().length || sending) && styles.sendBtnDisabled]}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Send size={16} color="white" />
-          )}
-        </TouchableOpacity>
-      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -158,46 +105,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 16, color: Colors.textPrimary, fontWeight: "600" },
   subtitle: { fontSize: 11, color: Colors.textMuted },
-  messagesList: { flex: 1 },
-  messagesContent: { paddingHorizontal: 14, paddingVertical: 16, gap: 8 },
-  center: { alignItems: "center", justifyContent: "center", paddingVertical: 40 },
-  emptyText: { color: Colors.textMuted, fontSize: 13, textAlign: "center" },
-  bubbleRow: { flexDirection: "row" },
-  bubbleLeft: { justifyContent: "flex-start" },
-  bubbleRight: { justifyContent: "flex-end" },
-  bubble: { maxWidth: "80%", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14 },
-  bubbleMine: { backgroundColor: Colors.primary, borderBottomRightRadius: 6 },
-  bubbleOther: { backgroundColor: "white", borderBottomLeftRadius: 6 },
-  bubbleText: { color: Colors.textPrimary, fontSize: 13, lineHeight: 18 },
-  bubbleTextMine: { color: "white" },
-  timestamp: { marginTop: 4, fontSize: 10, color: Colors.textMuted, textAlign: "right" },
-  timestampMine: { color: "rgba(255,255,255,0.7)" },
-  errorText: { paddingHorizontal: 16, paddingBottom: 6, color: Colors.danger, fontSize: 12 },
-  inputRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  input: {
-    flex: 1,
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: Colors.input,
-    paddingHorizontal: 14,
-    color: Colors.textPrimary,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.primary,
-  },
-  sendBtnDisabled: { opacity: 0.6 },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 40, flex: 1 },
+  errorText: { color: Colors.danger, fontSize: 12, textAlign: "center" },
 });
+

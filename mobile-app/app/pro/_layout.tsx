@@ -5,11 +5,18 @@
 
 import { Tabs } from "expo-router";
 import { Layers, FileText, TrendingUp, User } from "lucide-react-native";
+import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#0D0870";
 const ACCENT = "#8ECFDF";
 
 export default function ProLayout() {
+  const insets = useSafeAreaInsets();
+  const tabBottomPadding =
+    Platform.OS === "ios" ? Math.max(insets.bottom, 8) : Math.max(insets.bottom, 14);
+  const tabBarHeight = 50 + tabBottomPadding;
+
   return (
     <Tabs
       screenOptions={{
@@ -21,9 +28,9 @@ export default function ProLayout() {
           borderTopWidth: 0,
           elevation: 0,
           shadowOpacity: 0,
-          height: 72,
-          paddingBottom: 12,
-          paddingTop: 8,
+          height: tabBarHeight,
+          paddingBottom: tabBottomPadding,
+          paddingTop: 4,
         },
       }}
     >
@@ -72,6 +79,13 @@ export default function ProLayout() {
       />
       <Tabs.Screen
         name="documents"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="kyc"
         options={{
           href: null,
           tabBarStyle: { display: "none" },

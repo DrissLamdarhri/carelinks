@@ -19,15 +19,16 @@ import { useRouter } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Professional } from "@/lib/db/types";
+import { RadiusSlider } from "@/components/RadiusSlider";
 
 const menuItems = [
   { icon: User, label: "Informations personnelles", color: "#0D0870" },
-  { icon: FileText, label: "Mes documents", color: "#3B82F6" },
+  { icon: FileText, label: "Mes documents", color: "#3B82F6", route: "/pro/kyc" },
   { icon: CreditCard, label: "Compte bancaire", color: "#6BB8C8" },
   { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
   { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
   { icon: Bell, label: "Notifications", color: "#0D0870" },
-  { icon: Shield, label: "Vérification", color: "#0D0870" },
+  { icon: Shield, label: "Vérification", color: "#0D0870", route: "/pro/kyc" },
 ];
 
 export default function ProProfileScreen() {
@@ -147,10 +148,25 @@ export default function ProProfileScreen() {
       <Text style={styles.locationHint}>
         Permet aux patients de votre rayon de vous trouver via le matching géographique.
       </Text>
+      {user?.id && pro ? (
+        <RadiusSlider
+          professionalId={user.id}
+          initialRadiusKm={pro.service_radius_km || 5}
+          onUpdated={(radiusKm) =>
+            setPro((prev) => (prev ? { ...prev, service_radius_km: radiusKm } : prev))
+          }
+        />
+      ) : null}
 
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
-          <TouchableOpacity key={item.label} style={styles.menuItem}>
+          <TouchableOpacity
+            key={item.label}
+            style={styles.menuItem}
+            onPress={() => {
+              if (item.route) router.push(item.route as never);
+            }}
+          >
             <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
               <item.icon size={16} color={item.color} />
             </View>

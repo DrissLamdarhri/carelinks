@@ -1,34 +1,51 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Star, ThumbsUp } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-
-const tags = ["Ponctuel", "Professionnel", "Soigneux", "Aimable", "Propre", "Compétent"];
+import { db } from "@/lib/db/dal";
+import { RatingForm } from "@/components/RatingForm";
 
 export default function RatingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId: string }>();
   const bookingId = params.bookingId;
-
-  const [rating, setRating] = useState(0);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [comment, setComment] = useState("");
+  const [professionalId, setProfessionalId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const rating = 5;
   const [submitted, setSubmitted] = useState(false);
 
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]));
-  };
-
-  const canSubmit = rating > 0;
   const stars = useMemo(() => [1, 2, 3, 4, 5], []);
+
+  useEffect(() => {
+    let active = true;
+    const loadBooking = async () => {
+      setLoading(true);
+      setErrorMessage(null);
+      try {
+        const booking = await db.bookings.get(bookingId);
+        if (!active) return;
+        setProfessionalId(booking.professional_id ?? null);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(error instanceof Error ? error.message : "Impossible de charger la réservation.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void loadBooking();
+    return () => {
+      active = false;
+    };
+  }, [bookingId]);
 
   if (submitted) {
     return (
@@ -65,57 +82,30 @@ export default function RatingScreen() {
           <Text style={styles.subtitle}>Réservation #{bookingId.slice(0, 8)}</Text>
         </View>
 
-        <View style={styles.starsRow}>
-          {stars.map((item) => (
-            <TouchableOpacity key={item} onPress={() => setRating(item)}>
-              <Star
-                size={42}
-                color={item <= rating ? "#FBBF24" : "#E0E0E0"}
-                fill={item <= rating ? "#FBBF24" : "transparent"}
-                strokeWidth={1.5}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : null}
 
-        <Text style={styles.blockTitle}>Qu'avez-vous apprécié ?</Text>
-        <View style={styles.tagsWrap}>
-          {tags.map((tag) => {
-            const active = selectedTags.includes(tag);
-            return (
-              <TouchableOpacity
-                key={tag}
-                onPress={() => toggleTag(tag)}
-                style={[styles.tag, active && styles.tagActive]}
-              >
-                <Text style={[styles.tagText, active && styles.tagTextActive]}>{tag}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {!loading && professionalId ? (
+          <RatingForm
+            bookingId={bookingId}
+            professionalId={professionalId}
+            onSubmitted={() => setSubmitted(true)}
+          />
+        ) : null}
 
-        <Text style={styles.blockTitle}>Commentaire (optionnel)</Text>
-        <TextInput
-          value={comment}
-          onChangeText={setComment}
-          placeholder="Partagez votre expérience avec d'autres patients…"
-          placeholderTextColor={Colors.textSubtle}
-          style={styles.commentInput}
-          multiline
-          numberOfLines={4}
-        />
+        {!loading && !professionalId ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorText}>
+              {errorMessage ?? "Professionnel introuvable pour cette réservation."}
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity
-          disabled={!canSubmit}
-          onPress={() => setSubmitted(true)}
-          style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-        >
-          <Text style={[styles.submitBtnText, !canSubmit && styles.submitBtnTextDisabled]}>
-            Envoyer mon avis
-          </Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.skipBtn} onPress={() => router.replace("/patient")}>
           <Text style={styles.skipBtnText}>Passer</Text>
         </TouchableOpacity>
@@ -136,29 +126,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: { color: Colors.textMuted, fontSize: 13 },
-  starsRow: { flexDirection: "row", justifyContent: "center", gap: 10, marginBottom: 24 },
-  blockTitle: { color: Colors.textMuted, fontSize: 13, marginBottom: 10, fontWeight: "500" },
-  tagsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  tag: {
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.input,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  tagActive: { backgroundColor: Colors.primary },
-  tagText: { color: Colors.textPrimary, fontSize: 13 },
-  tagTextActive: { color: "white", fontWeight: "600" },
-  commentInput: {
-    minHeight: 96,
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 32 },
+  errorCard: {
     borderRadius: 14,
-    backgroundColor: Colors.input,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    color: Colors.textPrimary,
-    textAlignVertical: "top",
+    backgroundColor: "#FFF4F4",
+    borderWidth: 1,
+    borderColor: "#FAD3D3",
+    padding: 12,
   },
+  errorText: { color: Colors.danger, fontSize: 13 },
   footer: {
     backgroundColor: "white",
     borderTopWidth: 1,
@@ -167,17 +143,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 16,
   },
-  submitBtn: {
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitBtnDisabled: { backgroundColor: "#E0E0E0" },
-  submitBtnText: { color: "white", fontSize: 15, fontWeight: "600" },
-  submitBtnTextDisabled: { color: Colors.textMuted },
-  skipBtn: { height: 42, alignItems: "center", justifyContent: "center" },
+  skipBtn: { height: 42, alignItems: "center", justifyContent: "center", marginTop: 4 },
   skipBtnText: { color: Colors.textMuted, fontSize: 13 },
   successRoot: {
     flex: 1,

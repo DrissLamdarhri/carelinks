@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  Image,
   Linking,
   StyleSheet,
   Text,
@@ -10,10 +8,24 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Clock3, MessageCircle, Phone, Shield, X } from "lucide-react-native";
+import { MessageCircle, Phone, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
 import type { Booking, Profile } from "@/lib/db/types";
+import { BookingMap } from "@/components/BookingMap";
+import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
+
+type TrackPosition = {
+  lat: number;
+  lng: number;
+  at: string;
+};
+
+const DEFAULT_TRACK_POS: TrackPosition = {
+  lat: 33.5731,
+  lng: -7.5898,
+  at: new Date().toISOString(),
+};
 
 export default function LiveTrackingScreen() {
   const router = useRouter();
@@ -24,11 +36,8 @@ export default function LiveTrackingScreen() {
   const [proProfile, setProProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [eta, setEta] = useState(12);
-  const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const routeX = useMemo(() => new Animated.Value(0), []);
-  const routeY = useMemo(() => new Animated.Value(0), []);
+  const [position, setPosition] = useState<TrackPosition>(DEFAULT_TRACK_POS);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,31 +71,22 @@ export default function LiveTrackingScreen() {
   useEffect(() => {
     const iv = setInterval(() => {
       setEta((prev) => Math.max(0, prev - 1));
-      setProgress((prev) => Math.min(100, prev + 8));
     }, 2000);
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => {
-    Animated.timing(routeX, {
-      toValue: progress,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-    Animated.timing(routeY, {
-      toValue: progress,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, [progress, routeX, routeY]);
-
   const arrived = eta === 0;
   const proName = proProfile?.full_name || "Professionnel";
-  const proAvatar = proProfile?.avatar_url || null;
   const proPhone = proProfile?.phone || null;
 
   return (
     <View style={styles.root}>
+      <LiveTrackingChannel
+        bookingId={bookingId}
+        mode="watch"
+        onPosition={(next) => setPosition(next)}
+      />
+
       <View style={styles.mapSection}>
         <View style={styles.headerOverlay}>
           <TouchableOpacity onPress={() => router.replace("/patient")} style={styles.closeBtn}>
@@ -104,50 +104,12 @@ export default function LiveTrackingScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.mapMock}>
-          <View style={styles.roadHorizontal} />
-          <View style={styles.roadVertical} />
-
-          <View style={styles.patientPinWrap}>
-            <Text style={styles.patientTag}>Vous</Text>
-            <View style={styles.patientPin} />
-          </View>
-
-          <Animated.View
-            style={[
-              styles.proPinWrap,
-              {
-                transform: [
-                  {
-                    translateX: routeX.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: [120, 0],
-                    }),
-                  },
-                  {
-                    translateY: routeY.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: [-120, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.proPin}>
-              {proAvatar ? (
-                <Image source={{ uri: proAvatar }} style={styles.proPinAvatar} />
-              ) : (
-                <Text style={styles.proPinText}>
-                  {proName
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
-                </Text>
-              )}
-            </View>
-          </Animated.View>
+        <View style={styles.mapWrap}>
+          <BookingMap
+            initialLat={position.lat}
+            initialLng={position.lng}
+            radiusKm={2}
+          />
         </View>
       </View>
 
@@ -159,24 +121,11 @@ export default function LiveTrackingScreen() {
           </Text>
           <Text style={styles.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
         </View>
-        <View style={styles.progressBarTrack}>
-          <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
-        </View>
+        <Text style={styles.positionLabel}>
+          Position en direct: {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
+        </Text>
 
         <View style={styles.providerCard}>
-          {proAvatar ? (
-            <Image source={{ uri: proAvatar }} style={styles.providerAvatar} />
-          ) : (
-            <View style={styles.providerAvatarFallback}>
-              <Text style={styles.providerAvatarText}>
-                {proName
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)}
-              </Text>
-            </View>
-          )}
           <View style={styles.providerMeta}>
             <Text style={styles.providerName}>{proName}</Text>
             <Text style={styles.providerSub}>
@@ -264,60 +213,13 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 4 },
   etaPillText: { color: Colors.textPrimary, fontSize: 13, fontWeight: "600" },
-  mapMock: {
+  mapWrap: {
     flex: 1,
-    backgroundColor: "#D4E8D4",
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
+    paddingTop: 70,
+    paddingHorizontal: 20,
+    paddingBottom: 18,
   },
-  roadHorizontal: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "45%",
-    height: 14,
-    backgroundColor: "rgba(255,255,255,0.42)",
-  },
-  roadVertical: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: "55%",
-    width: 14,
-    backgroundColor: "rgba(255,255,255,0.42)",
-  },
-  patientPinWrap: { position: "absolute", left: "25%", top: "70%", alignItems: "center" },
-  patientTag: {
-    color: "white",
-    backgroundColor: Colors.primary,
-    fontSize: 10,
-    fontWeight: "600",
-    borderRadius: 8,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginBottom: 4,
-  },
-  patientPin: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
-    borderWidth: 2,
-    borderColor: "white",
-  },
-  proPinWrap: { position: "absolute", left: "55%", top: "45%" },
-  proPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "white",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  proPinAvatar: { width: 32, height: 32, borderRadius: 16 },
-  proPinText: { color: Colors.primary, fontSize: 14, fontWeight: "700" },
   bottomSheet: {
     backgroundColor: "white",
     borderTopLeftRadius: 24,
@@ -338,26 +240,13 @@ const styles = StyleSheet.create({
   progressHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   progressLabel: { color: Colors.textMuted, fontSize: 12 },
   progressValue: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  progressBarTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.input,
-    overflow: "hidden",
-    marginTop: 6,
+  positionLabel: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
     marginBottom: 12,
   },
-  progressBarFill: { height: "100%", backgroundColor: Colors.primary, borderRadius: 4 },
   providerCard: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
-  providerAvatar: { width: 56, height: 56, borderRadius: 28 },
-  providerAvatarFallback: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.surfaceWarm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  providerAvatarText: { color: Colors.primary, fontSize: 18, fontWeight: "700" },
   providerMeta: { flex: 1 },
   providerName: { color: Colors.textPrimary, fontSize: 15, fontWeight: "600" },
   providerSub: { color: Colors.textMuted, fontSize: 12 },
@@ -390,3 +279,4 @@ const styles = StyleSheet.create({
   loadingText: { color: Colors.textMuted, fontSize: 12 },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });
+

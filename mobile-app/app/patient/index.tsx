@@ -12,7 +12,6 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   MapPin,
-  ChevronDown,
   Zap,
   Syringe,
   Brain,
@@ -33,7 +32,7 @@ import {
   mockProfessionals,
   mockPatientBooking,
 } from "@/lib/mock-data";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const serviceIconMap = {
   syringe: Syringe,
@@ -44,8 +43,7 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
-  const [city, setCity] = useState(mockPatientProfile.city);
-  const [showCityPicker, setShowCityPicker] = useState(false);
+  const city = mockPatientProfile.city;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -63,47 +61,10 @@ export default function PatientHomeScreen() {
               </Text>
             </View>
           </View>
-          <LocaleSwitcher compact />
+          <View style={styles.headerActions}>
+            <NotificationBell />
+          </View>
         </View>
-
-        <TouchableOpacity
-          style={styles.cityRow}
-          onPress={() => setShowCityPicker((s) => !s)}
-        >
-          <View style={styles.cityBadge}>
-            <MapPin size={13} color={Colors.accent} />
-          </View>
-          <Text style={styles.cityText}>{city}</Text>
-          <ChevronDown size={14} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
-
-        {showCityPicker ? (
-          <View style={styles.cityPicker}>
-            {MOROCCAN_CITIES.map((c) => (
-              <TouchableOpacity
-                key={c}
-                onPress={() => {
-                  setCity(c);
-                  setShowCityPicker(false);
-                }}
-                style={styles.cityItem}
-              >
-                <MapPin
-                  size={12}
-                  color={c === city ? Colors.primary : Colors.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.cityItemText,
-                    c === city && { color: Colors.primary, fontWeight: "600" },
-                  ]}
-                >
-                  {c}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
 
         <Text style={styles.question}>Quel soin recherchez-vous ?</Text>
         <Text style={styles.questionSub}>
@@ -283,45 +244,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   userWrap: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)" },
   greeting: { color: "rgba(255,255,255,0.62)", fontSize: 12 },
   userName: { color: "white", fontSize: 16, fontWeight: "700" },
-  cityRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, zIndex: 6 },
-  cityBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(91,184,212,0.32)",
-  },
-  cityText: { color: "rgba(255,255,255,0.88)", fontSize: 14, fontWeight: "500" },
-  cityPicker: {
-    position: "absolute",
-    left: 20,
-    top: 120,
-    zIndex: 9,
-    width: 190,
-    borderRadius: 14,
-    backgroundColor: "white",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  cityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  cityItemText: { color: Colors.textPrimary, fontSize: 13 },
   question: {
     color: "white",
     fontSize: 24,

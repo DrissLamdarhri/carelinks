@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Shield, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 const ADMIN_CREDENTIALS = {
   email: "admin@carelink.ma",
@@ -42,7 +41,6 @@ export default function AdminLoginScreen() {
               <Text style={styles.brandSub}>Admin Dashboard</Text>
             </View>
           </View>
-          <LocaleSwitcher compact />
         </View>
 
         <View style={styles.card}>

@@ -13,7 +13,6 @@ import {
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { useRouter } from "expo-router";
 import { db } from "@/lib/db/dal";
 
@@ -79,7 +78,6 @@ export default function PatientProfileScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Mon profil</Text>
-        <LocaleSwitcher />
       </View>
 
       <View style={styles.topCard}>

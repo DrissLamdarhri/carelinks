@@ -12,6 +12,8 @@ import { Calendar, CalendarClock, ChevronRight, MapPin, Star, Wallet } from "luc
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
+import type { Booking } from "@/lib/db/types";
+import { CancellationDialog } from "@/components/CancellationDialog";
 
 const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
   open: { color: "#0891B2", bg: "#D8F0F4", label: "En attente" },
@@ -25,7 +27,8 @@ export default function PatientBookingsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
-  const { bookings, loading, error } = usePatientBookings(user?.id ?? null);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const { bookings, loading, error, refresh } = usePatientBookings(user?.id ?? null);
 
   const { upcoming, past } = useMemo(() => {
     const nextUpcoming = bookings.filter((item) =>
@@ -112,6 +115,8 @@ export default function PatientBookingsScreen() {
           const isOpen = booking.status === "open";
           const isActive = ["matched", "in_progress"].includes(booking.status);
           const isCompleted = booking.status === "completed";
+          const canCancel = ["open", "matched", "in_progress"].includes(booking.status);
+          const canPay = ["matched", "in_progress"].includes(booking.status);
 
           return (
             <View key={booking.id} style={styles.card}>
@@ -174,11 +179,41 @@ export default function PatientBookingsScreen() {
                   </TouchableOpacity>
                 ) : null}
               </View>
+
+              {(canCancel || canPay) ? (
+                <View style={styles.extraActionsRow}>
+                  {canCancel ? (
+                    <TouchableOpacity
+                      style={styles.cancelBtn}
+                      onPress={() => setCancelTarget(booking)}
+                    >
+                      <Text style={styles.cancelBtnText}>Annuler</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {canPay ? (
+                    <TouchableOpacity
+                      style={styles.payBtn}
+                      onPress={() => router.push(`/patient/payment/${booking.id}`)}
+                    >
+                      <Text style={styles.payBtnText}>Payer</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           );
         })}
 
       {error ? <Text style={styles.errorText}>{error.message}</Text> : null}
+      {cancelTarget ? (
+        <CancellationDialog
+          visible
+          bookingId={cancelTarget.id}
+          scheduledAt={cancelTarget.scheduled_at}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={refresh}
+        />
+      ) : null}
     </ScrollView>
   );
 }
@@ -283,5 +318,38 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   ratingBtnText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
+  extraActionsRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F4C8C8",
+    backgroundColor: "#FFF4F4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: Colors.danger,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  payBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payBtnText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });

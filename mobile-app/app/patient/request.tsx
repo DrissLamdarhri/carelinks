@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
+import { mockProfessionals } from "@/lib/mock-data";
 import { BookingMap } from "../../components/BookingMap";
 
 const careTypes = ["Pansement", "Injection IM", "Injection SC", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire", "Kinésithérapie"];
@@ -75,6 +76,20 @@ export default function PatientRequestScreen() {
     if (selected.includes("psy")) return "psy";
     return "infirmier";
   }, [careType]);
+
+  const availablePreview = useMemo(() => {
+    const specialtyMap: Record<string, string[]> = {
+      infirmier: ["infirmier"],
+      psy: ["psychologue"],
+      yoga: ["yoga"],
+      kine: ["kiné", "kine"],
+    };
+    const allowed = specialtyMap[serviceKey] ?? ["infirmier"];
+    return mockProfessionals
+      .filter((pro) => allowed.some((item) => pro.specialty.toLowerCase().includes(item)))
+      .sort((a, b) => Number(b.isOnline) - Number(a.isOnline))
+      .slice(0, 4);
+  }, [serviceKey]);
 
   const handleLocate = async () => {
     if (locating) return;
@@ -253,6 +268,30 @@ export default function PatientRequestScreen() {
           <Text style={styles.locateText}>{coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}</Text>
         </TouchableOpacity>
 
+        <View style={styles.previewCard}>
+          <Text style={styles.previewTitle}>Aperçu développeur: ce qui se passe après publication</Text>
+          <Text style={styles.previewStep}>1. Création de la demande (table bookings)</Text>
+          <Text style={styles.previewStep}>2. Filtrage par service + distance des pros disponibles</Text>
+          <Text style={styles.previewStep}>3. Notification envoyée aux pros ciblés</Text>
+          <Text style={styles.previewStep}>4. Réception des offres en temps réel (écran attente)</Text>
+
+          <Text style={styles.previewSubTitle}>Simulation des professionnels notifiés maintenant:</Text>
+          {availablePreview.length === 0 ? (
+            <Text style={styles.previewEmpty}>Aucun pro simulé pour ce service.</Text>
+          ) : (
+            availablePreview.map((pro) => (
+              <View key={pro.id} style={styles.previewProRow}>
+                <Text style={styles.previewProName}>
+                  {pro.firstName} {pro.lastName}
+                </Text>
+                <Text style={[styles.previewProStatus, pro.isOnline ? styles.previewProStatusOnline : undefined]}>
+                  {pro.isOnline ? "Disponible" : "Hors ligne"}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <TouchableOpacity
@@ -424,6 +463,61 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   locateText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
+  previewCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E6E6E6",
+    backgroundColor: "#FAFAFA",
+    padding: 12,
+    gap: 4,
+  },
+  previewTitle: {
+    color: Colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  previewStep: {
+    color: Colors.textMuted,
+    fontSize: 11,
+  },
+  previewSubTitle: {
+    marginTop: 7,
+    color: Colors.textPrimary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  previewEmpty: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  previewProRow: {
+    marginTop: 4,
+    borderRadius: 10,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ECECEC",
+    height: 34,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  previewProName: {
+    color: Colors.textPrimary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  previewProStatus: {
+    color: Colors.textSubtle,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  previewProStatusOnline: {
+    color: Colors.success,
+  },
   submitBtn: {
     marginTop: 14,
     height: 54,

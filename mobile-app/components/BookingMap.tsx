@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MapPin, Navigation } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
@@ -23,6 +23,14 @@ export function BookingMap({
   const [lat, setLat] = useState(initialLat);
   const [lng, setLng] = useState(initialLng);
   const [locating, setLocating] = useState(false);
+
+  useEffect(() => {
+    setLat(initialLat);
+  }, [initialLat]);
+
+  useEffect(() => {
+    setLng(initialLng);
+  }, [initialLng]);
 
   const useMyLocation = async () => {
     if (locating) return;
