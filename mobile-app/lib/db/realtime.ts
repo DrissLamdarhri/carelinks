@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { isDemoBookingId } from "@/lib/demo-booking";
 import { db } from "./dal";
 import type { Bid, Booking, Message, ProSpecialty, UUID } from "./types";
 
@@ -41,14 +42,17 @@ function useAsyncList<T>(loader: () => Promise<T[]>, deps: React.DependencyList)
 }
 
 export function useBookingBids(bookingId: UUID | null) {
+  const isDemo = isDemoBookingId(bookingId);
   const { data, setData, loading, error, refresh } = useAsyncList<Bid>(
-    () => (bookingId ? db.bids.listForBooking(bookingId) : Promise.resolve([])),
-    [bookingId]
+    () => (bookingId && !isDemo ? db.bids.listForBooking(bookingId) : Promise.resolve([])),
+    [bookingId, isDemo]
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (!bookingId) return;
+      // Skip realtime subscription for demo bookings
+      if (!bookingId || isDemo) return;
+
       const channel = supabase
         .channel(`bids:booking:${bookingId}`)
         .on(
@@ -78,7 +82,7 @@ export function useBookingBids(bookingId: UUID | null) {
       return () => {
         void supabase.removeChannel(channel);
       };
-    }, [bookingId, setData])
+    }, [bookingId, isDemo, setData])
   );
 
   const pendingBids = data.filter((item) => item.status === "pending");
@@ -178,14 +182,17 @@ export function useOpenBookingsBySpecialty(specialty: ProSpecialty | null) {
 }
 
 export function useBookingMessages(bookingId: UUID | null) {
+  const isDemo = isDemoBookingId(bookingId);
   const { data, setData, loading, error, refresh } = useAsyncList<Message>(
-    () => (bookingId ? db.messages.listForBooking(bookingId) : Promise.resolve([])),
-    [bookingId]
+    () => (bookingId && !isDemo ? db.messages.listForBooking(bookingId) : Promise.resolve([])),
+    [bookingId, isDemo]
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (!bookingId) return;
+      // Skip realtime subscription for demo bookings
+      if (!bookingId || isDemo) return;
+
       const channel = supabase
         .channel(`messages:booking:${bookingId}`)
         .on(
@@ -208,7 +215,7 @@ export function useBookingMessages(bookingId: UUID | null) {
       return () => {
         void supabase.removeChannel(channel);
       };
-    }, [bookingId, setData])
+    }, [bookingId, isDemo, setData])
   );
 
   return { messages: data, setMessages: setData, loading, error, refresh };

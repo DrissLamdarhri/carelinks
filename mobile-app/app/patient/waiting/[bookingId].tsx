@@ -14,14 +14,25 @@ import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Booking } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
+import {
+  buildDemoBids,
+  buildDemoBooking,
+  isDemoBookingId,
+  normalizeRouteParam,
+} from "@/lib/demo-booking";
 import { LiveBidsFeed } from "../../../components/LiveBidsFeed";
 
 export default function WaitingOffersScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
 
-  const { pendingBids, loading } = useBookingBids(bookingId);
+  const { pendingBids: livePendingBids, loading } = useBookingBids(isDemoBooking ? null : bookingId);
+  const pendingBids = useMemo(
+    () => (isDemoBooking && bookingId ? buildDemoBids(bookingId) : livePendingBids),
+    [bookingId, isDemoBooking, livePendingBids]
+  );
   const offersCount = pendingBids.length;
 
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -77,7 +88,17 @@ export default function WaitingOffersScreen() {
     let cancelled = false;
     const loadBooking = async () => {
       setBookingError(null);
+      if (!bookingId) {
+        if (!cancelled) setBookingError("Réservation introuvable.");
+        return;
+      }
+
       try {
+        if (isDemoBooking) {
+          if (!cancelled) setBooking(buildDemoBooking(bookingId));
+          return;
+        }
+
         const next = await db.bookings.get(bookingId);
         if (!cancelled) setBooking(next);
       } catch (loadError) {
@@ -90,13 +111,23 @@ export default function WaitingOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
 
   useEffect(() => {
     let cancelled = false;
     const loadNearby = async () => {
       setGeoError(null);
+      if (!bookingId) return;
+
       try {
+        if (isDemoBooking) {
+          if (!cancelled) {
+            setNearbyCount(3);
+            setNearestDistance(1.2);
+          }
+          return;
+        }
+
         const nearby = await geo.findProsNearBooking(bookingId, 15);
         if (!cancelled) {
           setNearbyCount(nearby.length);
@@ -109,19 +140,26 @@ export default function WaitingOffersScreen() {
       }
     };
     void loadNearby();
-    const iv = setInterval(() => {
-      void loadNearby();
-    }, 8000);
+    const iv = isDemoBooking
+      ? null
+      : setInterval(() => {
+          void loadNearby();
+        }, 8000);
     return () => {
       cancelled = true;
-      clearInterval(iv);
+      if (iv) clearInterval(iv);
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
 
   const handleCancel = async () => {
+    if (!bookingId) return;
     setCancelError(null);
     setCancelling(true);
     try {
+      if (isDemoBooking) {
+        router.replace("/patient");
+        return;
+      }
       await db.bookings.setStatus(bookingId, "cancelled");
       router.replace("/patient");
     } catch (cancelErr) {
@@ -184,7 +222,9 @@ export default function WaitingOffersScreen() {
 
         <View style={styles.realtimeRow}>
           <View style={styles.realtimeDot} />
-          <Text style={styles.realtimeText}>Connexion temps réel active</Text>
+          <Text style={styles.realtimeText}>
+            {isDemoBooking ? "Mode démo actif" : "Connexion temps réel active"}
+          </Text>
         </View>
 
         {nearbyCount !== null ? (
@@ -253,8 +293,19 @@ export default function WaitingOffersScreen() {
               <Bell size={16} color={Colors.primary} />
               <Text style={styles.previewTitle}>Offres reçues en direct</Text>
             </View>
-            <LiveBidsFeed bookingId={bookingId} onAccepted={() => router.replace(`/patient/chat/${bookingId}`)} />
-            <TouchableOpacity style={styles.offersBtn} onPress={() => router.replace(`/patient/offers/${bookingId}`)}>
+            <LiveBidsFeed
+              bookingId={bookingId ?? ""}
+              mockBids={isDemoBooking ? pendingBids : undefined}
+              onAccepted={() => {
+                if (bookingId) router.replace(`/patient/chat/${bookingId}`);
+              }}
+            />
+            <TouchableOpacity
+              style={styles.offersBtn}
+              onPress={() => {
+                if (bookingId) router.replace(`/patient/offers/${bookingId}`);
+              }}
+            >
               <Text style={styles.offersBtnText}>Voir toutes les offres</Text>
             </TouchableOpacity>
           </View>

@@ -13,6 +13,13 @@ import { Send } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
+import {
+  buildDemoMessages,
+  buildDemoProfile,
+  DEMO_PATIENT_ID,
+  DEMO_PRO_1_ID,
+  isDemoBookingId,
+} from "@/lib/demo-booking";
 
 type LiveChatProps = {
   bookingId: string;
@@ -33,6 +40,9 @@ type ChatMessage = MessageRow & {
 
 export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps) {
   const { user } = useAuth();
+  const isDemoBooking = isDemoBookingId(bookingId);
+  const demoRecipientId = _recipientId ?? DEMO_PRO_1_ID;
+  const demoPatientId = user?.id ?? DEMO_PATIENT_ID;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -57,6 +67,23 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
     if (!bookingId) return;
     setLoading(true);
     try {
+      if (isDemoBooking) {
+        const demoPro = buildDemoProfile(demoRecipientId);
+        const rows = buildDemoMessages(bookingId);
+        setMessages(
+          rows.map((row) => ({
+            ...row,
+            sender_name:
+              row.sender_id === demoRecipientId
+                ? demoPro.full_name
+                : row.sender_id === demoPatientId || row.sender_id === DEMO_PATIENT_ID
+                  ? "Vous"
+                  : "Utilisateur",
+          }))
+        );
+        return;
+      }
+
       const { data, error } = await supabase
         .from("messages")
         .select("id, booking_id, sender_id, body, created_at")
@@ -90,14 +117,14 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
     } finally {
       setLoading(false);
     }
-  }, [bookingId]);
+  }, [bookingId, demoPatientId, demoRecipientId, isDemoBooking]);
 
   useEffect(() => {
     void loadMessages();
   }, [loadMessages]);
 
   useEffect(() => {
-    if (!bookingId) return;
+    if (!bookingId || isDemoBooking) return;
     const channel = supabase
       .channel(`messages:live:${bookingId}`)
       .on(
@@ -130,7 +157,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bookingId, hydrateSenderName]);
+  }, [bookingId, hydrateSenderName, isDemoBooking]);
 
   const sorted = useMemo(
     () => [...messages].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)),
@@ -138,11 +165,28 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
   );
 
   const handleSend = async () => {
-    if (!user?.id || !input.trim() || sending) return;
+    if (!input.trim() || sending) return;
     setSending(true);
     const body = input.trim();
     setInput("");
     try {
+      if (isDemoBooking) {
+        const localMessage: ChatMessage = {
+          id: `demo-msg-${Date.now()}`,
+          booking_id: bookingId,
+          sender_id: demoPatientId,
+          body,
+          created_at: new Date().toISOString(),
+          sender_name: "Vous",
+        };
+        setMessages((prev) => [...prev, localMessage]);
+        return;
+      }
+
+      if (!user?.id) {
+        throw new Error("Utilisateur non connecté.");
+      }
+
       const { error } = await supabase.from("messages").insert({
         booking_id: bookingId,
         sender_id: user.id,
@@ -179,7 +223,11 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
         ) : null}
 
         {sorted.map((message) => {
-          const mine = message.sender_id === user?.id;
+          const mine = isDemoBooking
+            ? message.sender_name === "Vous" ||
+              message.sender_id === demoPatientId ||
+              message.sender_id === DEMO_PATIENT_ID
+            : message.sender_id === user?.id;
           return (
             <View key={message.id} style={[styles.row, mine ? styles.rowMine : styles.rowOther]}>
               <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
@@ -320,4 +368,3 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
-

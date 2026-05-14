@@ -12,6 +12,7 @@ import { Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
+import { isDemoBookingId } from "@/lib/demo-booking";
 
 type RatingFormProps = {
   bookingId: string;
@@ -21,16 +22,30 @@ type RatingFormProps = {
 
 export function RatingForm({ bookingId, professionalId, onSubmitted }: RatingFormProps) {
   const { user } = useAuth();
+  const isDemoBooking = isDemoBookingId(bookingId);
   const [stars, setStars] = useState(0);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = useMemo(() => stars >= 1 && !!user?.id, [stars, user?.id]);
+  const canSubmit = useMemo(
+    () => stars >= 1 && (isDemoBooking || !!user?.id),
+    [isDemoBooking, stars, user?.id]
+  );
 
   const handleSubmit = async () => {
-    if (!user?.id || !canSubmit || submitting) return;
+    if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
+      if (isDemoBooking) {
+        Alert.alert("Merci", "Votre avis démo a bien été enregistré.");
+        onSubmitted();
+        return;
+      }
+
+      if (!user?.id) {
+        throw new Error("Utilisateur non connecté.");
+      }
+
       const { error } = await supabase.from("ratings").insert({
         booking_id: bookingId,
         patient_id: user.id,
@@ -139,4 +154,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-

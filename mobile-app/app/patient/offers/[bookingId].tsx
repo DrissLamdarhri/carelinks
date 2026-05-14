@@ -25,6 +25,14 @@ import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
 import type { Booking, Bid, Professional, Profile } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
+import {
+  buildDemoBids,
+  buildDemoBooking,
+  buildDemoProfessional,
+  buildDemoProfile,
+  isDemoBookingId,
+  normalizeRouteParam,
+} from "@/lib/demo-booking";
 
 type ProOfferMeta = {
   fullName: string;
@@ -59,10 +67,16 @@ function getMeta(profile: Profile | null, pro: Professional | null): ProOfferMet
 
 export default function NurseOffersScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
 
-  const { bids, loading, error } = useBookingBids(bookingId);
+  const { bids: liveBids, loading: liveLoading, error } = useBookingBids(isDemoBooking ? null : bookingId);
+  const [demoBids, setDemoBids] = useState<Bid[]>(() =>
+    isDemoBooking && bookingId ? buildDemoBids(bookingId) : []
+  );
+  const bids = isDemoBooking ? demoBids : liveBids;
+  const loading = isDemoBooking ? false : liveLoading;
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -74,7 +88,16 @@ export default function NurseOffersScreen() {
     let cancelled = false;
     const loadBooking = async () => {
       setBookingError(null);
+      if (!bookingId) {
+        if (!cancelled) setBookingError("Réservation introuvable.");
+        return;
+      }
+
       try {
+        if (isDemoBooking) {
+          if (!cancelled) setBooking(buildDemoBooking(bookingId));
+          return;
+        }
         const next = await db.bookings.get(bookingId);
         if (!cancelled) setBooking(next);
       } catch (loadError) {
@@ -87,7 +110,12 @@ export default function NurseOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
+
+  useEffect(() => {
+    if (!isDemoBooking || !bookingId) return;
+    setDemoBids(buildDemoBids(bookingId));
+  }, [bookingId, isDemoBooking]);
 
   const visibleOffers = useMemo(
     () =>
@@ -102,6 +130,14 @@ export default function NurseOffersScreen() {
     let cancelled = false;
     const loadMeta = async () => {
       const uniqueProIds = [...new Set(visibleOffers.map((offer) => offer.professional_id))];
+      if (isDemoBooking) {
+        const nextMap = Object.fromEntries(
+          uniqueProIds.map((proId) => [proId, getMeta(buildDemoProfile(proId), buildDemoProfessional(proId))])
+        );
+        if (!cancelled) setMetaByProId(nextMap);
+        return;
+      }
+
       const missingIds = uniqueProIds.filter((id) => !metaByProId[id]);
       if (missingIds.length === 0) return;
 
@@ -127,12 +163,23 @@ export default function NurseOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [visibleOffers, metaByProId]);
+  }, [isDemoBooking, visibleOffers, metaByProId]);
 
   const handleAccept = async (offer: Bid) => {
+    if (!bookingId) return;
     setActionError(null);
     setActionId(offer.id);
     try {
+      if (isDemoBooking) {
+        setDemoBids((prev) =>
+          prev.map((bid) => ({
+            ...bid,
+            status: bid.id === offer.id ? "accepted" : "rejected",
+          }))
+        );
+        router.replace(`/patient/chat/${bookingId}`);
+        return;
+      }
       await db.bids.accept(offer);
       await db.bookings.acceptBid(bookingId, offer.professional_id, offer.price_mad);
       router.replace(`/patient/chat/${bookingId}`);
@@ -147,6 +194,13 @@ export default function NurseOffersScreen() {
     setActionError(null);
     setActionId(`${offerId}:reject`);
     try {
+      if (isDemoBooking) {
+        setDemoBids((prev) =>
+          prev.map((bid) => (bid.id === offerId ? { ...bid, status: "rejected" } : bid))
+        );
+        setHiddenOfferIds((prev) => [...prev, offerId]);
+        return;
+      }
       await db.bids.setStatus(offerId, "rejected");
       setHiddenOfferIds((prev) => [...prev, offerId]);
     } catch (rejectError) {
@@ -350,7 +404,12 @@ export default function NurseOffersScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity onPress={() => router.replace(`/patient/waiting/${bookingId}`)} style={styles.footerBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            if (bookingId) router.replace(`/patient/waiting/${bookingId}`);
+          }}
+          style={styles.footerBtn}
+        >
           <Text style={styles.footerBtnText}>Modifier mon prix</Text>
         </TouchableOpacity>
       </View>

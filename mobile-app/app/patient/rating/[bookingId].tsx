@@ -11,12 +11,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Star, ThumbsUp } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
+import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { RatingForm } from "@/components/RatingForm";
 
 export default function RatingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
   const [professionalId, setProfessionalId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,6 +30,18 @@ export default function RatingScreen() {
   useEffect(() => {
     let active = true;
     const loadBooking = async () => {
+      if (!bookingId) {
+        setLoading(false);
+        setErrorMessage("Réservation introuvable.");
+        return;
+      }
+
+      if (isDemoBooking) {
+        setProfessionalId(DEMO_PRO_1_ID);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setErrorMessage(null);
       try {
@@ -45,7 +59,7 @@ export default function RatingScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
 
   if (submitted) {
     return (
@@ -79,7 +93,7 @@ export default function RatingScreen() {
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 18 }}>
         <View style={styles.topBlock}>
           <Text style={styles.title}>Comment était votre soin ?</Text>
-          <Text style={styles.subtitle}>Réservation #{bookingId.slice(0, 8)}</Text>
+          <Text style={styles.subtitle}>Réservation #{(bookingId ?? "—").slice(0, 8)}</Text>
         </View>
 
         {loading ? (
@@ -88,7 +102,7 @@ export default function RatingScreen() {
           </View>
         ) : null}
 
-        {!loading && professionalId ? (
+        {!loading && professionalId && bookingId ? (
           <RatingForm
             bookingId={bookingId}
             professionalId={professionalId}

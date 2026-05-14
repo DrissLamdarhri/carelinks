@@ -66,6 +66,7 @@ export default function PatientRequestScreen() {
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [demoMode, setDemoMode] = useState(true);
 
   const canSubmit = useMemo(() => address.trim().length > 3, [address]);
 
@@ -114,6 +115,16 @@ export default function PatientRequestScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
+      // DEMO MODE: Skip database and navigate directly to waiting screen
+      if (demoMode) {
+        const mockBookingId = `demo-${Date.now()}`;
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 800));
+        router.push(`/patient/waiting/${mockBookingId}`);
+        setSubmitting(false);
+        return;
+      }
+
       await db.patients.upsert({ id: user.id });
 
       const [hour, minute] = times[selectedTime].split(":");
@@ -269,7 +280,17 @@ export default function PatientRequestScreen() {
         </TouchableOpacity>
 
         <View style={styles.previewCard}>
-          <Text style={styles.previewTitle}>Aperçu développeur: ce qui se passe après publication</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <Text style={styles.previewTitle}>Aperçu développeur: ce qui se passe après publication</Text>
+            <TouchableOpacity 
+              style={[styles.demoBadge, demoMode && styles.demoBadgeActive]}
+              onPress={() => setDemoMode(!demoMode)}
+            >
+              <Text style={[styles.demoBadgeText, demoMode && styles.demoBadgeTextActive]}>
+                {demoMode ? "DÉMO ON" : "PROD"}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.previewStep}>1. Création de la demande (table bookings)</Text>
           <Text style={styles.previewStep}>2. Filtrage par service + distance des pros disponibles</Text>
           <Text style={styles.previewStep}>3. Notification envoyée aux pros ciblés</Text>
@@ -517,6 +538,27 @@ const styles = StyleSheet.create({
   },
   previewProStatusOnline: {
     color: Colors.success,
+  },
+  demoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  demoBadgeActive: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#FBBF24",
+  },
+  demoBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#6B7280",
+    letterSpacing: 0.5,
+  },
+  demoBadgeTextActive: {
+    color: "#B45309",
   },
   submitBtn: {
     marginTop: 14,

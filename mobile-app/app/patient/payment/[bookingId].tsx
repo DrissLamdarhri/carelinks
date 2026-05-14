@@ -13,6 +13,7 @@ import { CheckCircle2, Circle, CreditCard, HandCoins, Landmark } from "lucide-re
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { supabase } from "@/lib/supabase";
 
 type PaymentProvider = "cmi" | "stripe" | "cash";
@@ -25,8 +26,9 @@ const options: { value: PaymentProvider; label: string; icon: typeof CreditCard 
 
 export default function PaymentSheetScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -38,8 +40,21 @@ export default function PaymentSheetScreen() {
   useEffect(() => {
     let active = true;
     const load = async () => {
+      if (!bookingId) {
+        Alert.alert("Erreur", "Réservation introuvable.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
+        if (isDemoBooking) {
+          if (!active) return;
+          setAmountMad(110);
+          setProfessionalId(DEMO_PRO_1_ID);
+          return;
+        }
+
         const booking = await db.bookings.get(bookingId);
         if (!active) return;
         const fallbackAmount =
@@ -58,7 +73,7 @@ export default function PaymentSheetScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
 
   const canSubmit = useMemo(
     () => !!user?.id && amountMad > 0 && !submitting && !loading,
@@ -66,9 +81,15 @@ export default function PaymentSheetScreen() {
   );
 
   const handleConfirm = async () => {
-    if (!user?.id || !canSubmit) return;
+    if (!bookingId || !user?.id || !canSubmit) return;
     setSubmitting(true);
     try {
+      if (isDemoBooking) {
+        Alert.alert("Paiement validé", "Paiement démo confirmé avec succès.");
+        router.replace("/patient/bookings");
+        return;
+      }
+
       const { error } = await supabase.from("payments").insert({
         booking_id: bookingId,
         patient_id: user.id,
@@ -95,7 +116,7 @@ export default function PaymentSheetScreen() {
       <Pressable style={styles.backdrop} onPress={() => router.back()} />
       <View style={styles.sheet}>
         <Text style={styles.title}>Paiement</Text>
-        <Text style={styles.subtitle}>Réservation #{bookingId.slice(0, 8)}</Text>
+        <Text style={styles.subtitle}>Réservation #{(bookingId ?? "—").slice(0, 8)}</Text>
 
         {loading ? (
           <View style={styles.center}>
@@ -245,4 +266,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-

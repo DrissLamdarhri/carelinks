@@ -3,15 +3,21 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { Check, Loader2, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
+import { isDemoBookingId } from "@/lib/demo-booking";
 import { useBookingBids } from "@/lib/db/realtime";
+import type { Bid } from "@/lib/db/types";
 
 type LiveBidsFeedProps = {
   bookingId: string;
   onAccepted?: (bidId: string) => void;
+  mockBids?: Bid[];
 };
 
-export function LiveBidsFeed({ bookingId, onAccepted }: LiveBidsFeedProps) {
-  const { pendingBids, loading } = useBookingBids(bookingId);
+export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedProps) {
+  const isDemoBooking = isDemoBookingId(bookingId);
+  const { pendingBids: liveBids, loading: liveLoading } = useBookingBids(isDemoBooking ? null : bookingId);
+  const pendingBids = isDemoBooking ? mockBids ?? [] : liveBids;
+  const loading = isDemoBooking ? false : liveLoading;
   const [accepting, setAccepting] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -21,6 +27,10 @@ export function LiveBidsFeed({ bookingId, onAccepted }: LiveBidsFeedProps) {
     setErrorMessage(null);
     setAccepting(bid.id);
     try {
+      if (isDemoBooking) {
+        onAccepted?.(bid.id);
+        return;
+      }
       await db.bids.accept(bid);
       await db.bookings.acceptBid(bookingId, bid.professional_id, bid.price_mad);
       onAccepted?.(bid.id);

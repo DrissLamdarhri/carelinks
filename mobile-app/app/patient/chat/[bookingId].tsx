@@ -13,12 +13,14 @@ import { ArrowLeft } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
 
 export default function BookingChatScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
   const { user, role } = useAuth();
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
@@ -28,6 +30,16 @@ export default function BookingChatScreen() {
   useEffect(() => {
     let active = true;
     const loadRecipient = async () => {
+      if (!bookingId) {
+        setLoading(false);
+        setErrorMessage("Réservation introuvable.");
+        return;
+      }
+      if (isDemoBooking) {
+        setRecipientId(DEMO_PRO_1_ID);
+        setLoading(false);
+        return;
+      }
       if (!user?.id) {
         setLoading(false);
         return;
@@ -51,7 +63,7 @@ export default function BookingChatScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId, role, user?.id]);
+  }, [bookingId, isDemoBooking, role, user?.id]);
 
   return (
     <KeyboardAvoidingView
@@ -63,17 +75,25 @@ export default function BookingChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <View>
+        <View style={styles.headerTextWrap}>
           <Text style={styles.title}>Chat de réservation</Text>
-          <Text style={styles.subtitle}>Booking #{bookingId.slice(0, 8)}</Text>
+          <Text style={styles.subtitle}>Booking #{(bookingId ?? "—").slice(0, 8)}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.trackBtn}
+          onPress={() => {
+            if (bookingId) router.push(`/patient/tracking/${bookingId}`);
+          }}
+        >
+          <Text style={styles.trackBtnText}>Suivi</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
-      ) : recipientId ? (
+      ) : recipientId && bookingId ? (
         <LiveChat bookingId={bookingId} recipientId={recipientId} />
       ) : (
         <View style={styles.center}>
@@ -95,6 +115,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: "white",
   },
+  headerTextWrap: { flex: 1 },
   backBtn: {
     width: 36,
     height: 36,
@@ -103,9 +124,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  trackBtn: {
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.surfaceWarm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trackBtnText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
   title: { fontSize: 16, color: Colors.textPrimary, fontWeight: "600" },
   subtitle: { fontSize: 11, color: Colors.textMuted },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 40, flex: 1 },
   errorText: { color: Colors.danger, fontSize: 12, textAlign: "center" },
 });
-

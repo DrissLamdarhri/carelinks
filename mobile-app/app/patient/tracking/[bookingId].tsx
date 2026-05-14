@@ -12,6 +12,7 @@ import { MessageCircle, Phone, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
 import type { Booking, Profile } from "@/lib/db/types";
+import { buildDemoBooking, buildDemoProfile, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { BookingMap } from "@/components/BookingMap";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 
@@ -29,8 +30,9 @@ const DEFAULT_TRACK_POS: TrackPosition = {
 
 export default function LiveTrackingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookingId: string }>();
-  const bookingId = params.bookingId;
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  const bookingId = normalizeRouteParam(params.bookingId);
+  const isDemoBooking = isDemoBookingId(bookingId);
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [proProfile, setProProfile] = useState<Profile | null>(null);
@@ -42,9 +44,25 @@ export default function LiveTrackingScreen() {
   useEffect(() => {
     let cancelled = false;
     const loadBooking = async () => {
+      if (!bookingId) {
+        setLoading(false);
+        setErrorMessage("Réservation introuvable.");
+        return;
+      }
+
       setErrorMessage(null);
       setLoading(true);
       try {
+        if (isDemoBooking) {
+          const nextBooking = buildDemoBooking(bookingId);
+          if (!cancelled) {
+            setBooking(nextBooking);
+            setProProfile(buildDemoProfile(nextBooking.professional_id ?? ""));
+            setEta(4);
+          }
+          return;
+        }
+
         const nextBooking = await db.bookings.get(bookingId);
         let nextProfile: Profile | null = null;
         if (nextBooking.professional_id) {
@@ -66,7 +84,26 @@ export default function LiveTrackingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId]);
+  }, [bookingId, isDemoBooking]);
+
+  useEffect(() => {
+    if (!isDemoBooking) return;
+    const demoPath: TrackPosition[] = [
+      { lat: 33.8951, lng: -5.5473, at: new Date().toISOString() },
+      { lat: 33.8943, lng: -5.5485, at: new Date().toISOString() },
+      { lat: 33.8935, lng: -5.5498, at: new Date().toISOString() },
+      { lat: 33.8928, lng: -5.5511, at: new Date().toISOString() },
+    ];
+
+    let idx = 0;
+    setPosition(demoPath[0]);
+    const iv = setInterval(() => {
+      idx = Math.min(idx + 1, demoPath.length - 1);
+      setPosition({ ...demoPath[idx], at: new Date().toISOString() });
+    }, 3000);
+
+    return () => clearInterval(iv);
+  }, [isDemoBooking]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -81,11 +118,13 @@ export default function LiveTrackingScreen() {
 
   return (
     <View style={styles.root}>
-      <LiveTrackingChannel
-        bookingId={bookingId}
-        mode="watch"
-        onPosition={(next) => setPosition(next)}
-      />
+      {!isDemoBooking && bookingId ? (
+        <LiveTrackingChannel
+          bookingId={bookingId}
+          mode="watch"
+          onPosition={(next) => setPosition(next)}
+        />
+      ) : null}
 
       <View style={styles.mapSection}>
         <View style={styles.headerOverlay}>
@@ -152,7 +191,9 @@ export default function LiveTrackingScreen() {
           ) : null}
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={() => router.push(`/patient/chat/${bookingId}`)}
+            onPress={() => {
+              if (bookingId) router.push(`/patient/chat/${bookingId}`);
+            }}
           >
             <MessageCircle size={18} color={Colors.primary} />
             <Text style={styles.secondaryBtnText}>Message</Text>
@@ -160,7 +201,9 @@ export default function LiveTrackingScreen() {
           {arrived ? (
             <TouchableOpacity
               style={styles.completeBtn}
-              onPress={() => router.replace(`/patient/rating/${bookingId}`)}
+              onPress={() => {
+                if (bookingId) router.replace(`/patient/rating/${bookingId}`);
+              }}
             >
               <Text style={styles.completeBtnText}>Terminer</Text>
             </TouchableOpacity>
@@ -279,4 +322,3 @@ const styles = StyleSheet.create({
   loadingText: { color: Colors.textMuted, fontSize: 12 },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });
-
