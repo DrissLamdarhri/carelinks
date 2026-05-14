@@ -5,71 +5,93 @@
 
 import { Tabs } from "expo-router";
 import { Home, Calendar, MessageCircle, User } from "lucide-react-native";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#0D0870";
 const ACCENT = "#5BB8D4";
+const INACTIVE = "#B0B0B0";
 
 export default function PatientLayout() {
   const insets = useSafeAreaInsets();
   const tabBottomPadding =
     Platform.OS === "ios" ? Math.max(insets.bottom, 8) : Math.max(insets.bottom, 14);
   const tabBarHeight = 50 + tabBottomPadding;
+  const iconWrap = (focused: boolean) => ({
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: focused ? "#EDE5CC" : "transparent",
+  });
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: ACCENT,
-        tabBarInactiveTintColor: "#888780",
+        tabBarActiveTintColor: PRIMARY,
+        tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
-          backgroundColor: PRIMARY,
-          borderTopWidth: 0,
+          backgroundColor: "white",
+          borderTopWidth: 1,
+          borderTopColor: "#EFEFEF",
           elevation: 0,
           shadowOpacity: 0,
-          height: tabBarHeight,
+          height: tabBarHeight + 2,
           paddingBottom: tabBottomPadding,
-          paddingTop: 4,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          marginTop: 2,
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Accueil",
-          tabBarIcon: ({ color, size }) => (
-            <Home color={color} size={size} strokeWidth={1.5} />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Accueil",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <Home color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{
-          title: "Réservations",
-          tabBarIcon: ({ color, size }) => (
-            <Calendar color={color} size={size} strokeWidth={1.5} />
+          }}
+        />
+        <Tabs.Screen
+          name="bookings"
+          options={{
+            title: "Réservations",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <Calendar color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messagerie",
-          tabBarIcon: ({ color, size }) => (
-            <MessageCircle color={color} size={size} strokeWidth={1.5} />
+          }}
+        />
+        <Tabs.Screen
+          name="messages"
+          options={{
+            title: "Messagerie",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profil",
-          tabBarIcon: ({ color, size }) => (
-            <User color={color} size={size} strokeWidth={1.5} />
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profil",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
-        }}
-      />
+          }}
+        />
       <Tabs.Screen
         name="request"
         options={{

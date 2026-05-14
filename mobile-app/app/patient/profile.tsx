@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   ChevronRight,
-  User,
   CreditCard,
+  Edit3,
+  HelpCircle,
+  LogOut,
   MapPin,
   Bell,
   Shield,
-  HelpCircle,
-  LogOut,
   Star,
+  User,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +39,18 @@ const menuSections = [
   },
 ];
 
+const demoFallbackProfile = {
+  fullName: "Driss Alaoui",
+  email: "driss.alaoui@email.com",
+  phone: "+212 6 12 34 56 78",
+  city: "Meknès",
+  avatar:
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
+  bookings: 12,
+  avgRating: "4.9",
+  spent: 1240,
+};
+
 export default function PatientProfileScreen() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
@@ -62,53 +75,57 @@ export default function PatientProfileScreen() {
     void loadStats();
   }, [user?.id]);
 
-  const displayName = profile ? `${profile.firstName} ${profile.lastName}` : "Utilisateur";
-  const initials = profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?";
-  const avatar = profile?.avatar;
-  const email = profile?.email ?? "";
-  const phone = profile?.phone ?? "";
-  const city = profile?.city ?? "";
+  const displayName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : demoFallbackProfile.fullName;
+  const initials = profile
+    ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` || "?"
+    : "DA";
+  const avatar = profile?.avatar || demoFallbackProfile.avatar;
+  const email = profile?.email || demoFallbackProfile.email;
+  const phone = profile?.phone || demoFallbackProfile.phone;
+  const city = profile?.city || demoFallbackProfile.city;
 
-  const spentLabel = useMemo(
-    () => totalSpent.toLocaleString("fr-MA"),
-    [totalSpent]
-  );
+  const spentLabel = useMemo(() => {
+    const value = totalSpent || demoFallbackProfile.spent;
+    return value.toLocaleString("fr-MA");
+  }, [totalSpent]);
+
+  const bookingsLabel = bookingsCount || demoFallbackProfile.bookings;
+  const ratingLabel = avgRating !== "—" ? avgRating : demoFallbackProfile.avgRating;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
+      <View style={styles.headerCard}>
         <Text style={styles.title}>Mon profil</Text>
-      </View>
 
-      <View style={styles.topCard}>
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarFallbackText}>{initials}</Text>
-              </View>
-            )}
+            <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
+            <TouchableOpacity style={styles.editBtn}>
+              <Edit3 size={10} color="white" />
+            </TouchableOpacity>
           </View>
+
           <View style={styles.profileMeta}>
             <Text style={styles.name}>{displayName}</Text>
-            {email ? <Text style={styles.email}>{email}</Text> : null}
-            {phone ? <Text style={styles.phone}>{phone}</Text> : null}
-            {city ? <Text style={styles.city}>{city}</Text> : null}
+            <Text style={styles.email}>{email}</Text>
+            <View style={styles.contactRow}>
+              <Text style={styles.phone}>{phone}</Text>
+              <Text style={styles.contactDot}>·</Text>
+              <Text style={styles.city}>{city}</Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>{bookingsCount}</Text>
+            <Text style={styles.statValue}>{bookingsLabel}</Text>
             <Text style={styles.statLabel}>Réservations</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
             <View style={styles.ratingRow}>
               <Star size={14} color="#FBBF24" fill="#FBBF24" />
-              <Text style={styles.statValue}>{avgRating}</Text>
+              <Text style={styles.statValue}>{ratingLabel}</Text>
             </View>
             <Text style={styles.statLabel}>Note moyenne</Text>
           </View>
@@ -156,42 +173,44 @@ export default function PatientProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 22,
-    color: Colors.textPrimary,
-    fontFamily: "DMSerifDisplay_400Regular",
-  },
-  topCard: {
+  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 24 },
+  headerCard: {
     backgroundColor: "white",
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: "#F0F0F0",
     marginBottom: 14,
   },
+  title: {
+    fontSize: 24,
+    color: Colors.textPrimary,
+    fontFamily: "DMSerifDisplay_400Regular",
+    marginBottom: 16,
+  },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
   avatar: { width: 64, height: 64, borderRadius: 32 },
-  avatarFallback: {
-    backgroundColor: Colors.surfaceWarm,
+  editBtn: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "rgba(13,8,112,0.12)",
+    borderColor: "white",
   },
-  avatarFallbackText: { color: Colors.primary, fontSize: 22, fontWeight: "700" },
   profileMeta: { flex: 1 },
   name: { color: Colors.textPrimary, fontSize: 17, fontWeight: "600" },
-  email: { marginTop: 1, color: Colors.textMuted, fontSize: 12 },
-  phone: { marginTop: 1, color: Colors.primary, fontSize: 12, fontWeight: "500" },
-  city: { marginTop: 1, color: Colors.textSubtle, fontSize: 11 },
+  email: { marginTop: 2, color: Colors.textMuted, fontSize: 12 },
+  contactRow: { marginTop: 2, flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  phone: { color: Colors.textMuted, fontSize: 12 },
+  contactDot: { color: "#D0D0D0", fontSize: 12 },
+  city: { color: Colors.textSubtle, fontSize: 11 },
   statsRow: {
     marginTop: 16,
     paddingTop: 14,

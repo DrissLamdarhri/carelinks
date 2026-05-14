@@ -15,7 +15,6 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
-import { mockProfessionals } from "@/lib/mock-data";
 import { BookingMap } from "../../components/BookingMap";
 
 const careTypes = ["Pansement", "Injection IM", "Injection SC", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire", "Kinésithérapie"];
@@ -66,7 +65,7 @@ export default function PatientRequestScreen() {
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [demoMode, setDemoMode] = useState(true);
+  const demoMode = true;
 
   const canSubmit = useMemo(() => address.trim().length > 3, [address]);
 
@@ -77,20 +76,6 @@ export default function PatientRequestScreen() {
     if (selected.includes("psy")) return "psy";
     return "infirmier";
   }, [careType]);
-
-  const availablePreview = useMemo(() => {
-    const specialtyMap: Record<string, string[]> = {
-      infirmier: ["infirmier"],
-      psy: ["psychologue"],
-      yoga: ["yoga"],
-      kine: ["kiné", "kine"],
-    };
-    const allowed = specialtyMap[serviceKey] ?? ["infirmier"];
-    return mockProfessionals
-      .filter((pro) => allowed.some((item) => pro.specialty.toLowerCase().includes(item)))
-      .sort((a, b) => Number(b.isOnline) - Number(a.isOnline))
-      .slice(0, 4);
-  }, [serviceKey]);
 
   const handleLocate = async () => {
     if (locating) return;
@@ -278,40 +263,6 @@ export default function PatientRequestScreen() {
           <LocateFixed size={14} color={Colors.primary} />
           <Text style={styles.locateText}>{coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}</Text>
         </TouchableOpacity>
-
-        <View style={styles.previewCard}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <Text style={styles.previewTitle}>Aperçu développeur: ce qui se passe après publication</Text>
-            <TouchableOpacity 
-              style={[styles.demoBadge, demoMode && styles.demoBadgeActive]}
-              onPress={() => setDemoMode(!demoMode)}
-            >
-              <Text style={[styles.demoBadgeText, demoMode && styles.demoBadgeTextActive]}>
-                {demoMode ? "DÉMO ON" : "PROD"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.previewStep}>1. Création de la demande (table bookings)</Text>
-          <Text style={styles.previewStep}>2. Filtrage par service + distance des pros disponibles</Text>
-          <Text style={styles.previewStep}>3. Notification envoyée aux pros ciblés</Text>
-          <Text style={styles.previewStep}>4. Réception des offres en temps réel (écran attente)</Text>
-
-          <Text style={styles.previewSubTitle}>Simulation des professionnels notifiés maintenant:</Text>
-          {availablePreview.length === 0 ? (
-            <Text style={styles.previewEmpty}>Aucun pro simulé pour ce service.</Text>
-          ) : (
-            availablePreview.map((pro) => (
-              <View key={pro.id} style={styles.previewProRow}>
-                <Text style={styles.previewProName}>
-                  {pro.firstName} {pro.lastName}
-                </Text>
-                <Text style={[styles.previewProStatus, pro.isOnline ? styles.previewProStatusOnline : undefined]}>
-                  {pro.isOnline ? "Disponible" : "Hors ligne"}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 

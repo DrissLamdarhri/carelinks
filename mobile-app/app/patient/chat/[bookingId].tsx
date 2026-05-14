@@ -3,27 +3,29 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Phone, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
-import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
+import type { Profile } from "@/lib/db/types";
 
 export default function BookingChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
   const isDemoBooking = isDemoBookingId(bookingId);
-  const { user, role } = useAuth();
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [recipientProfile, setRecipientProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -37,10 +39,7 @@ export default function BookingChatScreen() {
       }
       if (isDemoBooking) {
         setRecipientId(DEMO_PRO_1_ID);
-        setLoading(false);
-        return;
-      }
-      if (!user?.id) {
+        setRecipientProfile(buildDemoProfile(DEMO_PRO_1_ID));
         setLoading(false);
         return;
       }
@@ -49,9 +48,10 @@ export default function BookingChatScreen() {
       try {
         const booking = await db.bookings.get(bookingId);
         if (!active) return;
-        const counterpart =
-          role === "pro" ? booking.patient_id : booking.professional_id ?? booking.patient_id;
+        const counterpart = booking.professional_id ?? booking.patient_id;
         setRecipientId(counterpart);
+        const profile = await db.profiles.get(counterpart).catch(() => null);
+        if (active) setRecipientProfile(profile);
       } catch (error) {
         if (!active) return;
         setErrorMessage(error instanceof Error ? error.message : "Conversation indisponible.");
@@ -63,7 +63,7 @@ export default function BookingChatScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId, isDemoBooking, role, user?.id]);
+  }, [bookingId, isDemoBooking]);
 
   return (
     <KeyboardAvoidingView
@@ -75,18 +75,42 @@ export default function BookingChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>Chat de réservation</Text>
-          <Text style={styles.subtitle}>Booking #{(bookingId ?? "—").slice(0, 8)}</Text>
+        <View style={styles.headerProfile}>
+          {recipientProfile?.avatar_url ? (
+            <Image source={{ uri: recipientProfile.avatar_url }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarFallbackText}>
+                {(recipientProfile?.full_name ?? "Pro")
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.title} numberOfLines={1}>
+              {recipientProfile?.full_name ?? "Professionnel"}
+            </Text>
+            <Text style={styles.subtitle}>En ligne</Text>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.trackBtn}
-          onPress={() => {
-            if (bookingId) router.push(`/patient/tracking/${bookingId}`);
-          }}
-        >
-          <Text style={styles.trackBtnText}>Suivi</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => {
+              if (recipientProfile?.phone) {
+                void Linking.openURL(`tel:${recipientProfile.phone}`);
+              }
+            }}
+          >
+            <Phone size={16} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.iconBtn, styles.videoBtn]}>
+            <Video size={16} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -109,13 +133,11 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 12,
     backgroundColor: "white",
   },
-  headerTextWrap: { flex: 1 },
   backBtn: {
     width: 36,
     height: 36,
@@ -124,17 +146,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  trackBtn: {
-    height: 32,
-    borderRadius: 16,
-    paddingHorizontal: 12,
+  headerProfile: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 10 },
+  avatar: { width: 38, height: 38, borderRadius: 19 },
+  avatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.surfaceWarm,
     alignItems: "center",
     justifyContent: "center",
   },
-  trackBtnText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  title: { fontSize: 16, color: Colors.textPrimary, fontWeight: "600" },
-  subtitle: { fontSize: 11, color: Colors.textMuted },
+  avatarFallbackText: { color: Colors.primary, fontSize: 12, fontWeight: "700" },
+  headerTextWrap: { flex: 1 },
+  title: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600" },
+  subtitle: { fontSize: 11, color: Colors.primary },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.input,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoBtn: { backgroundColor: Colors.surfaceWarm },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 40, flex: 1 },
   errorText: { color: Colors.danger, fontSize: 12, textAlign: "center" },
 });

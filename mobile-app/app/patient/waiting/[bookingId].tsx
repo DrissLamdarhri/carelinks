@@ -28,7 +28,7 @@ export default function WaitingOffersScreen() {
   const bookingId = normalizeRouteParam(params.bookingId);
   const isDemoBooking = isDemoBookingId(bookingId);
 
-  const { pendingBids: livePendingBids, loading } = useBookingBids(isDemoBooking ? null : bookingId);
+  const { pendingBids: livePendingBids } = useBookingBids(isDemoBooking ? null : bookingId);
   const pendingBids = useMemo(
     () => (isDemoBooking && bookingId ? buildDemoBids(bookingId) : livePendingBids),
     [bookingId, isDemoBooking, livePendingBids]
@@ -37,12 +37,8 @@ export default function WaitingOffersScreen() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [nearbyCount, setNearbyCount] = useState<number | null>(null);
-  const [nearestDistance, setNearestDistance] = useState<number | null>(null);
-  const [geoError, setGeoError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [dots, setDots] = useState(0);
 
   const pulse1 = useRef(new Animated.Value(0)).current;
   const pulse2 = useRef(new Animated.Value(0)).current;
@@ -80,11 +76,6 @@ export default function WaitingOffersScreen() {
   }, [pulse1, pulse2, pulse3]);
 
   useEffect(() => {
-    const iv = setInterval(() => setDots((prev) => (prev + 1) % 4), 500);
-    return () => clearInterval(iv);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     const loadBooking = async () => {
       setBookingError(null);
@@ -116,26 +107,13 @@ export default function WaitingOffersScreen() {
   useEffect(() => {
     let cancelled = false;
     const loadNearby = async () => {
-      setGeoError(null);
       if (!bookingId) return;
-
+      if (isDemoBooking) return;
       try {
-        if (isDemoBooking) {
-          if (!cancelled) {
-            setNearbyCount(3);
-            setNearestDistance(1.2);
-          }
-          return;
-        }
-
-        const nearby = await geo.findProsNearBooking(bookingId, 15);
+        await geo.findProsNearBooking(bookingId, 15);
+      } catch {
         if (!cancelled) {
-          setNearbyCount(nearby.length);
-          setNearestDistance(nearby.length > 0 ? nearby[0].distance_km : null);
-        }
-      } catch (nearError) {
-        if (!cancelled) {
-          setGeoError(nearError instanceof Error ? nearError.message : "Recherche géographique indisponible.");
+          // Intentionally silent in the polished patient flow.
         }
       }
     };
@@ -215,7 +193,7 @@ export default function WaitingOffersScreen() {
           </View>
         </View>
 
-        <Text style={styles.searchTitle}>Recherche de professionnels{"•".repeat(dots)}</Text>
+        <Text style={styles.searchTitle}>Recherche de professionnels</Text>
         <Text style={styles.searchSubtitle}>
           Nous cherchons les professionnels disponibles dans votre zone
         </Text>
@@ -226,22 +204,6 @@ export default function WaitingOffersScreen() {
             {isDemoBooking ? "Mode démo actif" : "Connexion temps réel active"}
           </Text>
         </View>
-
-        {nearbyCount !== null ? (
-          <View style={styles.nearbyCard}>
-            <Text style={styles.nearbyTitle}>{nearbyCount} pro(s) à portée</Text>
-            <Text style={styles.nearbySub}>
-              {nearestDistance !== null
-                ? `Plus proche : ${nearestDistance.toFixed(1)} km`
-                : "Aucun professionnel détecté pour le moment"}
-            </Text>
-          </View>
-        ) : loading ? (
-          <View style={styles.nearbyCard}>
-            <ActivityIndicator size="small" color={Colors.primary} />
-            <Text style={styles.nearbySub}>Analyse géographique en cours…</Text>
-          </View>
-        ) : null}
 
         {booking ? (
           <View style={styles.summaryCard}>
@@ -297,7 +259,7 @@ export default function WaitingOffersScreen() {
               bookingId={bookingId ?? ""}
               mockBids={isDemoBooking ? pendingBids : undefined}
               onAccepted={() => {
-                if (bookingId) router.replace(`/patient/chat/${bookingId}`);
+                if (bookingId) router.replace(`/patient/tracking/${bookingId}`);
               }}
             />
             <TouchableOpacity
@@ -323,7 +285,6 @@ export default function WaitingOffersScreen() {
           <Text style={styles.cancelBtnText}>Annuler la demande</Text>
         </TouchableOpacity>
         {bookingError ? <Text style={styles.errorText}>{bookingError}</Text> : null}
-        {geoError ? <Text style={styles.errorText}>{geoError}</Text> : null}
         {cancelError ? <Text style={styles.errorText}>{cancelError}</Text> : null}
       </View>
     </View>

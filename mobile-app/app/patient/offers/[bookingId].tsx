@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,8 +14,6 @@ import {
   Clock3,
   Loader2,
   MapPin,
-  MessageCircle,
-  Phone,
   Shield,
   SlidersHorizontal,
   Star,
@@ -82,7 +79,7 @@ export default function NurseOffersScreen() {
   const [actionId, setActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hiddenOfferIds, setHiddenOfferIds] = useState<string[]>([]);
-  const [metaByProId, setMetaByProId] = useState<Record<string, ProOfferMeta>>({});
+  const [liveMetaByProId, setLiveMetaByProId] = useState<Record<string, ProOfferMeta>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -126,18 +123,21 @@ export default function NurseOffersScreen() {
     [bids, hiddenOfferIds]
   );
 
+  const demoMetaByProId = useMemo<Record<string, ProOfferMeta>>(() => {
+    if (!isDemoBooking) return {};
+    return Object.fromEntries(
+      [...new Set(visibleOffers.map((offer) => offer.professional_id))].map((proId) => [
+        proId,
+        getMeta(buildDemoProfile(proId), buildDemoProfessional(proId)),
+      ])
+    );
+  }, [isDemoBooking, visibleOffers]);
+  const metaByProId = isDemoBooking ? demoMetaByProId : liveMetaByProId;
+
   useEffect(() => {
-    let cancelled = false;
     const loadMeta = async () => {
       const uniqueProIds = [...new Set(visibleOffers.map((offer) => offer.professional_id))];
-      if (isDemoBooking) {
-        const nextMap = Object.fromEntries(
-          uniqueProIds.map((proId) => [proId, getMeta(buildDemoProfile(proId), buildDemoProfessional(proId))])
-        );
-        if (!cancelled) setMetaByProId(nextMap);
-        return;
-      }
-
+      if (isDemoBooking) return;
       const missingIds = uniqueProIds.filter((id) => !metaByProId[id]);
       if (missingIds.length === 0) return;
 
@@ -155,15 +155,10 @@ export default function NurseOffersScreen() {
         })
       );
 
-      if (!cancelled) {
-        setMetaByProId((prev) => ({ ...prev, ...Object.fromEntries(fetched) }));
-      }
+      setLiveMetaByProId((prev) => ({ ...prev, ...Object.fromEntries(fetched) }));
     };
     void loadMeta();
-    return () => {
-      cancelled = true;
-    };
-  }, [isDemoBooking, visibleOffers, metaByProId]);
+  }, [isDemoBooking, visibleOffers]);
 
   const handleAccept = async (offer: Bid) => {
     if (!bookingId) return;
@@ -177,12 +172,12 @@ export default function NurseOffersScreen() {
             status: bid.id === offer.id ? "accepted" : "rejected",
           }))
         );
-        router.replace(`/patient/chat/${bookingId}`);
+        router.replace(`/patient/tracking/${bookingId}`);
         return;
       }
       await db.bids.accept(offer);
       await db.bookings.acceptBid(bookingId, offer.professional_id, offer.price_mad);
-      router.replace(`/patient/chat/${bookingId}`);
+      router.replace(`/patient/tracking/${bookingId}`);
     } catch (acceptError) {
       setActionError(acceptError instanceof Error ? acceptError.message : "Erreur lors de l'acceptation.");
     } finally {
@@ -327,31 +322,6 @@ export default function NurseOffersScreen() {
                         <Text style={styles.specialtyText}>· {pro.yearsExperience} ans exp.</Text>
                       ) : null}
                     </View>
-                    {pro.phone ? (
-                      <View style={styles.contactRow}>
-                        <TouchableOpacity
-                          style={styles.callBtn}
-                          onPress={() => {
-                            void Linking.openURL(`tel:${pro.phone}`);
-                          }}
-                        >
-                          <Phone size={11} color="white" />
-                          <Text style={styles.callBtnText}>Appeler</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.whatsBtn}
-                          onPress={() => {
-                            const sanitized = pro.phone?.replace(/[^\d]/g, "");
-                            if (sanitized) {
-                              void Linking.openURL(`https://wa.me/${sanitized}`);
-                            }
-                          }}
-                        >
-                          <MessageCircle size={11} color="white" />
-                          <Text style={styles.whatsBtnText}>WhatsApp</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
                   </View>
 
                   <View style={styles.priceWrap}>

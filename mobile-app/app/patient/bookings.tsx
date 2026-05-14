@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,19 +9,106 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Calendar, CalendarClock, ChevronRight, MapPin, Star, Wallet } from "lucide-react-native";
+import { Calendar, CalendarClock, ChevronRight, MapPin, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import type { Booking } from "@/lib/db/types";
 import { CancellationDialog } from "@/components/CancellationDialog";
 
-const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
-  open: { color: "#0891B2", bg: "#D8F0F4", label: "En attente" },
-  matched: { color: Colors.primary, bg: Colors.surfaceWarm, label: "Confirmé" },
-  in_progress: { color: "#0891B2", bg: "#D8F0F4", label: "En cours" },
-  completed: { color: "#16A34A", bg: "#DCFCE7", label: "Terminé" },
-  cancelled: { color: Colors.danger, bg: "#FDE8E8", label: "Annulé" },
+type CardItem = {
+  id: string;
+  specialty: Booking["specialty"];
+  specialtyLabel: string;
+  statusLabel: string;
+  statusTone: "neutral" | "primary" | "success" | "danger";
+  name: string;
+  subtitle: string;
+  avatar: string | null;
+  price: number;
+  dateLabel: string;
+  scheduledAt: string | null;
+  status: Booking["status"];
+  rating?: number;
+  bookingId?: string;
+  isCompleted?: boolean;
+};
+
+const demoUpcoming: CardItem[] = [
+  {
+    id: "demo-upcoming-1",
+    specialtyLabel: "Infirmier",
+    specialty: "nurse",
+    statusLabel: "Confirmé",
+    statusTone: "neutral",
+    name: "Karim Benali",
+    subtitle: "Pansement",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
+    price: 120,
+    dateLabel: "15 Avr. 2025 — 14:00",
+    scheduledAt: "2025-04-15T14:00:00.000Z",
+    status: "matched",
+    bookingId: "demo-booking-upcoming-1",
+  },
+  {
+    id: "demo-upcoming-2",
+    specialtyLabel: "Psychologue",
+    specialty: "psychologist",
+    statusLabel: "En attente",
+    statusTone: "primary",
+    name: "Dr. Dalila Mansouri",
+    subtitle: "Consultation",
+    avatar: "https://images.unsplash.com/photo-1594824475317-d131f6cbf0d8?w=200&q=80",
+    price: 200,
+    dateLabel: "16 Avr. 2025 — 10:30",
+    scheduledAt: "2025-04-16T10:30:00.000Z",
+    status: "open",
+    bookingId: "demo-booking-upcoming-2",
+  },
+];
+
+const demoPast: CardItem[] = [
+  {
+    id: "demo-past-1",
+    specialtyLabel: "Infirmier",
+    specialty: "nurse",
+    statusLabel: "Terminé",
+    statusTone: "success",
+    name: "Fatima Zahra El Amrani",
+    subtitle: "Injection",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
+    price: 100,
+    dateLabel: "10 Avr. 2025 — 09:00",
+    scheduledAt: "2025-04-10T09:00:00.000Z",
+    status: "completed",
+    rating: 5,
+    bookingId: "demo-booking-past-1",
+    isCompleted: true,
+  },
+  {
+    id: "demo-past-2",
+    specialtyLabel: "Yoga",
+    specialty: "yoga_instructor",
+    statusLabel: "Terminé",
+    statusTone: "success",
+    name: "Sara Bennani",
+    subtitle: "Hatha Flow",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
+    price: 80,
+    dateLabel: "8 Avr. 2025 — 09:00",
+    scheduledAt: "2025-04-08T09:00:00.000Z",
+    status: "completed",
+    rating: 4,
+    bookingId: "demo-booking-past-2",
+    isCompleted: true,
+  },
+];
+
+const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string }> = {
+  neutral: { color: Colors.primary, bg: Colors.surfaceWarm },
+  primary: { color: Colors.primary, bg: "#EDE5CC" },
+  success: { color: "#16A34A", bg: "#DCFCE7" },
+  danger: { color: Colors.danger, bg: "#FDE8E8" },
 };
 
 export default function PatientBookingsScreen() {
@@ -30,29 +118,77 @@ export default function PatientBookingsScreen() {
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const { bookings, loading, error, refresh } = usePatientBookings(user?.id ?? null);
 
-  const { upcoming, past } = useMemo(() => {
-    const nextUpcoming = bookings.filter((item) =>
-      ["open", "matched", "in_progress"].includes(item.status)
-    );
-    const nextPast = bookings.filter((item) => ["completed", "cancelled"].includes(item.status));
-    return { upcoming: nextUpcoming, past: nextPast };
-  }, [bookings]);
+  const normalized = useMemo<CardItem[]>(() => {
+    if (!loading && bookings.length === 0) {
+      return tab === "upcoming" ? demoUpcoming : demoPast;
+    }
 
+    return bookings.map((booking, index) => {
+      const isPast = ["completed", "cancelled"].includes(booking.status);
+      const statusLabel =
+        booking.status === "open"
+          ? "En attente"
+          : booking.status === "matched"
+            ? "Confirmé"
+            : booking.status === "in_progress"
+              ? "En cours"
+              : booking.status === "completed"
+                ? "Terminé"
+                : "Annulé";
+      const tone: CardItem["statusTone"] =
+        booking.status === "completed"
+          ? "success"
+          : booking.status === "cancelled"
+            ? "danger"
+            : booking.status === "open"
+              ? "primary"
+              : "neutral";
+
+      return {
+        id: booking.id,
+        bookingId: booking.id,
+        specialty: booking.specialty,
+        specialtyLabel: booking.specialty.replaceAll("_", " "),
+        statusLabel,
+        statusTone: tone,
+        name: booking.professional_id ? `Professionnel ${booking.professional_id.slice(0, 4)}` : `Réservation ${index + 1}`,
+        subtitle: isPast ? "Soin terminé" : "Service à venir",
+        avatar: null,
+        price: booking.final_price_mad ?? booking.budget_max_mad ?? booking.budget_min_mad ?? 0,
+        dateLabel: booking.scheduled_at
+          ? new Date(booking.scheduled_at).toLocaleString("fr-MA", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+            : new Date(booking.created_at).toLocaleString("fr-MA", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+        scheduledAt: booking.scheduled_at,
+        status: booking.status,
+        isCompleted: isPast,
+        rating: booking.status === "completed" ? 5 : undefined,
+      };
+    });
+  }, [bookings, loading, tab]);
+
+  const upcoming = useMemo(
+    () => normalized.filter((item) => !item.isCompleted && item.statusLabel !== "Annulé"),
+    [normalized]
+  );
+  const past = useMemo(
+    () => normalized.filter((item) => item.isCompleted || item.statusLabel === "Annulé"),
+    [normalized]
+  );
   const displayed = tab === "upcoming" ? upcoming : past;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Mes Rendez-vous</Text>
-
-      <View style={styles.paymentCard}>
-        <Wallet size={18} color={Colors.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.paymentTitle}>Paiement</Text>
-          <Text style={styles.paymentText}>
-            Paiement en espèces ou lien carte sécurisé au moment du match.
-          </Text>
-        </View>
-      </View>
+      <Text style={styles.title}>Mes rendez-vous</Text>
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -60,7 +196,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("upcoming")}
         >
           <Text style={[styles.tabText, tab === "upcoming" && styles.tabTextActive]}>
-            À venir ({upcoming.length})
+            À venir
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -68,7 +204,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("past")}
         >
           <Text style={[styles.tabText, tab === "past" && styles.tabTextActive]}>
-            Passés ({past.length})
+            Historique
           </Text>
         </TouchableOpacity>
       </View>
@@ -96,110 +232,115 @@ export default function PatientBookingsScreen() {
       ) : null}
 
       {!loading &&
-        displayed.map((booking) => {
-          const status = statusConfig[booking.status] ?? statusConfig.open;
-          const when = booking.scheduled_at
-            ? new Date(booking.scheduled_at).toLocaleString("fr-MA", {
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : new Date(booking.created_at).toLocaleString("fr-MA", {
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-
-          const isOpen = booking.status === "open";
-          const isActive = ["matched", "in_progress"].includes(booking.status);
-          const isCompleted = booking.status === "completed";
-          const canCancel = ["open", "matched", "in_progress"].includes(booking.status);
-          const canPay = ["matched", "in_progress"].includes(booking.status);
-
+        displayed.map((item) => {
+          const tone = statusToneMap[item.statusTone];
           return (
-            <View key={booking.id} style={styles.card}>
+            <View key={item.id} style={styles.card}>
               <View style={styles.headRow}>
-                <View style={styles.iconWrap}>
-                  <CalendarClock size={18} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.serviceText}>
-                    {booking.specialty.replaceAll("_", " ")}
-                  </Text>
-                  <Text style={styles.metaText}>{booking.address ?? "Adresse non renseignée"}</Text>
-                </View>
-                <Text style={[styles.statusBadge, { color: status.color, backgroundColor: status.bg }]}>
-                  {status.label}
+                <Text style={[styles.badge, { backgroundColor: tone.bg, color: tone.color }]}>
+                  {item.specialtyLabel}
                 </Text>
+                <Text style={[styles.badge, { backgroundColor: "#F3F3F5", color: Colors.textMuted }]}>
+                  {item.statusLabel}
+                </Text>
+              </View>
+
+              <View style={styles.bodyRow}>
+                {item.avatar ? (
+                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarFallbackText}>
+                      {item.name
+                        .split(" ")
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.infoWrap}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.subtitle} numberOfLines={1}>
+                    {item.subtitle}
+                  </Text>
+                </View>
+
+                <View style={styles.priceWrap}>
+                  <Text style={styles.price}>{item.price} MAD</Text>
+                </View>
               </View>
 
               <View style={styles.metaRow}>
                 <CalendarClock size={12} color={Colors.textMuted} />
-                <Text style={styles.metaText}>{when}</Text>
+                <Text style={styles.metaText}>{item.dateLabel}</Text>
                 <MapPin size={12} color={Colors.textMuted} />
                 <Text style={styles.metaText} numberOfLines={1}>
-                  {booking.address ?? "—"}
+                  {item.isCompleted ? "Historique" : "Adresse enregistrée"}
                 </Text>
               </View>
 
               <View style={styles.footerRow}>
-                <Text style={styles.priceText}>
-                  {booking.final_price_mad ?? booking.budget_max_mad ?? booking.budget_min_mad ?? 0} MAD
-                </Text>
+                {item.isCompleted ? (
+                  <View style={styles.ratingWrap}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={12}
+                        color={s <= (item.rating ?? 0) ? "#FBBF24" : "#E0E0E0"}
+                        fill={s <= (item.rating ?? 0) ? "#FBBF24" : "transparent"}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => {
+                    if (!item.bookingId) return;
+                    setCancelTarget({
+                      id: item.bookingId,
+                      patient_id: user?.id ?? "demo-patient",
+                      service_id: null,
+                      specialty: item.specialty,
+                      professional_id: null,
+                      status: item.status,
+                      urgency: "normal",
+                      scheduled_at: item.scheduledAt,
+                      address: null,
+                      notes: null,
+                      budget_min_mad: null,
+                      budget_max_mad: null,
+                      final_price_mad: item.price,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                      completed_at: null,
+                      cancelled_at: null,
+                      cancel_reason: null,
+                    });
+                  }}
+                >
+                  <Text style={styles.secondaryBtnText}>Annuler</Text>
+                </TouchableOpacity>
+                )}
 
-                {isOpen ? (
-                  <TouchableOpacity
-                    style={styles.actionTextBtn}
-                    onPress={() => router.push(`/patient/waiting/${booking.id}`)}
-                  >
-                    <Text style={styles.actionText}>Suivre</Text>
-                    <ChevronRight size={14} color={Colors.primary} />
-                  </TouchableOpacity>
-                ) : null}
-
-                {isActive ? (
-                  <TouchableOpacity
-                    style={styles.actionTextBtn}
-                    onPress={() => router.push(`/patient/tracking/${booking.id}`)}
-                  >
-                    <Text style={styles.actionText}>Suivre</Text>
-                    <ChevronRight size={14} color={Colors.primary} />
-                  </TouchableOpacity>
-                ) : null}
-
-                {isCompleted ? (
-                  <TouchableOpacity
-                    style={styles.ratingBtn}
-                    onPress={() => router.push(`/patient/rating/${booking.id}`)}
-                  >
-                    <Star size={12} color={Colors.primary} fill={Colors.primary} />
-                    <Text style={styles.ratingBtnText}>Évaluer</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={() => {
+                    if (!item.bookingId) return;
+                    router.push(
+                      item.isCompleted ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}` : `/patient/tracking/${item.bookingId}`
+                    );
+                  }}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {item.isCompleted ? "Réserver à nouveau" : "Détails"}
+                  </Text>
+                  {!item.isCompleted ? <ChevronRight size={14} color="white" /> : null}
+                </TouchableOpacity>
               </View>
-
-              {(canCancel || canPay) ? (
-                <View style={styles.extraActionsRow}>
-                  {canCancel ? (
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={() => setCancelTarget(booking)}
-                    >
-                      <Text style={styles.cancelBtnText}>Annuler</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {canPay ? (
-                    <TouchableOpacity
-                      style={styles.payBtn}
-                      onPress={() => router.push(`/patient/payment/${booking.id}`)}
-                    >
-                      <Text style={styles.payBtnText}>Payer</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              ) : null}
             </View>
           );
         })}
@@ -227,24 +368,12 @@ const styles = StyleSheet.create({
     fontFamily: "DMSerifDisplay_400Regular",
     marginBottom: 12,
   },
-  paymentCard: {
-    backgroundColor: Colors.surfaceWarm,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E9DEC0",
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-  },
-  paymentTitle: { color: Colors.primary, fontWeight: "700", fontSize: 13 },
-  paymentText: { color: "rgba(13,8,112,0.75)", fontSize: 12, marginTop: 2 },
   tabs: {
     flexDirection: "row",
     backgroundColor: Colors.input,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   tabBtn: {
     flex: 1,
@@ -284,72 +413,55 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  headRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 9 },
-  iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.surfaceWarm,
-  },
-  serviceText: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600", textTransform: "capitalize" },
-  statusBadge: {
+  headRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  badge: {
     fontSize: 11,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
     overflow: "hidden",
     fontWeight: "600",
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
-  metaText: { color: Colors.textMuted, fontSize: 12, flexShrink: 1 },
-  footerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  priceText: { color: Colors.primary, fontSize: 16, fontWeight: "700" },
-  actionTextBtn: { flexDirection: "row", alignItems: "center", gap: 3 },
-  actionText: { color: Colors.primary, fontSize: 12, fontWeight: "500" },
-  ratingBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  bodyRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  avatar: { width: 42, height: 42, borderRadius: 21 },
+  avatarFallback: {
     backgroundColor: Colors.surfaceWarm,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  ratingBtnText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  extraActionsRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    gap: 8,
-  },
-  cancelBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#F4C8C8",
-    backgroundColor: "#FFF4F4",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EDE5CC",
   },
-  cancelBtnText: {
-    color: Colors.danger,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  payBtn: {
+  avatarFallbackText: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
+  infoWrap: { flex: 1, minWidth: 0 },
+  name: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
+  subtitle: { color: Colors.textMuted, fontSize: 12, marginTop: 1 },
+  priceWrap: { alignItems: "flex-end" },
+  price: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 10 },
+  metaText: { color: Colors.textMuted, fontSize: 12, flexShrink: 1 },
+  footerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  secondaryBtn: {
     flex: 1,
-    height: 40,
-    borderRadius: 10,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "white",
+  },
+  secondaryBtnText: { color: Colors.textMuted, fontSize: 12, fontWeight: "600" },
+  primaryBtn: {
+    flex: 1.2,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 4,
   },
-  payBtnText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  primaryBtnText: { color: "white", fontSize: 12, fontWeight: "600" },
+  ratingWrap: { flexDirection: "row", gap: 3, flex: 1 },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });

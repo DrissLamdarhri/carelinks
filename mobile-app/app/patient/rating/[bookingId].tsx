@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Star, ThumbsUp } from "lucide-react-native";
+import { ThumbsUp } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
-import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { buildDemoBooking, buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { RatingForm } from "@/components/RatingForm";
+import type { Booking, Profile } from "@/lib/db/types";
 
 export default function RatingScreen() {
   const router = useRouter();
@@ -20,12 +20,11 @@ export default function RatingScreen() {
   const bookingId = normalizeRouteParam(params.bookingId);
   const isDemoBooking = isDemoBookingId(bookingId);
   const [professionalId, setProfessionalId] = useState<string | null>(null);
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [professional, setProfessional] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const rating = 5;
   const [submitted, setSubmitted] = useState(false);
-
-  const stars = useMemo(() => [1, 2, 3, 4, 5], []);
 
   useEffect(() => {
     let active = true;
@@ -37,7 +36,11 @@ export default function RatingScreen() {
       }
 
       if (isDemoBooking) {
+        const nextBooking = buildDemoBooking(bookingId);
+        const nextProfessional = buildDemoProfile(DEMO_PRO_1_ID);
+        setBooking(nextBooking);
         setProfessionalId(DEMO_PRO_1_ID);
+        setProfessional(nextProfessional);
         setLoading(false);
         return;
       }
@@ -47,7 +50,12 @@ export default function RatingScreen() {
       try {
         const booking = await db.bookings.get(bookingId);
         if (!active) return;
+        setBooking(booking);
         setProfessionalId(booking.professional_id ?? null);
+        if (booking.professional_id) {
+          const pro = await db.profiles.get(booking.professional_id).catch(() => null);
+          if (active) setProfessional(pro);
+        }
       } catch (error) {
         if (!active) return;
         setErrorMessage(error instanceof Error ? error.message : "Impossible de charger la réservation.");
@@ -71,16 +79,6 @@ export default function RatingScreen() {
         <Text style={styles.successSubtitle}>
           Votre évaluation aide à améliorer la qualité des soins sur CareLink.
         </Text>
-        <View style={styles.successStars}>
-          {stars.map((item) => (
-            <Star
-              key={item}
-              size={30}
-              color={item <= rating ? "#FBBF24" : "#E0E0E0"}
-              fill={item <= rating ? "#FBBF24" : "transparent"}
-            />
-          ))}
-        </View>
         <TouchableOpacity style={styles.successBtn} onPress={() => router.replace("/patient")}>
           <Text style={styles.successBtnText}>Retour à l'accueil</Text>
         </TouchableOpacity>
@@ -90,22 +88,20 @@ export default function RatingScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 18 }}>
-        <View style={styles.topBlock}>
-          <Text style={styles.title}>Comment était votre soin ?</Text>
-          <Text style={styles.subtitle}>Réservation #{(bookingId ?? "—").slice(0, 8)}</Text>
-        </View>
-
+      <View style={styles.content}>
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={Colors.primary} />
           </View>
         ) : null}
 
-        {!loading && professionalId && bookingId ? (
+        {!loading && professionalId && bookingId && booking ? (
           <RatingForm
             bookingId={bookingId}
             professionalId={professionalId}
+            professionalName={professional?.full_name ?? "Professionnel"}
+            professionalAvatar={professional?.avatar_url ?? null}
+            subtitle={booking.specialty.replaceAll("_", " ")}
             onSubmitted={() => setSubmitted(true)}
           />
         ) : null}
@@ -117,29 +113,22 @@ export default function RatingScreen() {
             </Text>
           </View>
         ) : null}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.skipBtn} onPress={() => router.replace("/patient")}>
-          <Text style={styles.skipBtnText}>Passer</Text>
-        </TouchableOpacity>
       </View>
+
+      {!submitted ? (
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.skipBtn} onPress={() => router.replace("/patient")}>
+            <Text style={styles.skipBtnText}>Passer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "white" },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
-  topBlock: { alignItems: "center", marginBottom: 24 },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 22,
-    fontFamily: "DMSerifDisplay_400Regular",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  subtitle: { color: Colors.textMuted, fontSize: 13 },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20, justifyContent: "center" },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 32 },
   errorCard: {
     borderRadius: 14,
@@ -183,7 +172,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   successSubtitle: { color: Colors.textMuted, fontSize: 14, textAlign: "center", marginBottom: 20 },
-  successStars: { flexDirection: "row", gap: 8, marginBottom: 24 },
   successBtn: {
     width: "100%",
     height: 52,
