@@ -259,7 +259,7 @@ export default function WaitingOffersScreen() {
               bookingId={bookingId ?? ""}
               mockBids={isDemoBooking ? pendingBids : undefined}
               onAccepted={() => {
-                if (bookingId) router.replace(`/patient/tracking/${bookingId}`);
+                if (bookingId) router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
               }}
             />
             <TouchableOpacity

@@ -68,8 +68,18 @@ export default function RootLayout() {
                   headerShown: false,
                 }}
               >
+                <Stack.Screen name="index" options={{ headerShown: false }} />
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
                 <Stack.Screen name="patient" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/request" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/waiting/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/offers/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/chat/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/tracking" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/tracking/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/rating/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/payment/[bookingId]" options={{ headerShown: false }} />
+                <Stack.Screen name="patient/provider/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="pro" options={{ headerShown: false }} />
                 <Stack.Screen name="admin" options={{ headerShown: false }} />
               </Stack>

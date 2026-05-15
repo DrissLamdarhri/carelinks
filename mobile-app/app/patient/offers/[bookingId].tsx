@@ -172,12 +172,12 @@ export default function NurseOffersScreen() {
             status: bid.id === offer.id ? "accepted" : "rejected",
           }))
         );
-        router.replace(`/patient/tracking/${bookingId}`);
+        router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
         return;
       }
       await db.bids.accept(offer);
       await db.bookings.acceptBid(bookingId, offer.professional_id, offer.price_mad);
-      router.replace(`/patient/tracking/${bookingId}`);
+      router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
     } catch (acceptError) {
       setActionError(acceptError instanceof Error ? acceptError.message : "Erreur lors de l'acceptation.");
     } finally {

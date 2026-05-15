@@ -142,7 +142,7 @@ export default function PatientLayout() {
         }}
       />
       <Tabs.Screen
-        name="tracking/[bookingId]"
+        name="tracking"
         options={{
           href: null,
           tabBarStyle: { display: "none" },

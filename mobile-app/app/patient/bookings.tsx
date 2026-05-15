@@ -331,7 +331,9 @@ export default function PatientBookingsScreen() {
                   onPress={() => {
                     if (!item.bookingId) return;
                     router.push(
-                      item.isCompleted ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}` : `/patient/tracking/${item.bookingId}`
+                      item.isCompleted
+                        ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}`
+                        : `/patient/tracking?bookingId=${encodeURIComponent(item.bookingId)}`
                     );
                   }}
                 >

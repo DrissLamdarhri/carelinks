@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  LayoutAnimation,
   Image,
   Linking,
-  Platform,
-  UIManager,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -55,12 +52,6 @@ export default function LiveTrackingScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [position, setPosition] = useState<TrackPosition>(DEFAULT_TRACK_POS);
   const [demoStep, setDemoStep] = useState(0);
-
-  useEffect(() => {
-    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,7 +113,6 @@ export default function LiveTrackingScreen() {
     setDemoStep(0);
     const iv = setInterval(() => {
       idx = Math.min(idx + 1, demoPath.length - 1);
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPosition({ ...demoPath[idx], at: new Date().toISOString() });
       setDemoStep(idx);
     }, 900);
