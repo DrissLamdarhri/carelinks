@@ -79,7 +79,7 @@ export default function ProBidsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   backBtn: {

@@ -4,12 +4,11 @@
  */
 
 import { Tabs } from "expo-router";
-import { Home, Calendar, MessageCircle, User } from "lucide-react-native";
+import { Calendar, Home, MessageCircle, Search, User } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#0D0870";
-const ACCENT = "#5BB8D4";
 const INACTIVE = "#B0B0B0";
 
 export default function PatientLayout() {
@@ -48,119 +47,101 @@ export default function PatientLayout() {
         },
       }}
     >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Accueil",
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Accueil",
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Home color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
             </View>
           ),
-          }}
-        />
-        <Tabs.Screen
-          name="bookings"
-          options={{
-            title: "Réservations",
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={iconWrap(focused)}>
-              <Calendar color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
-            </View>
-          ),
-          }}
-        />
-        <Tabs.Screen
-          name="messages"
-          options={{
-            title: "Messagerie",
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={iconWrap(focused)}>
-              <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
-            </View>
-          ),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Profil",
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={iconWrap(focused)}>
-              <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
-            </View>
-          ),
-          }}
-        />
-      <Tabs.Screen
-        name="request"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
-      />
-      <Tabs.Screen
-        name="offers/[bookingId]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
-      />
-      <Tabs.Screen
-        name="chat/[bookingId]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
-      />
-      <Tabs.Screen
-        name="waiting/[bookingId]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen
         name="yoga"
         options={{
-          href: null,
-          tabBarStyle: { display: "none" },
+          title: "Explorer",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <Search color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
+          ),
         }}
+      />
+      <Tabs.Screen
+        name="bookings"
+        options={{
+          title: "Mes RDV",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <Calendar color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profil",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="request"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="offers/[bookingId]"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="chat/[bookingId]"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="waiting/[bookingId]"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="psychologist"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="provider/[id]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="tracking"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="tracking/[bookingId]"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="rating/[bookingId]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="payment/[bookingId]"
-        options={{
-          href: null,
-          tabBarStyle: { display: "none" },
-        }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
     </Tabs>
   );

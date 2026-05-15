@@ -222,7 +222,7 @@ export default function KycUploaderScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surfaceWarm,
   },
   content: {
     paddingHorizontal: 20,
@@ -344,4 +344,3 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
 });
-

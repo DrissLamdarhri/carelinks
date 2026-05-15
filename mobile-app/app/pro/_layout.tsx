@@ -5,32 +5,45 @@
 
 import { Tabs } from "expo-router";
 import { Layers, FileText, TrendingUp, User } from "lucide-react-native";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#0D0870";
-const ACCENT = "#8ECFDF";
+const INACTIVE = "#B0B0B0";
 
 export default function ProLayout() {
   const insets = useSafeAreaInsets();
   const tabBottomPadding =
     Platform.OS === "ios" ? Math.max(insets.bottom, 8) : Math.max(insets.bottom, 14);
   const tabBarHeight = 50 + tabBottomPadding;
+  const iconWrap = (focused: boolean) => ({
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: focused ? "#EDE5CC" : "transparent",
+  });
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: ACCENT,
-        tabBarInactiveTintColor: "#888780",
+        tabBarActiveTintColor: PRIMARY,
+        tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
-          backgroundColor: PRIMARY,
-          borderTopWidth: 0,
+          backgroundColor: "white",
+          borderTopWidth: 1,
+          borderTopColor: "#EFEFEF",
           elevation: 0,
           shadowOpacity: 0,
-          height: tabBarHeight,
+          height: tabBarHeight + 2,
           paddingBottom: tabBottomPadding,
-          paddingTop: 4,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          marginTop: 2,
         },
       }}
     >
@@ -38,8 +51,10 @@ export default function ProLayout() {
         name="index"
         options={{
           title: "Tableau de bord",
-          tabBarIcon: ({ color, size }) => (
-            <Layers color={color} size={size} strokeWidth={1.5} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <Layers color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
         }}
       />
@@ -47,8 +62,10 @@ export default function ProLayout() {
         name="schedule"
         options={{
           title: "Calendrier",
-          tabBarIcon: ({ color, size }) => (
-            <FileText color={color} size={size} strokeWidth={1.5} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <FileText color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
         }}
       />
@@ -56,8 +73,10 @@ export default function ProLayout() {
         name="earnings"
         options={{
           title: "Revenus",
-          tabBarIcon: ({ color, size }) => (
-            <TrendingUp color={color} size={size} strokeWidth={1.5} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <TrendingUp color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
         }}
       />
@@ -65,8 +84,10 @@ export default function ProLayout() {
         name="profile"
         options={{
           title: "Profil",
-          tabBarIcon: ({ color, size }) => (
-            <User color={color} size={size} strokeWidth={1.5} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+            </View>
           ),
         }}
       />

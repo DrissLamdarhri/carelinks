@@ -90,6 +90,8 @@ export default function ProProfileScreen() {
   const avatar =
     profile?.avatar ||
     "https://images.unsplash.com/photo-1594824475317-d131f6cbf0d8?w=200&q=80";
+  const email = profile?.email || "";
+  const phone = profile?.phone || "";
   const city = profile?.city ?? "";
   const rating = pro?.rating_avg ?? 0;
   const isVerified = pro?.verification_status === "approved";
@@ -101,14 +103,19 @@ export default function ProProfileScreen() {
 
       <View style={styles.headerCard}>
         <View style={styles.profileRow}>
-          <Image source={{ uri: avatar }} style={styles.avatar} />
+          <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
           <View style={styles.profileMeta}>
-            <View style={styles.nameRow}>
-              <Text style={styles.name}>{displayName}</Text>
+            <Text style={styles.name}>{displayName}</Text>
+            {email ? <Text style={styles.email}>{email}</Text> : null}
+            <View style={styles.contactRow}>
+              {phone ? <Text style={styles.phone}>{phone}</Text> : null}
+              {phone && city ? <Text style={styles.contactDot}>·</Text> : null}
+              {city ? <Text style={styles.city}>{city}</Text> : null}
+            </View>
+            <View style={styles.specialtyRow}>
+              <Text style={styles.specialty}>{specialty}</Text>
               {isVerified ? <Shield size={14} color={Colors.primary} /> : null}
             </View>
-            <Text style={styles.specialty}>{specialty}</Text>
-            {city ? <Text style={styles.city}>{city}</Text> : null}
           </View>
         </View>
 
@@ -135,29 +142,6 @@ export default function ProProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.locationBtn} onPress={handleLocationUpdate} disabled={locating}>
-        {locating ? (
-          <ActivityIndicator size="small" color="white" />
-        ) : (
-          <LocateFixed size={18} color="white" />
-        )}
-        <Text style={styles.locationText}>
-          {locating ? "Enregistrement…" : "Définir ma position GPS actuelle"}
-        </Text>
-      </TouchableOpacity>
-      <Text style={styles.locationHint}>
-        Permet aux patients de votre rayon de vous trouver via le matching géographique.
-      </Text>
-      {user?.id && pro ? (
-        <RadiusSlider
-          professionalId={user.id}
-          initialRadiusKm={pro.service_radius_km || 5}
-          onUpdated={(radiusKm) =>
-            setPro((prev) => (prev ? { ...prev, service_radius_km: radiusKm } : prev))
-          }
-        />
-      ) : null}
-
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
           <TouchableOpacity
@@ -174,6 +158,31 @@ export default function ProProfileScreen() {
             <ChevronRight size={16} color="#D0D0D0" />
           </TouchableOpacity>
         ))}
+      </View>
+
+      <View style={styles.coverageCard}>
+        <TouchableOpacity style={styles.locationBtn} onPress={handleLocationUpdate} disabled={locating}>
+          {locating ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <LocateFixed size={18} color="white" />
+          )}
+          <Text style={styles.locationText}>
+            {locating ? "Enregistrement…" : "Définir ma position GPS actuelle"}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.locationHint}>
+          Permet aux patients de votre rayon de vous trouver via le matching géographique.
+        </Text>
+        {user?.id && pro ? (
+          <RadiusSlider
+            professionalId={user.id}
+            initialRadiusKm={pro.service_radius_km || 5}
+            onUpdated={(radiusKm) =>
+              setPro((prev) => (prev ? { ...prev, service_radius_km: radiusKm } : prev))
+            }
+          />
+        ) : null}
       </View>
 
       <TouchableOpacity
@@ -213,9 +222,13 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: { width: 64, height: 64, borderRadius: 32 },
   profileMeta: { flex: 1 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { color: Colors.textPrimary, fontSize: 17, fontWeight: "600" },
-  specialty: { marginTop: 1, color: Colors.textMuted, fontSize: 13, textTransform: "capitalize" },
+  email: { marginTop: 2, color: Colors.textMuted, fontSize: 12 },
+  contactRow: { marginTop: 2, flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  phone: { color: Colors.textMuted, fontSize: 12 },
+  contactDot: { color: "#D0D0D0", fontSize: 12 },
+  specialtyRow: { marginTop: 2, flexDirection: "row", alignItems: "center", gap: 6 },
+  specialty: { color: Colors.textMuted, fontSize: 13, textTransform: "capitalize" },
   city: { marginTop: 1, color: Colors.textSubtle, fontSize: 11 },
   statsRow: {
     marginTop: 14,
@@ -242,6 +255,14 @@ const styles = StyleSheet.create({
   },
   locationText: { color: "white", fontSize: 14, fontWeight: "600" },
   locationHint: { color: Colors.textMuted, fontSize: 11, marginTop: 6, marginBottom: 12, paddingHorizontal: 2 },
+  coverageCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#F5F5F5",
+  },
   menuStack: { gap: 8 },
   menuItem: {
     flexDirection: "row",

@@ -82,7 +82,7 @@ export default function ProScheduleScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   content: { padding: 20, gap: 10 },
   title: {
     fontSize: 24,
