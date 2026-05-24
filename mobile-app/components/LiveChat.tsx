@@ -251,6 +251,8 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
           onChangeText={setInput}
           placeholder="Votre message..."
           placeholderTextColor={Colors.textSubtle}
+          selectionColor={Colors.primary}
+          cursorColor={Colors.primary}
           style={styles.input}
         />
         <TouchableOpacity
@@ -355,9 +357,12 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 999,
-    backgroundColor: Colors.input,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingHorizontal: 14,
     color: Colors.textPrimary,
+    fontSize: 14,
   },
   sendBtn: {
     width: 44,

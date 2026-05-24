@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -167,7 +168,11 @@ export default function WaitingOffersScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.centerWrap}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.radarWrap}>
           {[pulse1, pulse2, pulse3].map((pulse, index) => (
             <Animated.View
@@ -277,7 +282,7 @@ export default function WaitingOffersScreen() {
             <Text style={styles.waitingText}>En attente de réponses…</Text>
           </View>
         )}
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity onPress={handleCancel} disabled={cancelling} style={styles.cancelBtn}>
@@ -292,7 +297,7 @@ export default function WaitingOffersScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "white" },
+  root: { flex: 1, backgroundColor: Colors.background },
   header: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -310,11 +315,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: "600" },
-  centerWrap: {
-    flex: 1,
+  body: { flex: 1 },
+  bodyContent: {
     alignItems: "center",
-    justifyContent: "center",
     paddingHorizontal: 24,
+    paddingBottom: 16,
   },
   radarWrap: { width: 160, height: 160, alignItems: "center", justifyContent: "center", marginBottom: 24 },
   radarRing: {
@@ -357,18 +362,25 @@ const styles = StyleSheet.create({
   nearbySub: { color: Colors.textMuted, fontSize: 11 },
   summaryCard: {
     width: "100%",
-    backgroundColor: Colors.surfaceWarm,
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    padding: 16,
     marginBottom: 14,
-    gap: 9,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   summaryRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   summaryIconWrap: {
     width: 30,
     height: 30,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceWarm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -377,19 +389,24 @@ const styles = StyleSheet.create({
   summaryPrice: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
   previewWrap: {
     width: "100%",
-    borderRadius: 16,
-    backgroundColor: "white",
+    borderRadius: 18,
+    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "#EDE5CC",
-    padding: 12,
-    gap: 8,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   previewHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   previewTitle: { color: Colors.textPrimary, fontSize: 13, fontWeight: "600" },
   offersBtn: {
     width: "100%",
-    height: 44,
-    borderRadius: 12,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -400,7 +417,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: Colors.primary,
   },
   offersCountText: { color: "white", fontSize: 12, fontWeight: "700" },
   offersBtnText: { color: "white", fontSize: 14, fontWeight: "600" },

@@ -24,6 +24,14 @@ export default function PatientLayout() {
     justifyContent: "center" as const,
     backgroundColor: focused ? "#EDE5CC" : "transparent",
   });
+  const hiddenTabOptions = {
+    tabBarButton: () => null,
+    tabBarItemStyle: { display: "none" },
+  } as const;
+  const hiddenFullScreenOptions = {
+    ...hiddenTabOptions,
+    tabBarStyle: { display: "none" },
+  } as const;
 
   return (
     <Tabs
@@ -103,46 +111,17 @@ export default function PatientLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="request"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="offers/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="chat/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="waiting/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="psychologist"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="provider/[id]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="tracking"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="tracking/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="rating/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
-      <Tabs.Screen
-        name="payment/[bookingId]"
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
-      />
+      <Tabs.Screen name="request" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="waiting/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="psychologist" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="provider/[id]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="tracking/index" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="rating/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="payment/[bookingId]" options={hiddenFullScreenOptions} />
+
     </Tabs>
   );
 }

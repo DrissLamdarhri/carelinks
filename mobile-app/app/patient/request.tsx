@@ -67,7 +67,10 @@ export default function PatientRequestScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const demoMode = true;
 
-  const canSubmit = useMemo(() => address.trim().length > 3, [address]);
+  const canSubmit = useMemo(
+    () => address.trim().length > 3 || coords !== null,
+    [address, coords]
+  );
 
   const serviceKey = useMemo(() => {
     const selected = careTypes[careType].toLowerCase();
@@ -87,6 +90,8 @@ export default function PatientRequestScreen() {
       const city = await geo.reverseGeocode(current.lat, current.lng);
       if (city && !address.trim()) {
         setAddress(city);
+      } else if (!city && !address.trim()) {
+        setAddress("Ma position");
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Position GPS indisponible.");
