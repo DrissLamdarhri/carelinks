@@ -17,7 +17,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "expo-router";
 import { db } from "@/lib/db/dal";
 
-const menuSections = [
+const menuSections: Array<{
+  title: string;
+  items: Array<{ icon: typeof User; label: string; color: string; route?: string }>;
+}> = [
   {
     title: "Compte",
     items: [
@@ -30,7 +33,7 @@ const menuSections = [
     title: "Préférences",
     items: [
       { icon: Bell, label: "Notifications", color: "#6BB8C8" },
-      { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6" },
+      { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6", route: "/auth/mfa-settings" },
     ],
   },
   {
@@ -145,6 +148,9 @@ export default function PatientProfileScreen() {
               <TouchableOpacity
                 key={item.label}
                 style={[styles.menuItem, index === section.items.length - 1 && styles.menuItemLast]}
+                onPress={() => {
+                  if (item.route) router.push(item.route as never);
+                }}
               >
                 <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
                   <item.icon size={16} color={item.color} />

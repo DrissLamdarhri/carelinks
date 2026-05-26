@@ -114,7 +114,10 @@ export default function ProRegistrationScreen() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      await signUpWithEmail(form.email.trim(), form.password, fullName, "pro");
+      await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
+        phone: form.phone.trim(),
+        city: form.city.trim(),
+      });
       setSubmitted(true);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'inscription.");

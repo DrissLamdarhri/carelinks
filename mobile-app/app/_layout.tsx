@@ -26,12 +26,19 @@ export default function RootLayout() {
     DMSans_500Medium,
     DMSerifDisplay_400Regular,
   });
+  const appReady = fontsLoaded || Boolean(fontError);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    if (fontError) {
+      console.error("Failed to load fonts:", fontError);
+    }
+  }, [fontError]);
 
   useEffect(() => {
     const handleUrl = async (url: string) => {
@@ -61,7 +68,7 @@ export default function RootLayout() {
     <AuthProvider>
       <I18nProvider>
         <SafeAreaProvider>
-          {fontsLoaded ? (
+          {appReady ? (
             <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
               <Stack
                 screenOptions={{
@@ -71,15 +78,6 @@ export default function RootLayout() {
                 <Stack.Screen name="index" options={{ headerShown: false }} />
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
                 <Stack.Screen name="patient" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/request" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/waiting/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/offers/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/chat/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/tracking" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/tracking/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/rating/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/payment/[bookingId]" options={{ headerShown: false }} />
-                <Stack.Screen name="patient/provider/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="pro" options={{ headerShown: false }} />
                 <Stack.Screen name="admin" options={{ headerShown: false }} />
               </Stack>

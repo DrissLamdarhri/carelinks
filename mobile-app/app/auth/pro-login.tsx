@@ -13,32 +13,46 @@ import { ArrowLeft, ChevronRight, Eye, EyeOff, Lock, Mail, Shield, Stethoscope }
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
+import { AppleAuthButton } from "@/components/AppleAuthButton";
 
 export default function ProLoginScreen() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const valid = email.trim().length > 0 && password.trim().length > 0;
+
+  const routeByRole = (nextRole: string | null) => {
+    if (nextRole === "patient") {
+      router.replace("/patient");
+    } else if (nextRole === "admin") {
+      router.replace("/admin");
+    } else {
+      router.replace("/pro");
+    }
+  };
+
+  const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
+    router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
+  };
 
   const handleEmailSignIn = async () => {
     if (!valid || submitting) return;
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      const role = await signInWithEmail(email.trim(), password, "pro");
-      if (role === "patient") {
-        router.replace("/patient");
-      } else if (role === "admin") {
-        router.replace("/admin");
-      } else {
-        router.replace("/pro");
+      const result = await signInWithEmail(email.trim(), password, "pro");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "pro");
+        return;
       }
+      routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
     } finally {
@@ -51,12 +65,34 @@ export default function ProLoginScreen() {
     setErrorMessage(null);
     setGoogleLoading(true);
     try {
-      await signInWithGoogle("pro");
-      router.replace("/pro");
+      const result = await signInWithGoogle("pro");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "pro");
+        return;
+      }
+      routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (appleLoading) return;
+    setErrorMessage(null);
+    setAppleLoading(true);
+    try {
+      const result = await signInWithApple("pro");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "pro");
+        return;
+      }
+      routeByRole(result.role);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Connexion Apple impossible.");
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -85,6 +121,8 @@ export default function ProLoginScreen() {
         <Text style={styles.formLead}>Connectez-vous à votre compte professionnel</Text>
 
         <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignIn} />
+        <View style={styles.oauthSpacer} />
+        <AppleAuthButton loading={appleLoading} onPress={handleAppleSignIn} />
 
         <View style={styles.sepRow}>
           <View style={styles.sepLine} />
@@ -270,4 +308,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   registerText: { color: Colors.primary, fontSize: 14, fontWeight: "600" },
+  oauthSpacer: { height: 10 },
 });

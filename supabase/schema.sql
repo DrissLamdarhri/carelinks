@@ -24,6 +24,7 @@ create table public.profiles (
   id              uuid primary key references auth.users(id) on delete cascade,
   role            user_role not null,
   full_name       text not null,
+  email           text,
   phone           text unique,                       -- format E.164 +212...
   avatar_url      text,
   city            text,

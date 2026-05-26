@@ -13,32 +13,46 @@ import { ArrowLeft, ChevronRight, Eye, EyeOff, Lock, Mail } from "lucide-react-n
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
+import { AppleAuthButton } from "@/components/AppleAuthButton";
 
 export default function PatientLoginScreen() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const valid = email.trim().length > 0 && password.trim().length > 0;
+
+  const routeByRole = (nextRole: string | null) => {
+    if (nextRole === "pro") {
+      router.replace("/pro");
+    } else if (nextRole === "admin") {
+      router.replace("/admin");
+    } else {
+      router.replace("/patient");
+    }
+  };
+
+  const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
+    router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
+  };
 
   const handleEmailSignIn = async () => {
     if (!valid || submitting) return;
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      const role = await signInWithEmail(email.trim(), password, "patient");
-      if (role === "pro") {
-        router.replace("/pro");
-      } else if (role === "admin") {
-        router.replace("/admin");
-      } else {
-        router.replace("/patient");
+      const result = await signInWithEmail(email.trim(), password, "patient");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "patient");
+        return;
       }
+      routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
     } finally {
@@ -51,12 +65,34 @@ export default function PatientLoginScreen() {
     setErrorMessage(null);
     setGoogleLoading(true);
     try {
-      await signInWithGoogle("patient");
-      router.replace("/patient");
+      const result = await signInWithGoogle("patient");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "patient");
+        return;
+      }
+      routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (appleLoading) return;
+    setErrorMessage(null);
+    setAppleLoading(true);
+    try {
+      const result = await signInWithApple("patient");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "patient");
+        return;
+      }
+      routeByRole(result.role);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Connexion Apple impossible.");
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -81,6 +117,8 @@ export default function PatientLoginScreen() {
         </View>
 
         <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignIn} />
+        <View style={styles.oauthSpacer} />
+        <AppleAuthButton loading={appleLoading} onPress={handleAppleSignIn} />
 
         <View style={styles.sepRow}>
           <View style={styles.sepLine} />
@@ -219,4 +257,5 @@ const styles = StyleSheet.create({
   errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
   hintCard: { marginTop: 12, backgroundColor: Colors.surfaceWarm, borderRadius: 12, padding: 12 },
   hintText: { fontSize: 11, color: Colors.primary, fontWeight: "500" },
+  oauthSpacer: { height: 10 },
 });

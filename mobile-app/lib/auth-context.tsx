@@ -3,8 +3,7 @@
  *
  * Key differences from src/lib/auth-context.tsx (web):
  *   • No localStorage → AsyncStorage / expo-secure-store
- *   • signInWithGoogle → expo-web-browser + makeRedirectUri
- *   • No window.location.origin
+ *   • OAuth → expo-web-browser + makeRedirectUri
  *   • Deep-link handling is done in the root _layout.tsx (not here)
  */
 
@@ -17,19 +16,27 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Session } from "@supabase/supabase-js";
+import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { getOAuthRedirectUrl } from "@/lib/auth-redirect";
+import {
+  enrollTotp,
+  getAssuranceLevel,
+  listTotpFactors,
+  mfaStorage,
+  normalizePhoneNumber,
+  sendSmsOtp,
+  verifySmsOtp,
+  verifyTotp,
+} from "@/lib/hooks/useMfa";
+import { useAppleAuth } from "@/lib/hooks/useAppleAuth";
 
 // Lazy-import expo packages so this file can still be imported in unit tests
 // without needing the full Expo environment.
 let WebBrowser: typeof import("expo-web-browser") | null = null;
-let makeRedirectUri: typeof import("expo-auth-session").makeRedirectUri | null =
-  null;
-
 if (Platform.OS !== "web") {
   try {
     WebBrowser = require("expo-web-browser");
-    makeRedirectUri = require("expo-auth-session").makeRedirectUri;
     WebBrowser?.maybeCompleteAuthSession?.();
   } catch {
     // expo packages not installed — running in unit test context
@@ -38,6 +45,7 @@ if (Platform.OS !== "web") {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type UserRole = "patient" | "pro" | "admin" | null;
+export type MfaMethod = "totp" | "sms" | null;
 
 export interface UserProfile {
   id: string;
@@ -49,7 +57,14 @@ export interface UserProfile {
   email: string;
   avatar: string;
   createdAt?: string;
+  mfaEnabled: boolean;
+  mfaMethod: MfaMethod;
 }
+
+export type SignInResult = {
+  role: UserRole;
+  mfaRequired: boolean;
+};
 
 interface AuthContextValue {
   user: User | null;
@@ -57,20 +72,27 @@ interface AuthContextValue {
   profile: UserProfile | null;
   role: UserRole;
   loading: boolean;
+  mfaEnabled: boolean;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
-  signInWithGoogle: (intendedRole?: "patient" | "pro") => Promise<void>;
+  signInWithGoogle: (intendedRole?: "patient" | "pro") => Promise<SignInResult>;
+  signInWithApple: (intendedRole?: "patient" | "pro") => Promise<SignInResult>;
   signInWithEmail: (
     email: string,
     password: string,
     intendedRole?: "patient" | "pro"
-  ) => Promise<UserRole>;
+  ) => Promise<SignInResult>;
   signUpWithEmail: (
     email: string,
     password: string,
     fullName: string,
-    role: "patient" | "pro"
+    role: "patient" | "pro",
+    options?: { phone?: string; city?: string }
   ) => Promise<void>;
+  enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
+  verifyMfaTotp: (code: string, factorId?: string) => Promise<void>;
+  challengeMfaSms: (phone: string) => Promise<void>;
+  verifyMfaSms: (phone: string, code: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -79,11 +101,17 @@ const AuthContext = createContext<AuthContextValue>({
   profile: null,
   role: null,
   loading: true,
+  mfaEnabled: false,
   refreshProfile: async () => {},
   signOut: async () => {},
-  signInWithGoogle: async () => {},
-  signInWithEmail: async () => null,
+  signInWithGoogle: async () => ({ role: null, mfaRequired: false }),
+  signInWithApple: async () => ({ role: null, mfaRequired: false }),
+  signInWithEmail: async () => ({ role: null, mfaRequired: false }),
   signUpWithEmail: async () => {},
+  enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
+  verifyMfaTotp: async () => {},
+  challengeMfaSms: async () => {},
+  verifyMfaSms: async () => {},
 });
 
 // ── Helper: build UserProfile from Supabase profile row ──────────────────────
@@ -98,6 +126,7 @@ async function fetchProfileFromSupabase(
   if (error || !data) return null;
 
   const nameParts = (data.full_name ?? "").split(" ");
+  const method = data.mfa_method === "totp" || data.mfa_method === "sms" ? data.mfa_method : null;
   return {
     id: data.id,
     role: (data.role === "professional" ? "pro" : data.role) as UserRole,
@@ -105,9 +134,11 @@ async function fetchProfileFromSupabase(
     lastName: nameParts.slice(1).join(" "),
     phone: data.phone ?? "",
     city: data.city ?? "",
-    email: "",
+    email: data.email ?? "",
     avatar: data.avatar_url ?? "",
     createdAt: data.created_at,
+    mfaEnabled: Boolean(data.mfa_enabled),
+    mfaMethod: method,
   };
 }
 
@@ -117,8 +148,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { signInWithApple: startAppleSignIn } = useAppleAuth();
 
   const role: UserRole = profile?.role ?? null;
+  const mfaEnabled = Boolean(profile?.mfaEnabled);
+
+  const updateProfileMfa = async (enabled: boolean, method: MfaMethod) => {
+    if (!user?.id) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ mfa_enabled: enabled, mfa_method: method })
+      .eq("id", user.id);
+    if (error) throw error;
+    setProfile((prev) =>
+      prev ? { ...prev, mfaEnabled: enabled, mfaMethod: method } : prev
+    );
+  };
 
   const fetchProfile = async (authUser: User): Promise<UserProfile | null> => {
     let p = await fetchProfileFromSupabase(authUser.id);
@@ -130,12 +175,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (authUser.user_metadata?.name as string | undefined) ??
         authUser.email?.split("@")[0] ??
         "CareLink User";
-
+      const phone =
+        (authUser.user_metadata?.phone as string | undefined) ?? "";
+      const city = (authUser.user_metadata?.city as string | undefined) ?? "";
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: authUser.id,
         role,
         full_name: fullName,
         language: "fr",
+        phone: phone || null,
+        city: city || null,
       });
       if (profileError) throw profileError;
 
@@ -161,20 +210,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user);
   };
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) {
-        fetchProfile(data.session.user).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
+  const awaitSessionFromOAuth = async (): Promise<Session> => {
+    const { data: existing } = await supabase.auth.getSession();
+    if (existing.session) return existing.session;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        subscription.unsubscribe();
+        reject(new Error("Connexion OAuth expirée."));
+      }, 15000);
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, newSession) => {
+        if (newSession?.user && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+          clearTimeout(timeout);
+          subscription.unsubscribe();
+          resolve(newSession);
+        }
+      });
     });
+  };
+
+  const resolveMfaRequirement = async (p: UserProfile | null): Promise<boolean> => {
+    const level = await getAssuranceLevel();
+    const hasTotp = level.nextLevel === "aal2";
+    const wantsSms = p?.mfaMethod === "sms";
+    return hasTotp || wantsSms;
+  };
+
+  useEffect(() => {
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        if (data.session?.user) {
+          fetchProfile(data.session.user).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to read auth session:", error);
+        setLoading(false);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (_, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
@@ -191,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Sign out ────────────────────────────────────────────────────────────────
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    await mfaStorage.clearFactorId();
     setProfile(null);
     setUser(null);
     setSession(null);
@@ -200,33 +284,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Google OAuth (Expo WebBrowser) ──────────────────────────────────────────
   const signInWithGoogle = async (
     intendedRole: "patient" | "pro" = "patient"
-  ) => {
+  ): Promise<SignInResult> => {
     await AsyncStorage.setItem("carelink_intended_role", intendedRole);
 
-    const redirectTo = makeRedirectUri
-      ? makeRedirectUri({ scheme: "ma.carelink.app", path: "auth/callback" })
-      : "ma.carelink.app://auth/callback";
+    const redirectTo = getOAuthRedirectUrl();
+    const shouldSkipRedirect = Platform.OS !== "web";
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
         queryParams: { prompt: "select_account" },
-        skipBrowserRedirect: true, // we open the browser ourselves
+        skipBrowserRedirect: shouldSkipRedirect,
       },
     });
     if (error) throw error;
+
+    if (!shouldSkipRedirect) {
+      return { role: intendedRole, mfaRequired: false };
+    }
 
     if (data.url && WebBrowser) {
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
         redirectTo
       );
-      if (result.type === "success") {
-        // The deep-link handler in _layout.tsx will call
-        // supabase.auth.exchangeCodeForSession(code)
+      if (result.type !== "success") {
+        throw new Error("Connexion Google annulée.");
       }
     }
+
+    const oauthSession = await awaitSessionFromOAuth();
+    const p = oauthSession.user ? await fetchProfile(oauthSession.user) : null;
+    const mfaRequired = oauthSession.user ? await resolveMfaRequirement(p) : false;
+    return { role: p?.role ?? intendedRole, mfaRequired };
+  };
+
+  // ── Apple OAuth (Expo WebBrowser) ───────────────────────────────────────────
+  const signInWithApple = async (
+    intendedRole: "patient" | "pro" = "patient"
+  ): Promise<SignInResult> => {
+    await AsyncStorage.setItem("carelink_intended_role", intendedRole);
+    await startAppleSignIn();
+
+    if (Platform.OS === "web") {
+      return { role: intendedRole, mfaRequired: false };
+    }
+
+    const oauthSession = await awaitSessionFromOAuth();
+    const p = oauthSession.user ? await fetchProfile(oauthSession.user) : null;
+    const mfaRequired = oauthSession.user ? await resolveMfaRequirement(p) : false;
+    return { role: p?.role ?? intendedRole, mfaRequired };
   };
 
   // ── Email/password sign-in ──────────────────────────────────────────────────
@@ -234,16 +342,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     intendedRole: "patient" | "pro" = "patient"
-  ) => {
+  ): Promise<SignInResult> => {
     await AsyncStorage.setItem("carelink_intended_role", intendedRole);
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
-    if (!data.user) return null;
+    if (!data.user) return { role: intendedRole, mfaRequired: false };
     const p = await fetchProfile(data.user);
-    return p?.role ?? intendedRole;
+    const mfaRequired = await resolveMfaRequirement(p);
+    return { role: p?.role ?? intendedRole, mfaRequired };
   };
 
   // ── Email/password sign-up ──────────────────────────────────────────────────
@@ -251,16 +360,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    role: "patient" | "pro"
+    role: "patient" | "pro",
+    options?: { phone?: string; city?: string }
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", role);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          phone: options?.phone ?? "",
+          city: options?.city ?? "",
+        },
+      },
+    });
     if (error) throw error;
     if (data.user) {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         role: role === "pro" ? "professional" : "patient",
         full_name: fullName,
+        phone: options?.phone ?? null,
+        city: options?.city ?? null,
         language: "fr",
       });
       if (profileError) throw profileError;
@@ -279,6 +401,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ── MFA helpers ─────────────────────────────────────────────────────────────
+  const enrollMfaTotp = async () => {
+    return enrollTotp();
+  };
+
+  const resolveTotpFactorId = async (factorId?: string): Promise<string> => {
+    if (factorId) return factorId;
+    const stored = await mfaStorage.getFactorId();
+    if (stored) return stored;
+    const factors = await listTotpFactors();
+    const verified = factors.find((factor) => factor.status === "verified") ?? factors[0];
+    if (!verified) throw new Error("Aucun facteur TOTP disponible.");
+    await mfaStorage.setFactorId(verified.id);
+    return verified.id;
+  };
+
+  const verifyMfaTotp = async (code: string, factorId?: string) => {
+    const resolvedId = await resolveTotpFactorId(factorId);
+    await verifyTotp(resolvedId, code);
+    await updateProfileMfa(true, "totp");
+  };
+
+  const challengeMfaSms = async (phone: string) => {
+    const normalized = normalizePhoneNumber(phone);
+    await sendSmsOtp(normalized);
+  };
+
+  const verifyMfaSms = async (phone: string, code: string) => {
+    const normalized = normalizePhoneNumber(phone);
+    await verifySmsOtp(normalized, code);
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      setSession(data.session);
+      setUser(data.session.user);
+      await fetchProfile(data.session.user);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -287,11 +447,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         role,
         loading,
+        mfaEnabled,
         refreshProfile,
         signOut: handleSignOut,
         signInWithGoogle,
+        signInWithApple,
         signInWithEmail,
         signUpWithEmail,
+        enrollMfaTotp,
+        verifyMfaTotp,
+        challengeMfaSms,
+        verifyMfaSms,
       }}
     >
       {children}

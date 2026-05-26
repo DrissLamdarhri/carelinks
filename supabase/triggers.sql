@@ -174,12 +174,13 @@ language plpgsql
 security definer
 as $$
 begin
-  insert into public.profiles (id, full_name, avatar_url, role)
+  insert into public.profiles (id, full_name, avatar_url, role, email)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', new.email),
     new.raw_user_meta_data->>'avatar_url',
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'patient')
+    coalesce((new.raw_user_meta_data->>'role')::user_role, 'patient'),
+    new.email
   )
   on conflict (id) do nothing;
   return new;

@@ -14,10 +14,17 @@ import { Colors } from "@/lib/colors";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
+import { AppleAuthButton } from "@/components/AppleAuthButton";
 
 export default function RegistrationScreen() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithGoogle } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
+    router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
+  };
+  const goToMfaSetup = () => {
+    router.replace({ pathname: "/auth/mfa-setup", params: { next: "/patient" } });
+  };
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -31,6 +38,7 @@ export default function RegistrationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const fullName = `${firstName} ${lastName}`.trim();
   const passwordLevel = useMemo(() => {
@@ -55,12 +63,34 @@ export default function RegistrationScreen() {
     setErrorMessage(null);
     setGoogleLoading(true);
     try {
-      await signInWithGoogle("patient");
-      router.replace("/patient");
+      const result = await signInWithGoogle("patient");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "patient");
+        return;
+      }
+      goToMfaSetup();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Inscription Google impossible.");
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignUp = async () => {
+    if (appleLoading) return;
+    setErrorMessage(null);
+    setAppleLoading(true);
+    try {
+      const result = await signInWithApple("patient");
+      if (result.mfaRequired) {
+        goToMfaChallenge(result.role ?? "patient");
+        return;
+      }
+      goToMfaSetup();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Inscription Apple impossible.");
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -69,8 +99,11 @@ export default function RegistrationScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      await signUpWithEmail(email.trim(), password, fullName, "patient");
-      router.replace("/patient");
+      await signUpWithEmail(email.trim(), password, fullName, "patient", {
+        phone: phone.trim(),
+        city,
+      });
+      goToMfaSetup();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Inscription impossible.");
     } finally {
@@ -99,6 +132,8 @@ export default function RegistrationScreen() {
         </View>
 
         <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignUp} />
+        <View style={styles.oauthSpacer} />
+        <AppleAuthButton loading={appleLoading} onPress={handleAppleSignUp} />
 
         <View style={styles.sepRow}>
           <View style={styles.sepLine} />
@@ -381,4 +416,5 @@ const styles = StyleSheet.create({
   submitDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600", fontFamily: "DMSans_500Medium" },
   errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
+  oauthSpacer: { height: 10 },
 });
