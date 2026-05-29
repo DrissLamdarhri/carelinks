@@ -20,17 +20,20 @@ export default function MfaSettingsScreen() {
   const { user, profile, refreshProfile, challengeMfaSms, verifyMfaSms } = useAuth();
   const { listTotpFactors, unenrollFactor, clearBackupCodes } = useMfa(user?.id);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [checkingFactors, setCheckingFactors] = useState(true);
   const [totpFactorId, setTotpFactorId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [smsSent, setSmsSent] = useState(false);
   const [smsCode, setSmsCode] = useState("");
   const [smsLoading, setSmsLoading] = useState(false);
+  const smsAvailable = process.env.EXPO_PUBLIC_ENABLE_SMS_MFA === "true";
 
   useEffect(() => {
     let mounted = true;
     const loadFactors = async () => {
+      setCheckingFactors(true);
       try {
         const factors = await listTotpFactors();
         const verified = factors.find((factor) => factor.status === "verified");
@@ -38,7 +41,7 @@ export default function MfaSettingsScreen() {
       } catch (error) {
         if (mounted) setErrorMessage(error instanceof Error ? error.message : "MFA indisponible.");
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setCheckingFactors(false);
       }
     };
     void loadFactors();
@@ -115,16 +118,9 @@ export default function MfaSettingsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  const smsEnabled = profile?.mfaMethod === "sms";
+  const smsEnabled = smsAvailable && profile?.mfaMethod === "sms";
   const totpEnabled = Boolean(totpFactorId);
+  const showSmsCard = !totpEnabled && !checkingFactors;
 
   return (
     <View style={styles.root}>
@@ -139,81 +135,98 @@ export default function MfaSettingsScreen() {
           <View style={styles.cardHeader}>
             <ShieldCheck size={18} color={Colors.primary} />
             <Text style={styles.cardTitle}>Authentificateur</Text>
+            {checkingFactors ? <ActivityIndicator size="small" color={Colors.primary} /> : null}
           </View>
           <Text style={styles.cardBody}>
-            {totpEnabled
-              ? "Activé : votre compte est protégé par un code TOTP."
-              : "Non activé : utilisez une application comme Google Authenticator ou Authy."}
+            {checkingFactors
+              ? "Vérification du statut MFA…"
+              : totpEnabled
+                ? "Activé : votre compte est protégé par un code TOTP."
+                : "Non activé : utilisez une application comme Google Authenticator ou Authy."}
           </Text>
           {totpEnabled ? (
-            <TouchableOpacity style={styles.dangerBtn} onPress={handleDisableTotp}>
+            <TouchableOpacity
+              style={styles.dangerBtn}
+              onPress={handleDisableTotp}
+              disabled={loading || checkingFactors}
+            >
               <Text style={styles.dangerText}>Désactiver</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={styles.primaryBtn}
               onPress={() => router.push({ pathname: "/auth/mfa-setup" })}
+              disabled={loading || checkingFactors}
             >
               <Text style={styles.primaryText}>Configurer</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {!totpEnabled ? (
+        {showSmsCard ? (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Smartphone size={18} color={Colors.primary} />
               <Text style={styles.cardTitle}>Code SMS de secours</Text>
             </View>
-            <Text style={styles.cardBody}>
-              {smsEnabled
-                ? "Activé : un SMS peut être demandé si aucun TOTP n'est configuré."
-                : "Activez un SMS de secours si vous ne configurez pas de TOTP."}
-            </Text>
-            {!profile?.phone ? (
-              <Text style={styles.cardHint}>Numéro de téléphone manquant dans votre profil.</Text>
-            ) : null}
-            {smsEnabled ? (
-              <TouchableOpacity style={styles.dangerBtn} onPress={handleSmsDisable} disabled={smsLoading}>
-                {smsLoading ? (
-                  <ActivityIndicator size="small" color={Colors.danger} />
-                ) : (
-                  <Text style={styles.dangerText}>Désactiver</Text>
-                )}
-              </TouchableOpacity>
-            ) : (
+            {smsAvailable ? (
               <>
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={handleSmsEnroll}
-                  disabled={smsLoading || !profile?.phone}
-                >
-                  {smsLoading ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.primaryText}>Activer le SMS</Text>
-                  )}
-                </TouchableOpacity>
-                {smsSent ? (
-                  <View style={styles.smsVerifyRow}>
-                    <TextInput
-                      value={smsCode}
-                      onChangeText={(text) => setSmsCode(text.replace(/\D/g, "").slice(0, 6))}
-                      keyboardType="number-pad"
-                      placeholder="Code 6 chiffres"
-                      placeholderTextColor={Colors.textSubtle}
-                      style={styles.smsInput}
-                    />
-                    <TouchableOpacity
-                      style={styles.secondaryBtn}
-                      onPress={handleSmsVerify}
-                      disabled={smsLoading || smsCode.length !== 6}
-                    >
-                      <Text style={styles.secondaryText}>Valider</Text>
-                    </TouchableOpacity>
-                  </View>
+                <Text style={styles.cardBody}>
+                  {smsEnabled
+                    ? "Activé : un SMS peut être demandé si aucun TOTP n'est configuré."
+                    : "Activez un SMS de secours si vous ne configurez pas de TOTP."}
+                </Text>
+                {!profile?.phone ? (
+                  <Text style={styles.cardHint}>Numéro de téléphone manquant dans votre profil.</Text>
                 ) : null}
+                {smsEnabled ? (
+                  <TouchableOpacity style={styles.dangerBtn} onPress={handleSmsDisable} disabled={smsLoading}>
+                    {smsLoading ? (
+                      <ActivityIndicator size="small" color={Colors.danger} />
+                    ) : (
+                      <Text style={styles.dangerText}>Désactiver</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.primaryBtn}
+                      onPress={handleSmsEnroll}
+                      disabled={smsLoading || !profile?.phone}
+                    >
+                      {smsLoading ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Text style={styles.primaryText}>Activer le SMS</Text>
+                      )}
+                    </TouchableOpacity>
+                    {smsSent ? (
+                      <View style={styles.smsVerifyRow}>
+                        <TextInput
+                          value={smsCode}
+                          onChangeText={(text) => setSmsCode(text.replace(/\D/g, "").slice(0, 6))}
+                          keyboardType="number-pad"
+                          placeholder="Code 6 chiffres"
+                          placeholderTextColor={Colors.textSubtle}
+                          style={styles.smsInput}
+                        />
+                        <TouchableOpacity
+                          style={styles.secondaryBtn}
+                          onPress={handleSmsVerify}
+                          disabled={smsLoading || smsCode.length !== 6}
+                        >
+                          <Text style={styles.secondaryText}>Valider</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </>
+                )}
               </>
+            ) : (
+              <Text style={styles.cardHint}>
+                Le SMS nécessite un fournisseur payant (Twilio). Utilisez plutôt l’application
+                d’authentification (TOTP).
+              </Text>
             )}
           </View>
         ) : null}

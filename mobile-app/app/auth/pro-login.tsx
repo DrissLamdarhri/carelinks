@@ -14,6 +14,7 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
+import { showToast } from "@/lib/toast";
 
 export default function ProLoginScreen() {
   const router = useRouter();
@@ -42,12 +43,20 @@ export default function ProLoginScreen() {
     router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
   };
 
+  const handleRoleMismatch = (nextRole: string | null) => {
+    if (!nextRole || nextRole === "pro") return;
+    const label =
+      nextRole === "patient" ? "patient" : nextRole === "admin" ? "administrateur" : "utilisateur";
+    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+  };
+
   const handleEmailSignIn = async () => {
     if (!valid || submitting) return;
     setErrorMessage(null);
     setSubmitting(true);
     try {
       const result = await signInWithEmail(email.trim(), password, "pro");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "pro");
         return;
@@ -66,6 +75,7 @@ export default function ProLoginScreen() {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle("pro");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "pro");
         return;
@@ -84,6 +94,7 @@ export default function ProLoginScreen() {
     setAppleLoading(true);
     try {
       const result = await signInWithApple("pro");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "pro");
         return;

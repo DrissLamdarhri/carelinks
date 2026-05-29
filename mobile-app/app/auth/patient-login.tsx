@@ -14,6 +14,7 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
+import { showToast } from "@/lib/toast";
 
 export default function PatientLoginScreen() {
   const router = useRouter();
@@ -42,12 +43,20 @@ export default function PatientLoginScreen() {
     router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
   };
 
+  const handleRoleMismatch = (nextRole: string | null) => {
+    if (!nextRole || nextRole === "patient") return;
+    const label =
+      nextRole === "pro" ? "professionnel" : nextRole === "admin" ? "administrateur" : "utilisateur";
+    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+  };
+
   const handleEmailSignIn = async () => {
     if (!valid || submitting) return;
     setErrorMessage(null);
     setSubmitting(true);
     try {
       const result = await signInWithEmail(email.trim(), password, "patient");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "patient");
         return;
@@ -66,6 +75,7 @@ export default function PatientLoginScreen() {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle("patient");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "patient");
         return;
@@ -84,6 +94,7 @@ export default function PatientLoginScreen() {
     setAppleLoading(true);
     try {
       const result = await signInWithApple("patient");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "patient");
         return;

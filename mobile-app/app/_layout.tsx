@@ -4,7 +4,7 @@
  * Sets up navigation structure based on user role
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Stack } from "expo-router";
 import * as Linking from "expo-linking";
@@ -26,7 +26,8 @@ export default function RootLayout() {
     DMSans_500Medium,
     DMSerifDisplay_400Regular,
   });
-  const appReady = fontsLoaded || Boolean(fontError);
+  const [forceReady, setForceReady] = useState(false);
+  const appReady = fontsLoaded || Boolean(fontError) || forceReady;
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -39,6 +40,15 @@ export default function RootLayout() {
       console.error("Failed to load fonts:", fontError);
     }
   }, [fontError]);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) return;
+    const timer = setTimeout(() => {
+      console.warn("Font loading timed out, continuing without custom fonts.");
+      setForceReady(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [fontsLoaded, fontError]);
 
   useEffect(() => {
     const handleUrl = async (url: string) => {

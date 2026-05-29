@@ -65,7 +65,8 @@ export default function MfaChallengeScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const canSendSms = Boolean(profile?.phone);
+  const smsAvailable = process.env.EXPO_PUBLIC_ENABLE_SMS_MFA === "true";
+  const canSendSms = smsAvailable && Boolean(profile?.phone);
 
   useEffect(() => {
     let mounted = true;
@@ -77,20 +78,23 @@ export default function MfaChallengeScreen() {
         setTotpAvailable(hasTotp);
         if (hasTotp) {
           setMode("totp");
-        } else {
+        } else if (smsAvailable) {
           setMode("sms");
+        } else {
+          setMode("totp");
+          setErrorMessage("Le SMS est désactivé. Configurez un authentificateur TOTP.");
         }
       } catch (error) {
         if (!mounted) return;
         setErrorMessage(error instanceof Error ? error.message : "Impossible de charger le MFA.");
-        setMode(profile?.mfaMethod === "sms" ? "sms" : "totp");
+        setMode(profile?.mfaMethod === "sms" && smsAvailable ? "sms" : "totp");
       }
     };
     void loadFactors();
     return () => {
       mounted = false;
     };
-  }, [listTotpFactors, profile?.mfaMethod]);
+  }, [listTotpFactors, profile?.mfaMethod, smsAvailable]);
 
   useEffect(() => {
     if (mode !== "sms" || smsSent || !canSendSms) return;

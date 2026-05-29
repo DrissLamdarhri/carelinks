@@ -15,6 +15,7 @@ import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
+import { showToast } from "@/lib/toast";
 
 export default function RegistrationScreen() {
   const router = useRouter();
@@ -24,6 +25,13 @@ export default function RegistrationScreen() {
   };
   const goToMfaSetup = () => {
     router.replace({ pathname: "/auth/mfa-setup", params: { next: "/patient" } });
+  };
+
+  const handleRoleMismatch = (nextRole: string | null) => {
+    if (!nextRole || nextRole === "patient") return;
+    const label =
+      nextRole === "pro" ? "professionnel" : nextRole === "admin" ? "administrateur" : "utilisateur";
+    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
   };
 
   const [firstName, setFirstName] = useState("");
@@ -64,6 +72,7 @@ export default function RegistrationScreen() {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle("patient");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "patient");
         return;
@@ -82,6 +91,7 @@ export default function RegistrationScreen() {
     setAppleLoading(true);
     try {
       const result = await signInWithApple("patient");
+      handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "patient");
         return;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Check, CircleUserRound, X } from "lucide-react-native";
+import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 import type { ProDocument, Professional, Profile } from "@/lib/db/types";
@@ -78,9 +79,11 @@ export default function KycModerationQueueScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadQueue();
-  }, [loadQueue]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadQueue();
+    }, [loadQueue])
+  );
 
   const updateDecision = async (
     professionalId: string,

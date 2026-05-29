@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +45,7 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(true);
   const [marking, setMarking] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) {
@@ -77,24 +78,31 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel(`notifications:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          void fetchNotifications();
-        }
-      )
-      .subscribe();
+    if (channelRef.current) {
+      void supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    const channel = supabase.channel(`notifications:${user.id}:${Date.now()}`);
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${user.id}`,
+      },
+      () => {
+        void fetchNotifications();
+      }
+    );
+    channel.subscribe();
+    channelRef.current = channel;
 
     return () => {
-      void supabase.removeChannel(channel);
+      if (channelRef.current) {
+        void supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [fetchNotifications, user?.id]);
 
@@ -314,4 +322,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-

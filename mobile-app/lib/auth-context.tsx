@@ -233,9 +233,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resolveMfaRequirement = async (p: UserProfile | null): Promise<boolean> => {
     const level = await getAssuranceLevel();
-    const hasTotp = level.nextLevel === "aal2";
-    const wantsSms = p?.mfaMethod === "sms";
-    return hasTotp || wantsSms;
+    if (p?.mfaMethod === "sms") {
+      return level.currentLevel !== "aal2";
+    }
+    return level.currentLevel !== "aal2" && level.nextLevel === "aal2";
   };
 
   useEffect(() => {

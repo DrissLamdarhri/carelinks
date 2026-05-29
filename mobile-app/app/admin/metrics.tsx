@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { RefreshCw } from "lucide-react-native";
+import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 
@@ -105,9 +106,11 @@ export default function AdminMetricsScreen() {
     setLoading(false);
   }, [loadMetrics]);
 
-  useEffect(() => {
-    void runRefresh();
-  }, [runRefresh]);
+  useFocusEffect(
+    useCallback(() => {
+      void runRefresh();
+    }, [runRefresh])
+  );
 
   const cards = useMemo(
     () => [
@@ -236,4 +239,3 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
-

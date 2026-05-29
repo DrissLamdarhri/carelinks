@@ -11,9 +11,13 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, ShieldCheck } from "lucide-react-native";
+import { Buffer } from "buffer";
+import * as Clipboard from "expo-clipboard";
+import { SvgXml } from "react-native-svg";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { useMfa } from "@/lib/hooks/useMfa";
+import { supabase } from "@/lib/supabase";
 
 function CodeInput({
   value,
@@ -53,8 +57,8 @@ function CodeInput({
 export default function MfaSetupScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { user, profile, enrollMfaTotp, verifyMfaTotp } = useAuth();
-  const { createBackupCodes, clearBackupCodes } = useMfa(user?.id);
+  const { user, profile, enrollMfaTotp, verifyMfaTotp, refreshProfile } = useAuth();
+  const { createBackupCodes, clearBackupCodes, listTotpFactors, unenrollFactor } = useMfa(user?.id);
 
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
@@ -64,6 +68,9 @@ export default function MfaSetupScreen() {
   const [secret, setSecret] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [alreadyEnabled, setAlreadyEnabled] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const nextRoute = useMemo<"/patient" | "/pro" | "/admin">(() => {
     if (typeof params.next === "string") {
@@ -80,10 +87,32 @@ export default function MfaSetupScreen() {
     let mounted = true;
     const init = async () => {
       if (profile?.mfaEnabled) {
+        setAlreadyEnabled(true);
         setLoading(false);
         return;
       }
       try {
+        setErrorMessage(null);
+        const factors = await listTotpFactors();
+        const verified = factors.find((factor) => factor.status === "verified");
+        if (verified) {
+          if (user?.id) {
+            const { error } = await supabase
+              .from("profiles")
+              .update({ mfa_enabled: true, mfa_method: "totp" })
+              .eq("id", user.id);
+            if (error) throw error;
+            await refreshProfile();
+          }
+          if (!mounted) return;
+          setAlreadyEnabled(true);
+          setFactorId(verified.id);
+          return;
+        }
+        const unverified = factors.filter((factor) => factor.status === "unverified");
+        for (const factor of unverified) {
+          await unenrollFactor(factor.id);
+        }
         const result = await enrollMfaTotp();
         if (!mounted) return;
         setFactorId(result.factorId);
@@ -100,7 +129,7 @@ export default function MfaSetupScreen() {
     return () => {
       mounted = false;
     };
-  }, [enrollMfaTotp, profile?.mfaEnabled]);
+  }, [enrollMfaTotp, listTotpFactors, profile?.mfaEnabled, refreshProfile, unenrollFactor, user?.id]);
 
   const handleVerify = async () => {
     if (!factorId || verifying) return;
@@ -122,6 +151,50 @@ export default function MfaSetupScreen() {
     router.replace(nextRoute);
   };
 
+  const handleCopySecret = async () => {
+    if (!secret) return;
+    await Clipboard.setStringAsync(secret);
+    setSecretCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setSecretCopied(false), 2000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const renderQrCode = () => {
+    if (!qrCode) return null;
+    const trimmed = qrCode.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("data:image/svg+xml")) {
+      const match = trimmed.match(/^data:image\/svg\+xml(;charset=[^;,]+)?(;base64)?,(.*)$/);
+      if (match) {
+        const isBase64 = Boolean(match[2]);
+        const payload = match[3] ?? "";
+        const xml = isBase64
+          ? Buffer.from(payload, "base64").toString("utf8")
+          : decodeURIComponent(payload);
+        return <SvgXml xml={xml} width={160} height={160} />;
+      }
+    }
+    if (trimmed.includes("<svg")) {
+      return <SvgXml xml={trimmed} width={160} height={160} />;
+    }
+    if (trimmed.startsWith("data:image/")) {
+      return <Image source={{ uri: trimmed }} style={styles.qrImage} resizeMode="contain" />;
+    }
+    return (
+      <Image
+        source={{ uri: `data:image/png;base64,${trimmed}` }}
+        style={styles.qrImage}
+        resizeMode="contain"
+      />
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -129,6 +202,7 @@ export default function MfaSetupScreen() {
       </View>
     );
   }
+  const isEnabled = Boolean(profile?.mfaEnabled || alreadyEnabled);
 
   return (
     <View style={styles.root}>
@@ -147,26 +221,23 @@ export default function MfaSetupScreen() {
           </Text>
         </View>
 
-        {profile?.mfaEnabled ? (
+        {isEnabled ? (
           <View style={styles.enabledCard}>
             <Text style={styles.enabledTitle}>MFA déjà activé</Text>
             <Text style={styles.enabledText}>Votre compte est déjà protégé.</Text>
           </View>
         ) : (
           <>
-            {qrCode ? (
-              <View style={styles.qrWrap}>
-                <Image
-                  source={{ uri: `data:image/png;base64,${qrCode}` }}
-                  style={styles.qrImage}
-                  resizeMode="contain"
-                />
-              </View>
-            ) : null}
+            {qrCode ? <View style={styles.qrWrap}>{renderQrCode()}</View> : null}
 
             {secret ? (
               <View style={styles.secretCard}>
-                <Text style={styles.secretLabel}>Clé manuelle</Text>
+                <View style={styles.secretHeader}>
+                  <Text style={styles.secretLabel}>Clé manuelle</Text>
+                  <TouchableOpacity onPress={handleCopySecret} style={styles.copyBtn}>
+                    <Text style={styles.copyText}>{secretCopied ? "Copié" : "Copier"}</Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={styles.secretValue}>{secret}</Text>
               </View>
             ) : null}
@@ -212,7 +283,7 @@ export default function MfaSetupScreen() {
         {!backupCodes.length ? (
           <TouchableOpacity onPress={handleContinue} style={styles.skipBtn}>
             <Text style={styles.skipText}>
-              {profile?.mfaEnabled ? "Continuer" : "Configurer plus tard"}
+              {isEnabled ? "Continuer" : "Configurer plus tard"}
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -271,8 +342,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceWarm,
     marginBottom: 12,
   },
+  secretHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   secretLabel: { fontSize: 11, color: Colors.textMuted, marginBottom: 4 },
   secretValue: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
+  copyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  copyText: { fontSize: 11, color: Colors.primary, fontWeight: "600" },
   codeRow: { flexDirection: "row", justifyContent: "center", gap: 10, marginVertical: 12 },
   codeCell: {
     width: 44,
