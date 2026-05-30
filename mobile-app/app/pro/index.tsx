@@ -31,6 +31,7 @@ import {
   mockCompletedStats,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useAuth } from "@/lib/auth-context";
 
 export default function ProHomeScreen() {
   const router = useRouter();
@@ -38,16 +39,22 @@ export default function ProHomeScreen() {
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
   const [counterFor, setCounterFor] = useState<string | null>(null);
   const [counterPrice, setCounterPrice] = useState(0);
+  const { profile } = useAuth();
+  const displayName =
+    profile?.firstName || profile?.lastName
+      ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+      : mockProProfile.name;
+  const avatar = profile?.avatar || mockProProfile.avatar;
 
   return (
     <View style={styles.root}>
       <LinearGradient colors={Gradients.nurse} style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image source={{ uri: mockProProfile.avatar }} style={styles.avatar} />
+            <Image source={{ uri: avatar }} style={styles.avatar} />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
-              <Text style={styles.userName}>{mockProProfile.name}</Text>
+              <Text style={styles.userName}>{displayName}</Text>
             </View>
           </View>
           <View style={styles.rightTop}>

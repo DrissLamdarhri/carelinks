@@ -10,6 +10,7 @@ import type {
   Professional,
   Profile,
   ProSpecialty,
+  Subscription,
   UUID,
 } from "./types";
 
@@ -225,6 +226,18 @@ export const messages = {
   },
 };
 
+export const subscriptions = {
+  async getForUser(userId: UUID): Promise<Subscription | null> {
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as Subscription | null) ?? null;
+  },
+};
+
 export const db = {
   profiles,
   patients,
@@ -233,4 +246,5 @@ export const db = {
   bookings,
   bids,
   messages,
+  subscriptions,
 };

@@ -42,18 +42,6 @@ const menuSections: Array<{
   },
 ];
 
-const demoFallbackProfile = {
-  fullName: "Driss Alaoui",
-  email: "driss.alaoui@email.com",
-  phone: "+212 6 12 34 56 78",
-  city: "Meknès",
-  avatar:
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
-  bookings: 12,
-  avgRating: "4.9",
-  spent: 1240,
-};
-
 export default function PatientProfileScreen() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
@@ -78,22 +66,23 @@ export default function PatientProfileScreen() {
     void loadStats();
   }, [user?.id]);
 
-  const displayName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : demoFallbackProfile.fullName;
+  const displayName = profile
+    ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+    : "Mon profil";
   const initials = profile
     ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` || "?"
-    : "DA";
-  const avatar = profile?.avatar || demoFallbackProfile.avatar;
-  const email = profile?.email || demoFallbackProfile.email;
-  const phone = profile?.phone || demoFallbackProfile.phone;
-  const city = profile?.city || demoFallbackProfile.city;
+    : "?";
+  const avatar = profile?.avatar ?? "";
+  const email = profile?.email || "—";
+  const phone = profile?.phone || "—";
+  const city = profile?.city || "—";
 
   const spentLabel = useMemo(() => {
-    const value = totalSpent || demoFallbackProfile.spent;
-    return value.toLocaleString("fr-MA");
+    return totalSpent.toLocaleString("fr-MA");
   }, [totalSpent]);
 
-  const bookingsLabel = bookingsCount || demoFallbackProfile.bookings;
-  const ratingLabel = avgRating !== "—" ? avgRating : demoFallbackProfile.avgRating;
+  const bookingsLabel = bookingsCount;
+  const ratingLabel = avgRating;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -102,7 +91,13 @@ export default function PatientProfileScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
             <TouchableOpacity style={styles.editBtn}>
               <Edit3 size={10} color="white" />
             </TouchableOpacity>
@@ -197,6 +192,19 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
   avatar: { width: 64, height: 64, borderRadius: 32 },
+  avatarFallback: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#E9ECF7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitials: {
+    color: Colors.primary,
+    fontSize: 18,
+    fontWeight: "700",
+  },
   editBtn: {
     position: "absolute",
     right: -1,

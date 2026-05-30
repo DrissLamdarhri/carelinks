@@ -33,6 +33,7 @@ import {
   mockPatientBooking,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useAuth } from "@/lib/auth-context";
 
 const serviceIconMap = {
   syringe: Syringe,
@@ -43,7 +44,13 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
-  const city = mockPatientProfile.city;
+  const { profile } = useAuth();
+  const city = profile?.city ?? mockPatientProfile.city ?? MOROCCAN_CITIES[0];
+  const displayName =
+    profile?.firstName || profile?.lastName
+      ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+      : "Bienvenue";
+  const avatar = profile?.avatar || mockPatientProfile.avatar;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -53,12 +60,10 @@ export default function PatientHomeScreen() {
 
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image source={{ uri: mockPatientProfile.avatar }} style={styles.avatar} />
+            <Image source={{ uri: avatar }} style={styles.avatar} />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
-              <Text style={styles.userName}>
-                {mockPatientProfile.firstName} {mockPatientProfile.lastName}
-              </Text>
+              <Text style={styles.userName}>{displayName}</Text>
             </View>
           </View>
           <View style={styles.headerActions}>

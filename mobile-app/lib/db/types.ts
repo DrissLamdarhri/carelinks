@@ -116,6 +116,24 @@ export interface NearbyPro {
   distance_km: number;
 }
 
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "canceled"
+  | "incomplete"
+  | "paused";
+
+export interface Subscription {
+  user_id: UUID;
+  plan_id: string;
+  status: SubscriptionStatus;
+  expires_at: ISODate | null;
+  features: string[];
+  created_at: ISODate;
+  updated_at: ISODate;
+}
+
 export function toDbSpecialty(key: string): ProSpecialty {
   const map: Record<string, ProSpecialty> = {
     nurse: "nurse",
