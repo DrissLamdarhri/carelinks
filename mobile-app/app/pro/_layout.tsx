@@ -24,6 +24,10 @@ export default function ProLayout() {
     justifyContent: "center" as const,
     backgroundColor: focused ? "#EDE5CC" : "transparent",
   });
+  const hiddenTabOptions = {
+    href: null,
+    tabBarStyle: { display: "none" },
+  } as const;
 
   return (
     <Tabs
@@ -94,24 +98,23 @@ export default function ProLayout() {
       <Tabs.Screen
         name="bids"
         options={{
-          href: null,
-          tabBarStyle: { display: "none" },
+          ...hiddenTabOptions,
         }}
       />
       <Tabs.Screen
         name="documents"
         options={{
-          href: null,
-          tabBarStyle: { display: "none" },
+          ...hiddenTabOptions,
         }}
       />
       <Tabs.Screen
         name="kyc"
         options={{
-          href: null,
-          tabBarStyle: { display: "none" },
+          ...hiddenTabOptions,
         }}
       />
+      <Tabs.Screen name="profile-infos" options={hiddenTabOptions} />
+      <Tabs.Screen name="notifications" options={hiddenTabOptions} />
     </Tabs>
   );
 }

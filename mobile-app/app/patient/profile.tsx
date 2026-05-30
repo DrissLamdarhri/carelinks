@@ -24,15 +24,15 @@ const menuSections: Array<{
   {
     title: "Compte",
     items: [
-      { icon: User, label: "Informations personnelles", color: "#0D0870" },
-      { icon: CreditCard, label: "Paiement & Portefeuille", color: "#3B82F6" },
-      { icon: MapPin, label: "Adresses enregistrées", color: "#6BB8C8" },
+      { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/patient/profile-infos" },
+      { icon: CreditCard, label: "Politique patient", color: "#3B82F6", route: "/patient/patient-policy" },
+      { icon: MapPin, label: "Adresses enregistrées", color: "#6BB8C8", route: "/patient/addresses" },
     ],
   },
   {
     title: "Préférences",
     items: [
-      { icon: Bell, label: "Notifications", color: "#6BB8C8" },
+      { icon: Bell, label: "Notifications", color: "#6BB8C8", route: "/patient/notifications" },
       { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6", route: "/auth/mfa-settings" },
     ],
   },

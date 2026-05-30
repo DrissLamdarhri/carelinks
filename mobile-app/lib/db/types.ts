@@ -26,6 +26,11 @@ export interface Profile {
   avatar_url: string | null;
   city: string | null;
   language: string | null;
+  policy_version?: string | null;
+  policy_accepted_at?: ISODate | null;
+  consent_share_data?: boolean | null;
+  consent_reminders?: boolean | null;
+  consent_analytics?: boolean | null;
   created_at: ISODate;
   updated_at: ISODate;
 }
@@ -106,6 +111,67 @@ export interface Message {
   sender_id: UUID;
   body: string;
   created_at: ISODate;
+}
+
+export interface Conversation {
+  id: UUID;
+  created_by: UUID;
+  booking_id: UUID | null;
+  created_at: ISODate;
+}
+
+export interface ConversationParticipant {
+  conversation_id: UUID;
+  user_id: UUID;
+  role: UserRole | null;
+  joined_at: ISODate;
+  last_read_at: ISODate | null;
+}
+
+export interface ConversationMessage {
+  id: UUID;
+  conversation_id: UUID;
+  sender_id: UUID;
+  body: string;
+  type: string;
+  attachment_url: string | null;
+  created_at: ISODate;
+  edited_at: ISODate | null;
+  deleted_at: ISODate | null;
+}
+
+export interface MessageReceipt {
+  message_id: UUID;
+  user_id: UUID;
+  delivered_at: ISODate | null;
+  read_at: ISODate | null;
+}
+
+export interface Address {
+  id: UUID;
+  user_id: UUID;
+  label: string | null;
+  street: string;
+  city: string;
+  postal_code: string;
+  country: string;
+  notes: string | null;
+  is_default: boolean;
+  created_at: ISODate;
+  updated_at: ISODate;
+}
+
+export interface NotificationSettings {
+  user_id: UUID;
+  push_enabled: boolean;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  appointment_enabled: boolean;
+  messages_enabled: boolean;
+  reminders_enabled: boolean;
+  security_enabled: boolean;
+  created_at: ISODate;
+  updated_at: ISODate;
 }
 
 export interface NearbyPro {
