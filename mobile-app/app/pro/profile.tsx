@@ -22,12 +22,12 @@ import type { Professional } from "@/lib/db/types";
 import { RadiusSlider } from "@/components/RadiusSlider";
 
 const menuItems = [
-  { icon: User, label: "Informations personnelles", color: "#0D0870" },
+  { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/pro/profile-infos" },
   { icon: FileText, label: "Mes documents", color: "#3B82F6", route: "/pro/kyc" },
   { icon: CreditCard, label: "Compte bancaire", color: "#6BB8C8" },
   { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
   { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
-  { icon: Bell, label: "Notifications", color: "#0D0870" },
+  { icon: Bell, label: "Notifications", color: "#0D0870", route: "/pro/notifications" },
   { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6", route: "/auth/mfa-settings" },
   { icon: Shield, label: "Vérification", color: "#0D0870", route: "/pro/kyc" },
 ];

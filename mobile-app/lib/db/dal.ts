@@ -1,16 +1,17 @@
 import { supabase } from "@/lib/supabase";
 import type {
+  Address,
   Bid,
   BidStatus,
   Booking,
   BookingStatus,
   Message,
+  NotificationSettings,
   Patient,
   ProDocument,
   Professional,
   Profile,
   ProSpecialty,
-  Subscription,
   UUID,
 } from "./types";
 
@@ -23,6 +24,17 @@ function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
 export const profiles = {
   async get(id: UUID): Promise<Profile> {
     return unwrap(await supabase.from("profiles").select("*").eq("id", id).single());
+  },
+
+  async update(id: UUID, patch: Partial<Omit<Profile, "id" | "created_at">>): Promise<Profile> {
+    return unwrap(
+      await supabase
+        .from("profiles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*")
+        .single()
+    );
   },
 };
 
@@ -226,15 +238,84 @@ export const messages = {
   },
 };
 
-export const subscriptions = {
-  async getForUser(userId: UUID): Promise<Subscription | null> {
+export const addresses = {
+  async listForUser(userId: UUID): Promise<Address[]> {
+    return unwrap(
+      await supabase
+        .from("addresses")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+    );
+  },
+
+  async create(input: Omit<Address, "id" | "created_at" | "updated_at">): Promise<Address> {
+    return unwrap(await supabase.from("addresses").insert(input).select("*").single());
+  },
+
+  async update(id: UUID, patch: Partial<Omit<Address, "id" | "user_id" | "created_at">>): Promise<Address> {
+    return unwrap(
+      await supabase
+        .from("addresses")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*")
+        .single()
+    );
+  },
+
+  async remove(id: UUID): Promise<void> {
+    const { error } = await supabase.from("addresses").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async setDefault(userId: UUID, addressId: UUID): Promise<void> {
+    const { error: clearError } = await supabase
+      .from("addresses")
+      .update({ is_default: false })
+      .eq("user_id", userId)
+      .eq("is_default", true);
+    if (clearError) throw clearError;
+    const { error } = await supabase.from("addresses").update({ is_default: true }).eq("id", addressId);
+    if (error) throw error;
+  },
+};
+
+export const notificationSettings = {
+  async get(userId: UUID): Promise<NotificationSettings | null> {
     const { data, error } = await supabase
-      .from("subscriptions")
+      .from("notification_settings")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw error;
-    return (data as Subscription | null) ?? null;
+    return data;
+  },
+
+  async getOrCreate(userId: UUID): Promise<NotificationSettings> {
+    const existing = await this.get(userId);
+    if (existing) return existing;
+    return unwrap(
+      await supabase
+        .from("notification_settings")
+        .insert({ user_id: userId })
+        .select("*")
+        .single()
+    );
+  },
+
+  async update(
+    userId: UUID,
+    patch: Partial<Omit<NotificationSettings, "user_id" | "created_at">>
+  ): Promise<NotificationSettings> {
+    return unwrap(
+      await supabase
+        .from("notification_settings")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .select("*")
+        .single()
+    );
   },
 };
 
@@ -246,5 +327,6 @@ export const db = {
   bookings,
   bids,
   messages,
-  subscriptions,
+  addresses,
+  notificationSettings,
 };

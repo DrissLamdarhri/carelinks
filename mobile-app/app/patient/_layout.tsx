@@ -115,6 +115,10 @@ export default function PatientLayout() {
       <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="waiting/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="patient-policy" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="addresses" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="psychologist" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="provider/[id]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/index" options={hiddenFullScreenOptions} />
