@@ -32,7 +32,6 @@ import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
-import { useMapTab } from "@/lib/map-tab-context";
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Lungs, ShieldCheck] as const;
@@ -79,14 +78,6 @@ export default function PatientRequestScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ service?: string }>();
   const { user } = useAuth();
-  const { setShowMap } = useMapTab();
-
-  useEffect(() => {
-    // show the MapPin tab while on the request screen
-    setShowMap(true);
-    return () => setShowMap(false);
-  }, [setShowMap]);
-
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
   const normalizedService = initialService.toLowerCase();
   const isKine = isKineService(normalizedService);

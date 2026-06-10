@@ -4,16 +4,14 @@
  */
 
 import { Tabs } from "expo-router";
-import { Calendar, Home, MessageCircle, Search, User, MapPin } from "lucide-react-native";
+import { Calendar, Home, MessageCircle, Search, User } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MapTabProvider, useMapTab } from "@/lib/map-tab-context";
 
 const PRIMARY = "#0D0870";
 const INACTIVE = "#B0B0B0";
 
 function PatientTabs() {
-  const { showMap } = useMapTab();
   const insets = useSafeAreaInsets();
   const tabBottomPadding =
     Platform.OS === "ios" ? Math.max(insets.bottom, 8) : Math.max(insets.bottom, 14);
@@ -113,22 +111,6 @@ function PatientTabs() {
         }}
       />
 
-      {/* tracking map tab: only visible when showMap is true */}
-      <Tabs.Screen
-        name="tracking/index"
-        options={
-          showMap
-            ? {
-                title: "Localiser",
-                tabBarIcon: ({ color, size, focused }) => (
-                  <View style={iconWrap(focused)}>
-                    <MapPin color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
-                  </View>
-                ),
-              }
-            : hiddenFullScreenOptions
-        }
-      />
 
       <Tabs.Screen name="request" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
@@ -149,9 +131,5 @@ function PatientTabs() {
 }
 
 export default function PatientLayout() {
-  return (
-    <MapTabProvider>
-      <PatientTabs />
-    </MapTabProvider>
-  );
+  return <PatientTabs />;
 }
