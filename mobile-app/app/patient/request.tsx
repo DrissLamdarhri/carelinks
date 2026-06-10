@@ -32,7 +32,6 @@ import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
-import { useEffect } from "react";
 import { useMapTab } from "@/lib/map-tab-context";
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
