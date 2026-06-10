@@ -95,21 +95,12 @@ export default function PatientHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Choisissez votre service</Text>
-        <View style={styles.grid}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 2 }}>
           {primaryServices.map((s) => {
-            const Icon = serviceIconMap[s.icon];
-            const gradient =
-              s.gradient === "nurse"
-                ? Gradients.nurse
-                : s.gradient === "psy"
-                ? Gradients.psy
-                : s.gradient === "yoga"
-                ? Gradients.yoga
-                : Gradients.kine;
             return (
               <TouchableOpacity
                 key={s.key}
-                style={styles.serviceCard}
+                style={styles.horizServiceCard}
                 onPress={() =>
                   router.push(
                     s.key === "psy"
@@ -119,28 +110,17 @@ export default function PatientHomeScreen() {
                       : `/patient/request?service=${s.key}`
                   )
                 }
+                activeOpacity={0.9}
               >
-                <Image source={{ uri: s.image }} style={styles.serviceImage} />
-                <LinearGradient
-                  colors={[gradient[0], "rgba(0,0,0,0.42)"]}
-                  style={styles.serviceOverlay}
-                />
-
-                <View style={styles.serviceTop}>
-                  <View style={styles.serviceIconWrap}>
-                    <Icon size={18} color="white" />
-                  </View>
-                  {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : <View />}
-                </View>
-
-                <View>
-                  <Text style={styles.serviceLabel}>{s.label}</Text>
-                  <Text style={styles.serviceSub}>{s.sub}</Text>
+                <Image source={{ uri: s.image }} style={styles.horizServiceImage} />
+                <View style={styles.horizServiceBody}>
+                  <Text style={styles.serviceLabelDark}>{s.label}</Text>
+                  <Text style={styles.serviceSubDark}>{s.sub}</Text>
                 </View>
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <View style={styles.section}>
@@ -316,6 +296,24 @@ const styles = StyleSheet.create({
   },
   serviceLabel: { color: "white", fontSize: 16, fontWeight: "700" },
   serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 11 },
+
+  // Horizontal compact service card (image on top, text on white bottom)
+  horizServiceCard: {
+    width: 140,
+    marginRight: 10,
+    backgroundColor: "white",
+    borderRadius: 14,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  horizServiceImage: { width: "100%", height: 92, resizeMode: "cover" },
+  horizServiceBody: { padding: 10 },
+  serviceLabelDark: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
+  serviceSubDark: { color: Colors.textMuted, fontSize: 12 },
   cta: {
     height: 54,
     borderRadius: 20,
