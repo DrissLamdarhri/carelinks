@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -9,24 +9,52 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, ChevronDown, LocateFixed, MapPin, Minus, Navigation, Plus } from "lucide-react-native";
-import { Colors } from "@/lib/colors";
+import {
+  ArrowLeft,
+  ChevronDown,
+  LocateFixed,
+  MapPin,
+  Minus,
+  Navigation,
+  Plus,
+  Activity,
+  Bone,
+  Droplets,
+  Lungs,
+  RotateCcw,
+  ShieldCheck,
+  HandMetal,
+} from "lucide-react-native";
+import { Colors, KineColors } from "@/lib/colors";
+import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
+import { useEffect } from "react";
+import { useMapTab } from "@/lib/map-tab-context";
 
-const careTypes = ["Pansement", "Injection IM", "Injection SC", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire", "Kinésithérapie"];
-const serviceToCareIndex: Record<string, number> = {
-  infirmier: 0,
-  nurse: 0,
-  psy: 4,
-  psychologist: 4,
-  yoga: 6,
-  kine: 7,
-  physio: 7,
-};
+// ── Kiné care type icons ─────────────────────────────────────────────────────
+const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Lungs, ShieldCheck] as const;
+
+const nurseCareTypes = [
+  "Pansement",
+  "Injection IM",
+  "Injection SC",
+  "Perfusion",
+  "Bilan sanguin",
+  "Soins post-op",
+  "Sonde urinaire",
+];
+const kineCareTypes = [
+  "Rééducation fonctionnelle",
+  "Massage thérapeutique",
+  "Mobilisation articulaire",
+  "Drainage lymphatique",
+  "Rééducation respiratoire",
+  "Prévention des blessures",
+];
 
 function buildDates() {
   const result: { day: string; num: string; month: string; isoDate: string }[] = [];
@@ -52,13 +80,28 @@ export default function PatientRequestScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ service?: string }>();
   const { user } = useAuth();
+  const { setShowMap } = useMapTab();
+
+  useEffect(() => {
+    // show the MapPin tab while on the request screen
+    setShowMap(true);
+    return () => setShowMap(false);
+  }, [setShowMap]);
 
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
-  const [careType, setCareType] = useState(serviceToCareIndex[initialService] ?? 0);
+  const normalizedService = initialService.toLowerCase();
+  const isKine = isKineService(normalizedService);
+  const serviceKey = isKine ? "kine" : "infirmier";
+  const careTypes = useMemo(
+    () => (serviceKey === "kine" ? kineCareTypes : nurseCareTypes),
+    [serviceKey]
+  );
+  const theme = useMemo(() => getServiceTheme(serviceKey), [serviceKey]);
+  const [careType, setCareType] = useState(0);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedTime, setSelectedTime] = useState(4);
-  const [price, setPrice] = useState(120);
+  const [price, setPrice] = useState(isKine ? 120 : 80);
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -72,13 +115,10 @@ export default function PatientRequestScreen() {
     [address, coords]
   );
 
-  const serviceKey = useMemo(() => {
-    const selected = careTypes[careType].toLowerCase();
-    if (selected.includes("kin")) return "kine";
-    if (selected.includes("yoga")) return "yoga";
-    if (selected.includes("psy")) return "psy";
-    return "infirmier";
-  }, [careType]);
+  useEffect(() => {
+    setCareType(0);
+    setShowCareMenu(false);
+  }, [serviceKey]);
 
   const handleLocate = async () => {
     if (locating) return;
@@ -105,10 +145,8 @@ export default function PatientRequestScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      // DEMO MODE: Skip database and navigate directly to waiting screen
       if (demoMode) {
-        const mockBookingId = `demo-${Date.now()}`;
-        // Simulate network delay
+        const mockBookingId = `demo-${serviceKey}-${Date.now()}`;
         await new Promise(resolve => setTimeout(resolve, 800));
         router.push(`/patient/waiting/${mockBookingId}`);
         setSubmitting(false);
@@ -162,7 +200,7 @@ export default function PatientRequestScreen() {
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.addressBar}>
-            <MapPin size={16} color={Colors.primary} />
+            <MapPin size={16} color={theme.primary} />
             <TextInput
               value={address}
               onChangeText={setAddress}
@@ -171,71 +209,157 @@ export default function PatientRequestScreen() {
               placeholderTextColor={Colors.textSubtle}
             />
             <TouchableOpacity onPress={handleLocate} disabled={locating} style={styles.gpsBtn}>
-              {locating ? <ActivityIndicator size="small" color={Colors.primary} /> : <Navigation size={13} color={Colors.primary} />}
-              <Text style={styles.gpsText}>{coords ? "GPS ✓" : "GPS"}</Text>
+              {locating ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : (
+                <Navigation size={13} color={theme.primary} />
+              )}
+              <Text style={[styles.gpsText, { color: theme.primary }]}>
+                {coords ? "GPS ✓" : "GPS"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent}>
+      <ScrollView
+        style={styles.sheet}
+        contentContainerStyle={styles.sheetContent}
+      >
         <View style={styles.grabber} />
+
+        {/* ── Title row ── */}
         <Text style={styles.sheetTitle}>Votre demande</Text>
-
-        <Text style={styles.label}>Type de soin</Text>
-        <TouchableOpacity style={styles.selector} onPress={() => setShowCareMenu((v) => !v)}>
-          <Text style={styles.selectorText}>{careTypes[careType]}</Text>
-          <ChevronDown size={18} color={Colors.textMuted} />
-        </TouchableOpacity>
-        {showCareMenu ? (
-          <View style={styles.menu}>
-            {careTypes.map((item, index) => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.menuItem, index === careType && styles.menuItemActive]}
-                onPress={() => {
-                  setCareType(index);
-                  setShowCareMenu(false);
-                }}
-              >
-                <Text style={[styles.menuText, index === careType && styles.menuTextActive]}>{item}</Text>
-              </TouchableOpacity>
-            ))}
+        {isKine && (
+          <View style={styles.kineBadgeRow}>
+            <View style={styles.kinePill}>
+              <View style={styles.kinePillDot} />
+              <Text style={styles.kinePillText}>Kinésithérapie</Text>
+            </View>
+            <Text style={styles.kinePillSub}>Rééducation à domicile</Text>
           </View>
-        ) : null}
+        )}
 
+        {/* ── Type de soin ── */}
+        <Text style={styles.label}>Type de soin</Text>
+
+        {isKine ? (
+          /* Kiné: visual chip grid */
+          <View style={styles.kineCareGrid}>
+            {kineCareTypes.map((item, index) => {
+              const Icon = kineCareIcons[index] ?? Activity;
+              const active = careType === index;
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={[styles.kineCareChip, active && styles.kineCareChipActive]}
+                  onPress={() => setCareType(index)}
+                >
+                  <View style={[styles.kineCareIcon, active && styles.kineCareIconActive]}>
+                    <Icon size={14} color={active ? KineColors.primary : Colors.textMuted} />
+                  </View>
+                  <Text
+                    style={[styles.kineCareText, active && styles.kineCareTextActive]}
+                    numberOfLines={2}
+                  >
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          /* Nurse: dropdown */
+          <>
+            <TouchableOpacity
+              style={styles.selector}
+              onPress={() => setShowCareMenu((v) => !v)}
+            >
+              <Text style={styles.selectorText}>{careTypes[careType]}</Text>
+              <ChevronDown size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+            {showCareMenu ? (
+              <View style={styles.menu}>
+                {careTypes.map((item, index) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.menuItem,
+                      index === careType && styles.menuItemActive,
+                      index === careType && { backgroundColor: theme.surfaceStrong },
+                    ]}
+                    onPress={() => {
+                      setCareType(index);
+                      setShowCareMenu(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.menuText,
+                        index === careType && styles.menuTextActive,
+                        index === careType && { color: theme.primary },
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
+
+        {/* ── Date ── */}
         <Text style={styles.label}>Date</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.rowChips}>
             {dates.map((date, index) => (
               <TouchableOpacity
                 key={date.isoDate}
-                style={[styles.dateChip, selectedDate === index && styles.dateChipActive]}
+                style={[
+                  styles.dateChip,
+                  selectedDate === index && styles.dateChipActive,
+                  selectedDate === index && { backgroundColor: theme.primary },
+                ]}
                 onPress={() => setSelectedDate(index)}
               >
-                <Text style={[styles.dateDay, selectedDate === index && styles.dateTextActive]}>{date.day}</Text>
-                <Text style={[styles.dateNum, selectedDate === index && styles.dateTextActive]}>{date.num}</Text>
-                <Text style={[styles.dateMonth, selectedDate === index && styles.dateTextActive]}>{date.month}</Text>
+                <Text style={[styles.dateDay, selectedDate === index && styles.dateTextActive]}>
+                  {date.day}
+                </Text>
+                <Text style={[styles.dateNum, selectedDate === index && styles.dateTextActive]}>
+                  {date.num}
+                </Text>
+                <Text style={[styles.dateMonth, selectedDate === index && styles.dateTextActive]}>
+                  {date.month}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
 
+        {/* ── Heure ── */}
         <Text style={styles.label}>Heure</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.rowChips}>
             {times.map((time, index) => (
               <TouchableOpacity
                 key={time}
-                style={[styles.timeChip, selectedTime === index && styles.timeChipActive]}
+                style={[
+                  styles.timeChip,
+                  selectedTime === index && styles.timeChipActive,
+                  selectedTime === index && { backgroundColor: theme.primary },
+                ]}
                 onPress={() => setSelectedTime(index)}
               >
-                <Text style={[styles.timeText, selectedTime === index && styles.timeTextActive]}>{time}</Text>
+                <Text style={[styles.timeText, selectedTime === index && styles.timeTextActive]}>
+                  {time}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
 
+        {/* ── Notes ── */}
         <Text style={styles.label}>Notes (optionnel)</Text>
         <TextInput
           value={notes}
@@ -243,36 +367,73 @@ export default function PatientRequestScreen() {
           style={styles.notesInput}
           multiline
           numberOfLines={2}
-          placeholder="Ex: ordonnance disponible, allergie…"
+          placeholder={
+            isKine
+              ? "Ex: ordonnance disponible, zone douloureuse, allergie…"
+              : "Ex: ordonnance disponible, allergie…"
+          }
           placeholderTextColor={Colors.textSubtle}
         />
 
+        {/* ── Prix ── */}
         <Text style={styles.label}>
-          Votre prix proposé <Text style={{ color: Colors.primary }}>(enchère inversée)</Text>
+          Votre prix proposé{" "}
+          <Text style={{ color: theme.primary }}>(enchère inversée)</Text>
         </Text>
         <View style={styles.priceCard}>
-          <TouchableOpacity style={styles.priceBtn} onPress={() => setPrice((v) => Math.max(50, v - 10))}>
+          <TouchableOpacity
+            style={styles.priceBtn}
+            onPress={() => setPrice((v) => Math.max(50, v - 10))}
+          >
             <Minus size={18} color={Colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.priceCenter}>
-            <Text style={styles.priceValue}>{price}</Text>
+            <Text style={[styles.priceValue, { color: theme.primary }]}>{price}</Text>
             <Text style={styles.priceUnit}>MAD</Text>
           </View>
-          <TouchableOpacity style={styles.priceBtn} onPress={() => setPrice((v) => v + 10)}>
+          <TouchableOpacity
+            style={styles.priceBtn}
+            onPress={() => setPrice((v) => v + 10)}
+          >
             <Plus size={18} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.priceHint}>Prix moyen dans votre zone : 100–150 MAD</Text>
+        <Text style={styles.priceHint}>
+          {isKine
+            ? "Prix moyen dans votre zone : 100–150 MAD"
+            : "Prix moyen dans votre zone : 60–120 MAD"}
+        </Text>
 
-        <TouchableOpacity style={[styles.locateRow, locating && { opacity: 0.7 }]} onPress={handleLocate} disabled={locating}>
+        {/* ── GPS locate ── */}
+        <TouchableOpacity
+          style={[styles.locateRow, locating && { opacity: 0.7 }]}
+          onPress={handleLocate}
+          disabled={locating}
+        >
           <LocateFixed size={14} color={Colors.primary} />
-          <Text style={styles.locateText}>{coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}</Text>
+          <Text style={styles.locateText}>
+            {coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}
+          </Text>
         </TouchableOpacity>
+
+        {/* ── Info hint (kiné only) ── */}
+        {isKine && (
+          <View style={styles.kineInfoStrip}>
+            <Text style={styles.kineInfoText}>
+              💡 Les kinés certifiés de votre zone verront votre offre et pourront répondre en moins de 5 min.
+            </Text>
+          </View>
+        )}
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
+        {/* ── Submit ── */}
         <TouchableOpacity
-          style={[styles.submitBtn, (!canSubmit || submitting) && styles.submitBtnDisabled]}
+          style={[
+            styles.submitBtn,
+            { backgroundColor: theme.primary },
+            (!canSubmit || submitting) && styles.submitBtnDisabled,
+          ]}
           disabled={!canSubmit || submitting}
           onPress={handleSubmit}
         >
@@ -287,7 +448,9 @@ export default function PatientRequestScreen() {
         </TouchableOpacity>
 
         <Text style={styles.submitHint}>
-          Les professionnels de votre zone verront votre offre et pourront répondre.
+          {isKine
+            ? "Les kinésithérapeutes de votre zone verront votre offre et pourront répondre."
+            : "Les professionnels de votre zone verront votre offre et pourront répondre."}
         </Text>
       </ScrollView>
     </View>
@@ -296,7 +459,7 @@ export default function PatientRequestScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  mapZone: { height: "35%", paddingTop: 6, paddingHorizontal: 0 },
+  mapZone: { height: "35%", paddingTop: 6 },
   topBar: {
     position: "absolute",
     top: 14,
@@ -326,7 +489,9 @@ const styles = StyleSheet.create({
   },
   addressInput: { flex: 1, color: Colors.textPrimary, fontSize: 13, fontWeight: "500" },
   gpsBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  gpsText: { color: Colors.primary, fontSize: 11, fontWeight: "600" },
+  gpsText: { fontSize: 11, fontWeight: "600" },
+
+  // Sheet
   sheet: {
     flex: 1,
     marginTop: -16,
@@ -340,21 +505,63 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 3,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: Colors.input,
     marginBottom: 10,
   },
   sheetTitle: {
     fontSize: 22,
     color: Colors.textPrimary,
-    marginBottom: 10,
+    marginBottom: 4,
     fontFamily: "DMSerifDisplay_400Regular",
   },
-  label: { fontSize: 12, color: Colors.textMuted, marginBottom: 7, marginTop: 8, fontWeight: "500" },
+
+  // Kiné identity row
+  kineBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  kinePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: KineColors.surfaceStrong,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  kinePillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: KineColors.primary,
+  },
+  kinePillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: KineColors.primary,
+  },
+  kinePillSub: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+
+  // Shared form
+  label: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 7,
+    marginTop: 8,
+    fontWeight: "500",
+  },
+
+  // Nurse dropdown
   selector: {
     height: 52,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: Colors.border,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -365,15 +572,66 @@ const styles = StyleSheet.create({
   menu: {
     marginTop: 6,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: Colors.border,
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "white",
   },
-  menuItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  menuItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
   menuItemActive: { backgroundColor: Colors.surfaceWarm },
   menuText: { color: Colors.textPrimary, fontSize: 14 },
-  menuTextActive: { color: Colors.primary, fontWeight: "600" },
+  menuTextActive: { fontWeight: "600" },
+
+  // Kiné care type grid
+  kineCareGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginBottom: 2,
+  },
+  kineCareChip: {
+    width: "48.2%",
+    borderRadius: 12,
+    backgroundColor: Colors.input,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  kineCareChipActive: {
+    backgroundColor: KineColors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: KineColors.inputBorder,
+  },
+  kineCareIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: "white",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kineCareIconActive: {
+    backgroundColor: KineColors.badgeBg,
+  },
+  kineCareText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "500",
+    color: Colors.textPrimary,
+    lineHeight: 14,
+  },
+  kineCareTextActive: {
+    color: KineColors.primary,
+    fontWeight: "600",
+  },
+
+  // Date & time chips
   rowChips: { flexDirection: "row", gap: 8, marginBottom: 2 },
   dateChip: {
     width: 56,
@@ -382,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
   },
-  dateChipActive: { backgroundColor: Colors.primary },
+  dateChipActive: {},
   dateDay: { fontSize: 10, color: Colors.textMuted },
   dateNum: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
   dateMonth: { fontSize: 9, color: Colors.textMuted },
@@ -395,9 +653,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  timeChipActive: { backgroundColor: Colors.primary },
+  timeChipActive: {},
   timeText: { color: Colors.textPrimary, fontSize: 13 },
   timeTextActive: { color: "white" },
+
+  // Notes
   notesInput: {
     minHeight: 68,
     borderRadius: 14,
@@ -406,7 +666,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     color: Colors.textPrimary,
     textAlignVertical: "top",
+    fontSize: 13,
   },
+
+  // Price
   priceCard: {
     borderRadius: 16,
     backgroundColor: Colors.input,
@@ -425,9 +688,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   priceCenter: { flexDirection: "row", alignItems: "flex-end", gap: 4 },
-  priceValue: { color: Colors.primary, fontSize: 34, fontWeight: "800", lineHeight: 38 },
+  priceValue: { fontSize: 34, fontWeight: "800", lineHeight: 38 },
   priceUnit: { color: Colors.textMuted, fontSize: 14, marginBottom: 6 },
   priceHint: { marginTop: 6, textAlign: "center", color: Colors.textMuted, fontSize: 11 },
+
+  // Locate
   locateRow: {
     marginTop: 10,
     alignSelf: "flex-start",
@@ -440,87 +705,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   locateText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  previewCard: {
+
+  // Kiné info hint
+  kineInfoStrip: {
     marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E6E6E6",
-    backgroundColor: "#FAFAFA",
+    backgroundColor: Colors.surfaceWarm,
+    borderRadius: 12,
     padding: 12,
-    gap: 4,
   },
-  previewTitle: {
-    color: Colors.textPrimary,
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  previewStep: {
-    color: Colors.textMuted,
+  kineInfoText: {
     fontSize: 11,
+    color: Colors.primary,
+    fontWeight: "500",
+    lineHeight: 16,
   },
-  previewSubTitle: {
-    marginTop: 7,
-    color: Colors.textPrimary,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  previewEmpty: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  previewProRow: {
-    marginTop: 4,
-    borderRadius: 10,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#ECECEC",
-    height: 34,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  previewProName: {
-    color: Colors.textPrimary,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  previewProStatus: {
-    color: Colors.textSubtle,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  previewProStatusOnline: {
-    color: Colors.success,
-  },
-  demoBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  demoBadgeActive: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FBBF24",
-  },
-  demoBadgeText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#6B7280",
-    letterSpacing: 0.5,
-  },
-  demoBadgeTextActive: {
-    color: "#B45309",
-  },
+
+  // Submit
   submitBtn: {
     marginTop: 14,
     height: 54,
     borderRadius: 16,
-    backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
