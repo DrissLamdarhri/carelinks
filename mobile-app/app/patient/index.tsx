@@ -203,7 +203,7 @@ export default function PatientHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   header: { paddingHorizontal: 20, paddingTop: 42, paddingBottom: 28, overflow: "visible" },
   headerCircle1: {
     position: "absolute",

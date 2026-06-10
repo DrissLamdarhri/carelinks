@@ -134,7 +134,7 @@ export default function PatientMessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   content: { padding: 20 },
   title: {
     fontSize: 24,
