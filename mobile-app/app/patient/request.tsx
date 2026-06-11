@@ -100,14 +100,18 @@ export default function PatientRequestScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Calendar window controls (visible to all services including psychologue)
-  const [windowStart, setWindowStart] = useState(0);
-  const windowSize = 30; // afficher 30 jours à la fois
-  const jumpSize = 30; // jump ~1 month
-  const datesWindow = dates.slice(windowStart, Math.min(windowStart + windowSize, dates.length));
-  const monthLabel = dates[windowStart]
-    ? new Date(dates[windowStart].isoDate).toLocaleString("fr-MA", { month: "long", year: "numeric" })
-    : "";
+  // Calendar: group dates by month and render month sections (no selector)
+  const groupedMonths = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; dates: typeof dates }>();
+    for (const d of dates) {
+      const dt = new Date(d.isoDate);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}`;
+      const label = dt.toLocaleString("fr-MA", { month: "long", year: "numeric" });
+      if (!map.has(key)) map.set(key, { key, label, dates: [] as any });
+      map.get(key)!.dates.push(d);
+    }
+    return Array.from(map.values());
+  }, [dates]);
   const demoMode = true;
 
   const canSubmit = useMemo(
@@ -310,60 +314,40 @@ export default function PatientRequestScreen() {
         )}
 
         {/* ── Date ── */}
-        <View style={styles.dateHeader}>
-          <Text style={styles.label}>Date</Text>
-          <View style={styles.monthNav}>
-            <TouchableOpacity
-              style={styles.monthNavBtn}
-              onPress={() => {
-                const nextStart = Math.max(0, windowStart - jumpSize);
-                setWindowStart(nextStart);
-                setSelectedDate(Math.min(dates.length - 1, nextStart));
-              }}
-            >
-              <Text style={styles.monthNavBtnText}>‹</Text>
-            </TouchableOpacity>
-            <Text style={styles.monthLabel}>{monthLabel}</Text>
-            <TouchableOpacity
-              style={styles.monthNavBtn}
-              onPress={() => {
-                const nextStart = Math.min(Math.max(0, dates.length - windowSize), windowStart + jumpSize);
-                setWindowStart(nextStart);
-                setSelectedDate(Math.min(dates.length - 1, nextStart));
-              }}
-            >
-              <Text style={styles.monthNavBtnText}>›</Text>
-            </TouchableOpacity>
+        <Text style={styles.label}>Date</Text>
+        {groupedMonths.map((month) => (
+          <View key={month.key} style={styles.monthGroup}>
+            <Text style={styles.monthHeader}>{month.label}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.rowChips}>
+                {month.dates.map((date) => {
+                  const globalIndex = dates.findIndex((d) => d.isoDate === date.isoDate);
+                  return (
+                    <TouchableOpacity
+                      key={date.isoDate}
+                      style={[
+                        styles.dateChip,
+                        selectedDate === globalIndex && styles.dateChipActive,
+                        selectedDate === globalIndex && { backgroundColor: theme.primary },
+                      ]}
+                      onPress={() => setSelectedDate(globalIndex)}
+                    >
+                      <Text style={[styles.dateDay, selectedDate === globalIndex && styles.dateTextActive]}>
+                        {date.day}
+                      </Text>
+                      <Text style={[styles.dateNum, selectedDate === globalIndex && styles.dateTextActive]}>
+                        {date.num}
+                      </Text>
+                      <Text style={[styles.dateMonth, selectedDate === globalIndex && styles.dateTextActive]}>
+                        {date.month}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
           </View>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.rowChips}>
-            {datesWindow.map((date, idx) => {
-              const globalIndex = windowStart + idx;
-              return (
-                <TouchableOpacity
-                  key={date.isoDate}
-                  style={[
-                    styles.dateChip,
-                    selectedDate === globalIndex && styles.dateChipActive,
-                    selectedDate === globalIndex && { backgroundColor: theme.primary },
-                  ]}
-                  onPress={() => setSelectedDate(globalIndex)}
-                >
-                  <Text style={[styles.dateDay, selectedDate === globalIndex && styles.dateTextActive]}>
-                    {date.day}
-                  </Text>
-                  <Text style={[styles.dateNum, selectedDate === globalIndex && styles.dateTextActive]}>
-                    {date.num}
-                  </Text>
-                  <Text style={[styles.dateMonth, selectedDate === globalIndex && styles.dateTextActive]}>
-                    {date.month}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
+        ))}
 
         {/* ── Heure ── */}
         <Text style={styles.label}>Heure</Text>
@@ -761,10 +745,7 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600" },
   submitHint: { marginTop: 8, textAlign: "center", color: Colors.textMuted, fontSize: 11 },
-  dateHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
-  monthNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
-  monthLabel: { fontSize: 13, color: Colors.textPrimary, fontWeight: "600" },
-  monthNavBtnText: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
+  monthGroup: { marginTop: 8, marginBottom: 12 },
+  monthHeader: { fontSize: 14, color: Colors.textPrimary, fontWeight: "700", marginBottom: 6 },
   errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
 });
