@@ -102,7 +102,7 @@ export default function PatientRequestScreen() {
 
   // Calendar window controls (visible to all services including psychologue)
   const [windowStart, setWindowStart] = useState(0);
-  const windowSize = 7;
+  const windowSize = 30; // afficher 30 jours à la fois
   const jumpSize = 30; // jump ~1 month
   const datesWindow = dates.slice(windowStart, Math.min(windowStart + windowSize, dates.length));
   const monthLabel = dates[windowStart]
