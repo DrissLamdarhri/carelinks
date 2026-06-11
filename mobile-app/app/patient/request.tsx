@@ -99,6 +99,15 @@ export default function PatientRequestScreen() {
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Calendar window controls (visible to all services including psychologue)
+  const [windowStart, setWindowStart] = useState(0);
+  const windowSize = 7;
+  const jumpSize = 30; // jump ~1 month
+  const datesWindow = dates.slice(windowStart, Math.min(windowStart + windowSize, dates.length));
+  const monthLabel = dates[windowStart]
+    ? new Date(dates[windowStart].isoDate).toLocaleString("fr-MA", { month: "long", year: "numeric" })
+    : "";
   const demoMode = true;
 
   const canSubmit = useMemo(
@@ -301,30 +310,58 @@ export default function PatientRequestScreen() {
         )}
 
         {/* ── Date ── */}
-        <Text style={styles.label}>Date</Text>
+        <View style={styles.dateHeader}>
+          <Text style={styles.label}>Date</Text>
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              style={styles.monthNavBtn}
+              onPress={() => {
+                const nextStart = Math.max(0, windowStart - jumpSize);
+                setWindowStart(nextStart);
+                setSelectedDate(Math.min(dates.length - 1, nextStart));
+              }}
+            >
+              <Text style={styles.monthNavBtnText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.monthLabel}>{monthLabel}</Text>
+            <TouchableOpacity
+              style={styles.monthNavBtn}
+              onPress={() => {
+                const nextStart = Math.min(Math.max(0, dates.length - windowSize), windowStart + jumpSize);
+                setWindowStart(nextStart);
+                setSelectedDate(Math.min(dates.length - 1, nextStart));
+              }}
+            >
+              <Text style={styles.monthNavBtnText}>›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.rowChips}>
-            {dates.map((date, index) => (
-              <TouchableOpacity
-                key={date.isoDate}
-                style={[
-                  styles.dateChip,
-                  selectedDate === index && styles.dateChipActive,
-                  selectedDate === index && { backgroundColor: theme.primary },
-                ]}
-                onPress={() => setSelectedDate(index)}
-              >
-                <Text style={[styles.dateDay, selectedDate === index && styles.dateTextActive]}>
-                  {date.day}
-                </Text>
-                <Text style={[styles.dateNum, selectedDate === index && styles.dateTextActive]}>
-                  {date.num}
-                </Text>
-                <Text style={[styles.dateMonth, selectedDate === index && styles.dateTextActive]}>
-                  {date.month}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {datesWindow.map((date, idx) => {
+              const globalIndex = windowStart + idx;
+              return (
+                <TouchableOpacity
+                  key={date.isoDate}
+                  style={[
+                    styles.dateChip,
+                    selectedDate === globalIndex && styles.dateChipActive,
+                    selectedDate === globalIndex && { backgroundColor: theme.primary },
+                  ]}
+                  onPress={() => setSelectedDate(globalIndex)}
+                >
+                  <Text style={[styles.dateDay, selectedDate === globalIndex && styles.dateTextActive]}>
+                    {date.day}
+                  </Text>
+                  <Text style={[styles.dateNum, selectedDate === globalIndex && styles.dateTextActive]}>
+                    {date.num}
+                  </Text>
+                  <Text style={[styles.dateMonth, selectedDate === globalIndex && styles.dateTextActive]}>
+                    {date.month}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </ScrollView>
 
@@ -724,5 +761,10 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600" },
   submitHint: { marginTop: 8, textAlign: "center", color: Colors.textMuted, fontSize: 11 },
+  dateHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
+  monthLabel: { fontSize: 13, color: Colors.textPrimary, fontWeight: "600" },
+  monthNavBtnText: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
   errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
 });
