@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Keyboard,
 } from "react-native";
 import { Send } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
@@ -49,6 +50,16 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
   const [input, setInput] = useState("");
   const namesRef = useRef<Map<string, string>>(new Map());
   const scrollRef = useRef<ScrollView | null>(null);
+
+  // Ensure chat scrolls to bottom when keyboard opens or input is focused
+  const scrollToBottom = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", scrollToBottom);
+    return () => showSub.remove();
+  }, []);
 
   const hydrateSenderName = useCallback(async (senderId: string) => {
     if (namesRef.current.has(senderId)) return namesRef.current.get(senderId)!;
@@ -209,6 +220,8 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
         style={styles.messages}
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         {loading ? (
           <View style={styles.center}>
@@ -254,6 +267,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
           selectionColor={Colors.primary}
           cursorColor={Colors.primary}
           style={styles.input}
+          onFocus={scrollToBottom}
         />
         <TouchableOpacity
           style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.65 }]}

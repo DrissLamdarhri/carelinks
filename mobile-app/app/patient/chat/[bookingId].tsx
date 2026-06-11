@@ -69,7 +69,7 @@ export default function BookingChatScreen() {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 20}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 100}
     >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
