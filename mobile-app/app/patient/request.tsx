@@ -58,7 +58,8 @@ function buildDates() {
   const result: { day: string; num: string; month: string; isoDate: string }[] = [];
   const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
   const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
-  for (let i = 0; i < 7; i += 1) {
+  // Générer plusieurs jours pour permettre la réservation sur plusieurs mois (ex: 90 jours)
+  for (let i = 0; i < 90; i += 1) {
     const date = new Date();
     date.setDate(date.getDate() + i);
     result.push({
