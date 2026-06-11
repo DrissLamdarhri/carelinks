@@ -11,6 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Banknote, Bell, Clock3, Loader2, MapPin, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Booking } from "@/lib/db/types";
@@ -18,6 +19,7 @@ import { useBookingBids } from "@/lib/db/realtime";
 import {
   buildDemoBids,
   buildDemoBooking,
+  getDemoSpecialty,
   isDemoBookingId,
   normalizeRouteParam,
 } from "@/lib/demo-booking";
@@ -40,6 +42,10 @@ export default function WaitingOffersScreen() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const serviceKey = booking?.specialty ?? (isDemoBooking && bookingId ? getDemoSpecialty(bookingId) : null);
+  const isKine = isKineService(serviceKey);
+  const theme = useMemo(() => getServiceTheme(serviceKey), [serviceKey]);
+  const radarBorder = isKine ? "rgba(6,95,70,0.24)" : "rgba(13,8,112,0.24)";
 
   const pulse1 = useRef(new Animated.Value(0)).current;
   const pulse2 = useRef(new Animated.Value(0)).current;
@@ -159,7 +165,7 @@ export default function WaitingOffersScreen() {
   }, [booking?.scheduled_at]);
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: isKine ? theme.surface : Colors.surfaceWarm }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace("/patient")} style={styles.closeBtn}>
           <X size={20} color={Colors.textPrimary} />
@@ -180,6 +186,7 @@ export default function WaitingOffersScreen() {
               style={[
                 styles.radarRing,
                 {
+                  borderColor: radarBorder,
                   opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
                   transform: [
                     {
@@ -193,7 +200,7 @@ export default function WaitingOffersScreen() {
               ]}
             />
           ))}
-          <View style={styles.pinCircle}>
+          <View style={[styles.pinCircle, { backgroundColor: theme.primary }]}>
             <MapPin size={32} color="white" />
           </View>
         </View>
@@ -204,8 +211,8 @@ export default function WaitingOffersScreen() {
         </Text>
 
         <View style={styles.realtimeRow}>
-          <View style={styles.realtimeDot} />
-          <Text style={styles.realtimeText}>
+          <View style={[styles.realtimeDot, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.realtimeText, { color: theme.primary }]}>
             {isDemoBooking ? "Mode démo actif" : "Connexion temps réel active"}
           </Text>
         </View>
@@ -213,8 +220,8 @@ export default function WaitingOffersScreen() {
         {booking ? (
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <View style={styles.summaryIconWrap}>
-                <Clock3 size={15} color={Colors.primary} />
+              <View style={[styles.summaryIconWrap, { backgroundColor: theme.surfaceStrong }]}>
+                <Clock3 size={15} color={theme.primary} />
               </View>
               <View>
                 <Text style={styles.summaryLabel}>Date & heure</Text>
@@ -223,8 +230,8 @@ export default function WaitingOffersScreen() {
             </View>
 
             <View style={styles.summaryRow}>
-              <View style={styles.summaryIconWrap}>
-                <MapPin size={15} color={Colors.primary} />
+              <View style={[styles.summaryIconWrap, { backgroundColor: theme.surfaceStrong }]}>
+                <MapPin size={15} color={theme.primary} />
               </View>
               <View>
                 <Text style={styles.summaryLabel}>Adresse</Text>
@@ -233,12 +240,12 @@ export default function WaitingOffersScreen() {
             </View>
 
             <View style={styles.summaryRow}>
-              <View style={styles.summaryIconWrap}>
-                <Banknote size={15} color={Colors.primary} />
+              <View style={[styles.summaryIconWrap, { backgroundColor: theme.surfaceStrong }]}>
+                <Banknote size={15} color={theme.primary} />
               </View>
               <View>
                 <Text style={styles.summaryLabel}>Votre budget</Text>
-                <Text style={styles.summaryPrice}>
+                <Text style={[styles.summaryPrice, { color: theme.primary }]}>
                   {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} MAD
                 </Text>
               </View>
@@ -246,7 +253,7 @@ export default function WaitingOffersScreen() {
           </View>
         ) : (
           <View style={styles.summaryCard}>
-            <Loader2 size={18} color={Colors.primary} />
+            <Loader2 size={18} color={theme.primary} />
             <Text style={styles.summaryLabel}>Chargement de votre demande…</Text>
           </View>
         )}
@@ -254,21 +261,22 @@ export default function WaitingOffersScreen() {
         {offersCount > 0 ? (
           <View style={styles.previewWrap}>
             <View style={styles.previewHeader}>
-              <View style={styles.offersCountBubble}>
+              <View style={[styles.offersCountBubble, { backgroundColor: theme.primary }]}>
                 <Text style={styles.offersCountText}>{offersCount}</Text>
               </View>
-              <Bell size={16} color={Colors.primary} />
+              <Bell size={16} color={theme.primary} />
               <Text style={styles.previewTitle}>Offres reçues en direct</Text>
             </View>
             <LiveBidsFeed
               bookingId={bookingId ?? ""}
               mockBids={isDemoBooking ? pendingBids : undefined}
+              theme={theme}
               onAccepted={() => {
                 if (bookingId) router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
               }}
             />
             <TouchableOpacity
-              style={styles.offersBtn}
+              style={[styles.offersBtn, { backgroundColor: theme.primary }]}
               onPress={() => {
                 if (bookingId) router.replace(`/patient/offers/${bookingId}`);
               }}
@@ -432,12 +440,13 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  cancelBtnText: { color: Colors.textMuted, fontSize: 14 },
+  cancelBtnText: { color: Colors.primary, fontSize: 14, fontWeight: "600" },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });
