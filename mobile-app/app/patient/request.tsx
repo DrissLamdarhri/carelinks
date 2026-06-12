@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600" },
   submitHint: { marginTop: 8, textAlign: "center", color: Colors.textMuted, fontSize: 11 },
-  dateHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  dateHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6, marginTop: 12 },
   monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
   monthNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
   monthNavBtnDisabled: { opacity: 0.4 },
