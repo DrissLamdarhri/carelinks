@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     height: 92,
     borderRadius: 46,
     overflow: "hidden",
-    backgroundColor: Colors.surfaceWarm, // crème
+    backgroundColor: Colors.white, // blanc
     alignItems: "center",
     justifyContent: "center",
   },
