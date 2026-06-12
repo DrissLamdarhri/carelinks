@@ -100,7 +100,7 @@ export default function PatientHomeScreen() {
             return (
               <TouchableOpacity
                 key={s.key}
-                style={styles.horizServiceCard}
+                style={styles.serviceCircleWrap}
                 onPress={() =>
                   router.push(
                     s.key === "psy"
@@ -112,11 +112,11 @@ export default function PatientHomeScreen() {
                 }
                 activeOpacity={0.9}
               >
-                <Image source={{ uri: s.image }} style={styles.horizServiceImage} />
-                <View style={styles.horizServiceBody}>
-                  <Text style={styles.serviceLabelDark}>{s.label}</Text>
-                  <Text style={styles.serviceSubDark}>{s.sub}</Text>
+                <View style={styles.serviceCircle}>
+                  <Image source={{ uri: s.image }} style={styles.serviceCircleImage} />
                 </View>
+                <Text style={styles.serviceLabelDarkCenter}>{s.label}</Text>
+                <Text style={styles.serviceSubDarkCenter} numberOfLines={1}>{s.sub}</Text>
               </TouchableOpacity>
             );
           })}
@@ -297,23 +297,24 @@ const styles = StyleSheet.create({
   serviceLabel: { color: "white", fontSize: 16, fontWeight: "700" },
   serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 11 },
 
-  // Horizontal compact service card (image on top, text on white bottom)
-  horizServiceCard: {
-    width: 140,
-    marginRight: 10,
-    backgroundColor: "white",
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 2,
+  // Service circles (image as background)
+  serviceCircleWrap: {
+    width: 92,
+    alignItems: "center",
+    marginRight: 12,
   },
-  horizServiceImage: { width: "100%", height: 92, resizeMode: "cover" },
-  horizServiceBody: { padding: 10 },
-  serviceLabelDark: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
-  serviceSubDark: { color: Colors.textMuted, fontSize: 12 },
+  serviceCircle: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    overflow: "hidden",
+    backgroundColor: Colors.input,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  serviceCircleImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  serviceLabelDarkCenter: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginTop: 8, textAlign: "center" },
+  serviceSubDarkCenter: { color: Colors.textMuted, fontSize: 11, textAlign: "center" },
   cta: {
     height: 54,
     borderRadius: 20,
