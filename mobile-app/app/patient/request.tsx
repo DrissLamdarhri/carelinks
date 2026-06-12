@@ -91,6 +91,7 @@ export default function PatientRequestScreen() {
   const [careType, setCareType] = useState(0);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
   const [selectedTime, setSelectedTime] = useState(4);
   const [price, setPrice] = useState(isKine ? 120 : 80);
   const [address, setAddress] = useState("");
@@ -314,13 +315,47 @@ export default function PatientRequestScreen() {
         )}
 
         {/* ── Date ── */}
-        <Text style={styles.label}>Date</Text>
-        {groupedMonths.map((month) => (
-          <View key={month.key} style={styles.monthGroup}>
-            <Text style={styles.monthHeader}>{month.label}</Text>
+        <View style={styles.dateHeaderRow}>
+          <Text style={styles.label}>Date</Text>
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              style={[styles.monthNavBtn, selectedMonthIndex === 0 && styles.monthNavBtnDisabled]}
+              onPress={() => {
+                const prev = Math.max(0, selectedMonthIndex - 1);
+                setSelectedMonthIndex(prev);
+                const firstGlobal = dates.findIndex((d) => d.isoDate === groupedMonths[prev].dates[0].isoDate);
+                if (firstGlobal >= 0) setSelectedDate(firstGlobal);
+              }}
+              disabled={selectedMonthIndex === 0}
+            >
+              <Text style={styles.monthNavBtnText}>‹</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.monthHeader}>{groupedMonths[selectedMonthIndex]?.label}</Text>
+
+            <TouchableOpacity
+              style={[
+                styles.monthNavBtn,
+                selectedMonthIndex === groupedMonths.length - 1 && styles.monthNavBtnDisabled,
+              ]}
+              onPress={() => {
+                const next = Math.min(groupedMonths.length - 1, selectedMonthIndex + 1);
+                setSelectedMonthIndex(next);
+                const firstGlobal = dates.findIndex((d) => d.isoDate === groupedMonths[next].dates[0].isoDate);
+                if (firstGlobal >= 0) setSelectedDate(firstGlobal);
+              }}
+              disabled={selectedMonthIndex === groupedMonths.length - 1}
+            >
+              <Text style={styles.monthNavBtnText}>›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {groupedMonths[selectedMonthIndex] && (
+          <View key={groupedMonths[selectedMonthIndex].key} style={styles.monthGroup}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.rowChips}>
-                {month.dates.map((date) => {
+                {groupedMonths[selectedMonthIndex].dates.map((date) => {
                   const globalIndex = dates.findIndex((d) => d.isoDate === date.isoDate);
                   return (
                     <TouchableOpacity
@@ -347,7 +382,7 @@ export default function PatientRequestScreen() {
               </View>
             </ScrollView>
           </View>
-        ))}
+        )}
 
         {/* ── Heure ── */}
         <Text style={styles.label}>Heure</Text>
@@ -745,7 +780,12 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { backgroundColor: "#D9D9D9" },
   submitText: { color: "white", fontSize: 15, fontWeight: "600" },
   submitHint: { marginTop: 8, textAlign: "center", color: Colors.textMuted, fontSize: 11 },
+  dateHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
+  monthNavBtnDisabled: { opacity: 0.4 },
+  monthNavBtnText: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
   monthGroup: { marginTop: 8, marginBottom: 12 },
-  monthHeader: { fontSize: 14, color: Colors.textPrimary, fontWeight: "700", marginBottom: 6 },
+  monthHeader: { fontSize: 16, color: Colors.textPrimary, fontWeight: "700", marginBottom: 6 },
   errorText: { marginTop: 10, color: Colors.danger, fontSize: 12 },
 });
