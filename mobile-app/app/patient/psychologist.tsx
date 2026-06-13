@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, MapPin, MessageCircle, Star, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 
-const days = [
-  { day: "Lun", num: 14, available: true },
-  { day: "Mar", num: 15, available: true },
-  { day: "Mer", num: 16, available: true },
-  { day: "Jeu", num: 17, available: false },
-  { day: "Ven", num: 18, available: true },
-  { day: "Sam", num: 19, available: true },
-  { day: "Dim", num: 20, available: false },
-];
+function buildDates() {
+  const result: { day: string; num: string; month: string; isoDate: string }[] = [];
+  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+  for (let i = 0; i < 90; i += 1) {
+    const date = new Date();
+    date.setDate(date.getDate() + i);
+    result.push({
+      day: days[date.getDay()],
+      num: String(date.getDate()).padStart(2, "0"),
+      month: months[date.getMonth()],
+      isoDate: date.toISOString().split("T")[0],
+    });
+  }
+  return result;
+}
+
+const dates = buildDates();
 
 const slots = [
   { time: "09:00", taken: false },
@@ -31,9 +40,22 @@ const consultTypes = [
 
 export default function PsychologistBookingScreen() {
   const router = useRouter();
-  const [selectedDay, setSelectedDay] = useState(2);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [consultType, setConsultType] = useState("onsite");
+
+  const groupedMonths = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; dates: typeof dates }>();
+    for (const d of dates) {
+      const dt = new Date(d.isoDate);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}`;
+      const label = dt.toLocaleString("fr-MA", { month: "long", year: "numeric" });
+      if (!map.has(key)) map.set(key, { key, label, dates: [] as any });
+      map.get(key)!.dates.push(d);
+    }
+    return Array.from(map.values());
+  }, [dates]);
 
   const canConfirm = selectedSlot !== null;
 
@@ -95,27 +117,71 @@ export default function PsychologistBookingScreen() {
           })}
         </View>
 
-        <Text style={styles.blockLabel}>Choisir une date</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysRow}>
-          {days.map((d, i) => {
-            const active = selectedDay === i;
-            return (
-              <TouchableOpacity
-                key={`${d.day}-${d.num}`}
-                onPress={() => d.available && setSelectedDay(i)}
-                disabled={!d.available}
-                style={[
-                  styles.dayChip,
-                  !d.available && styles.dayChipDisabled,
-                  d.available && active && styles.dayChipActive,
-                ]}
-              >
-                <Text style={[styles.dayText, active && styles.dayTextActive]}>{d.day}</Text>
-                <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.num}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.dateHeaderRow}>
+          <Text style={styles.blockLabel}>Choisir une date</Text>
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              style={[styles.monthNavBtn, selectedMonthIndex === 0 && styles.monthNavBtnDisabled]}
+              onPress={() => {
+                const prev = Math.max(0, selectedMonthIndex - 1);
+                setSelectedMonthIndex(prev);
+                const firstGlobal = dates.findIndex((d) => d.isoDate === groupedMonths[prev].dates[0].isoDate);
+                if (firstGlobal >= 0) setSelectedDay(firstGlobal);
+              }}
+              disabled={selectedMonthIndex === 0}
+            >
+              <Text style={styles.monthNavBtnText}>‹</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.monthHeader}>{groupedMonths[selectedMonthIndex]?.label}</Text>
+
+            <TouchableOpacity
+              style={[
+                styles.monthNavBtn,
+                selectedMonthIndex === groupedMonths.length - 1 && styles.monthNavBtnDisabled,
+              ]}
+              onPress={() => {
+                const next = Math.min(groupedMonths.length - 1, selectedMonthIndex + 1);
+                setSelectedMonthIndex(next);
+                const firstGlobal = dates.findIndex((d) => d.isoDate === groupedMonths[next].dates[0].isoDate);
+                if (firstGlobal >= 0) setSelectedDay(firstGlobal);
+              }}
+              disabled={selectedMonthIndex === groupedMonths.length - 1}
+            >
+              <Text style={styles.monthNavBtnText}>›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {groupedMonths[selectedMonthIndex] && (
+          <View style={styles.monthGroup}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.rowChips}>
+                {groupedMonths[selectedMonthIndex].dates.map((date) => {
+                  const globalIndex = dates.findIndex((d) => d.isoDate === date.isoDate);
+                  const active = selectedDay === globalIndex;
+                  return (
+                    <TouchableOpacity
+                      key={date.isoDate}
+                      style={[
+                        styles.dayChip,
+                        active && styles.dayChipActive,
+                      ]}
+                      onPress={() => setSelectedDay(globalIndex)}
+                    >
+                      <Text style={[styles.dayText, active && styles.dayTextActive]}>
+                        {date.day}
+                      </Text>
+                      <Text style={[styles.dayNum, active && styles.dayTextActive]}>
+                        {date.num}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        )}
 
         <Text style={styles.blockLabel}>Créneaux disponibles</Text>
         <View style={styles.slotsGrid}>
@@ -231,6 +297,13 @@ const styles = StyleSheet.create({
   consultText: { color: Colors.textMuted, fontSize: 11, fontWeight: "500" },
   consultTextActive: { color: Colors.primary },
   daysRow: { gap: 8, marginBottom: 14 },
+  dateHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
+  monthNavBtnDisabled: { opacity: 0.4 },
+  monthNavBtnText: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
+  monthHeader: { fontSize: 16, color: Colors.textPrimary, fontWeight: "700", marginHorizontal: 8 },
+  rowChips: { flexDirection: "row", gap: 8, marginBottom: 14 },
   dayChip: {
     width: 52,
     borderRadius: 14,
