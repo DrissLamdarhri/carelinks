@@ -118,7 +118,7 @@ export default function PatientHomeScreen() {
                     <View style={styles.serviceImageWrap}>
                       <LinearGradient colors={(Gradients as any)[s.gradient]} style={styles.serviceImageBg} />
                       <Image source={{ uri: s.image }} style={[styles.serviceImage, { opacity: 0.9 }]} />
-                      <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]} style={styles.serviceImageGradient} />
+                      <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.6)"]} style={styles.serviceImageGradient} />
 
                       <View style={styles.serviceTop}>
                         <View style={styles.serviceIconWrap}>
@@ -126,11 +126,11 @@ export default function PatientHomeScreen() {
                         </View>
                         {s.tag ? <Text style={styles.tagPill}>{s.tag}</Text> : null}
                       </View>
-                    </View>
 
-                    <View style={styles.serviceTextWrap}>
-                      <Text style={styles.serviceLabel}>{s.label}</Text>
-                      <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
+                      <View style={styles.serviceTextWrapOverlay}>
+                        <Text style={styles.serviceLabel}>{s.label}</Text>
+                        <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
+                      </View>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -292,10 +292,10 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   serviceInner: { flex: 1, borderRadius: 18, overflow: "hidden", flexDirection: "column" },
-  serviceImageWrap: { flex: 0.66, overflow: "hidden", position: "relative" },
+  serviceImageWrap: { flex: 1, overflow: "hidden", position: "relative" },
   serviceImageBg: { ...StyleSheet.absoluteFillObject },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined, resizeMode: "cover" },
-  serviceImageGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%" },
+  serviceImageGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "50%" },
   serviceTop: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
     width: 30,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontWeight: "600",
   },
-  serviceTextWrap: { paddingHorizontal: 8, paddingVertical: 10 },
+  serviceTextWrapOverlay: { position: "absolute", left: 10, right: 10, bottom: 10 },
   serviceLabel: { color: "white", fontSize: 16, fontWeight: "800" },
   serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 12 },
 
