@@ -96,31 +96,42 @@ export default function PatientHomeScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Choisissez votre service</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 2 }}>
-          {primaryServices.map((s) => {
-            const IconComp = serviceIconMap[s.icon as keyof typeof serviceIconMap] ?? Syringe;
-            return (
-              <TouchableOpacity
-                key={s.key}
-                style={styles.serviceCircleWrap}
-                onPress={() =>
-                  router.push(
-                    s.key === "psy"
-                      ? "/patient/psychologist"
-                      : s.key === "yoga"
-                      ? "/patient/yoga"
-                      : `/patient/request?service=${s.key}`
-                  )
-                }
-                activeOpacity={0.9}
-              >
-                <LinearGradient colors={Gradients[s.gradient]} style={styles.serviceCircle}>
-                  <IconComp size={30} color="white" />
-                </LinearGradient>
-                <Text style={styles.serviceLabelDarkCenter}>{s.label}</Text>
-                <Text style={styles.serviceSubDarkCenter} numberOfLines={1}>{s.sub}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          <View style={styles.grid}>
+            {primaryServices.map((s) => {
+              const IconComp = serviceIconMap[s.icon as keyof typeof serviceIconMap] ?? Syringe;
+              return (
+                <TouchableOpacity
+                  key={s.key}
+                  style={styles.serviceCard}
+                  onPress={() =>
+                    router.push(
+                      s.key === "psy"
+                        ? "/patient/psychologist"
+                        : s.key === "yoga"
+                        ? "/patient/yoga"
+                        : `/patient/request?service=${s.key}`
+                    )
+                  }
+                  activeOpacity={0.9}
+                >
+                  <Image source={{ uri: s.image }} style={styles.serviceImage} />
+                  <View style={[styles.serviceOverlay, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
+
+                  <View style={styles.serviceTop}>
+                    <View style={styles.serviceIconWrap}>
+                      <IconComp size={16} color="white" />
+                    </View>
+                    {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : null}
+                  </View>
+
+                  <View>
+                    <Text style={styles.serviceLabel}>{s.label}</Text>
+                    <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </ScrollView>
       </View>
 
