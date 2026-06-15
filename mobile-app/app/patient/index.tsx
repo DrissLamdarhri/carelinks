@@ -116,7 +116,8 @@ export default function PatientHomeScreen() {
                 >
                   <View style={styles.serviceInner}>
                     <View style={styles.serviceImageWrap}>
-                      <Image source={{ uri: s.image }} style={styles.serviceImage} />
+                      <LinearGradient colors={(Gradients as any)[s.gradient]} style={styles.serviceImageBg} />
+                      <Image source={{ uri: s.image }} style={[styles.serviceImage, { opacity: 0.9 }]} />
                       <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]} style={styles.serviceImageGradient} />
 
                       <View style={styles.serviceTop}>
@@ -286,18 +287,14 @@ const styles = StyleSheet.create({
     width: "48.5%",
     aspectRatio: 1,
     borderRadius: 22,
-    overflow: "visible",
+    overflow: "hidden",
     justifyContent: "flex-end",
     padding: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    elevation: 6,
   },
   serviceInner: { flex: 1, borderRadius: 18, overflow: "hidden", flexDirection: "column" },
-  serviceImageWrap: { flex: 0.66, overflow: "hidden" },
-  serviceImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  serviceImageWrap: { flex: 0.66, overflow: "hidden", position: "relative" },
+  serviceImageBg: { ...StyleSheet.absoluteFillObject },
+  serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined, resizeMode: "cover" },
   serviceImageGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%" },
   serviceTop: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
