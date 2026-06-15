@@ -277,14 +277,14 @@ const styles = StyleSheet.create({
   quickText: { fontSize: 12, fontWeight: "600" },
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 6 },
   serviceCard: {
-    width: "44%",
+    width: "47%",
     aspectRatio: 1,
     borderRadius: 22,
     overflow: "hidden",
     justifyContent: "flex-end",
-    padding: 10,
+    padding: 8,
   },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   serviceOverlay: { ...StyleSheet.absoluteFillObject },
@@ -310,6 +310,7 @@ const styles = StyleSheet.create({
   serviceTextWrap: { position: "absolute", left: 10, right: 10, bottom: 12 },
   serviceLabel: { color: "white", fontSize: 16, fontWeight: "800" },
   serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 12 },
+
   serviceShadow: { shadowColor: "#000", shadowOpacity: 0.08, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 3 },
 
 
