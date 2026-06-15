@@ -280,25 +280,25 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   serviceCard: {
     width: "48.5%",
-    height: 140,
-    borderRadius: 22,
+    height: 110,
+    borderRadius: 20,
     overflow: "hidden",
     justifyContent: "space-between",
-    padding: 12,
+    padding: 10,
   },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   serviceOverlay: { ...StyleSheet.absoluteFillObject },
   serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
   tag: {
-    fontSize: 10,
+    fontSize: 9,
     color: "white",
     backgroundColor: "rgba(255,255,255,0.25)",
     borderRadius: 999,
@@ -306,8 +306,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     fontWeight: "600",
   },
-  serviceLabel: { color: "white", fontSize: 16, fontWeight: "700" },
-  serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 11 },
+  serviceLabel: { color: "white", fontSize: 14, fontWeight: "700" },
+  serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 10 },
+
 
   // Service circles (image as background)
   serviceCircleWrap: {
