@@ -97,6 +97,7 @@ export default function PatientHomeScreen() {
         <Text style={styles.sectionTitle}>Choisissez votre service</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 2 }}>
           {primaryServices.map((s) => {
+            const IconComp = serviceIconMap[s.icon as keyof typeof serviceIconMap] ?? Syringe;
             return (
               <TouchableOpacity
                 key={s.key}
@@ -112,9 +113,9 @@ export default function PatientHomeScreen() {
                 }
                 activeOpacity={0.9}
               >
-                <View style={styles.serviceCircle}>
-                  <Image source={{ uri: s.image }} style={styles.serviceCircleImage} />
-                </View>
+                <LinearGradient colors={Gradients[s.gradient]} style={styles.serviceCircle}>
+                  <IconComp size={30} color="white" />
+                </LinearGradient>
                 <Text style={styles.serviceLabelDarkCenter}>{s.label}</Text>
                 <Text style={styles.serviceSubDarkCenter} numberOfLines={1}>{s.sub}</Text>
               </TouchableOpacity>
@@ -308,7 +309,7 @@ const styles = StyleSheet.create({
     height: 92,
     borderRadius: 46,
     overflow: "hidden",
-    backgroundColor: Colors.white, // blanc
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
