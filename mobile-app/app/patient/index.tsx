@@ -95,14 +95,14 @@ export default function PatientHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Choisissez votre service</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 2 }}>
+        <View style={{ paddingVertical: 6, paddingHorizontal: 2 }}>
           <View style={styles.grid}>
             {primaryServices.map((s) => {
               const IconComp = serviceIconMap[s.icon as keyof typeof serviceIconMap] ?? Syringe;
               return (
                 <TouchableOpacity
                   key={s.key}
-                  style={styles.serviceCard}
+                  style={[styles.serviceCard, styles.serviceShadow]}
                   onPress={() =>
                     router.push(
                       s.key === "psy"
@@ -132,7 +132,7 @@ export default function PatientHomeScreen() {
               );
             })}
           </View>
-        </ScrollView>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -277,39 +277,40 @@ const styles = StyleSheet.create({
   quickText: { fontSize: 12, fontWeight: "600" },
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10 },
   serviceCard: {
     width: "44%",
     aspectRatio: 1,
-    borderRadius: 14,
+    borderRadius: 22,
     overflow: "hidden",
     justifyContent: "flex-end",
-    padding: 8,
+    padding: 10,
   },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   serviceOverlay: { ...StyleSheet.absoluteFillObject },
-  serviceOverlayGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "50%" },
-  serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 6 },
+  serviceOverlayGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%" },
+  serviceTop: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
   tagPill: {
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textPrimary,
     backgroundColor: "rgba(255,255,255,0.95)",
     borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     fontWeight: "600",
   },
-  serviceTextWrap: { paddingHorizontal: 6, paddingBottom: 8 },
-  serviceLabel: { color: "white", fontSize: 14, fontWeight: "700" },
-  serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 10 },
+  serviceTextWrap: { position: "absolute", left: 10, right: 10, bottom: 12 },
+  serviceLabel: { color: "white", fontSize: 16, fontWeight: "800" },
+  serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 12 },
+  serviceShadow: { shadowColor: "#000", shadowOpacity: 0.08, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 3 },
 
 
 
