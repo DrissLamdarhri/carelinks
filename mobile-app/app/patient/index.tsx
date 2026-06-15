@@ -102,7 +102,7 @@ export default function PatientHomeScreen() {
               return (
                 <TouchableOpacity
                   key={s.key}
-                  style={[styles.serviceCard, styles.serviceShadow]}
+                  style={styles.serviceCard}
                   onPress={() =>
                     router.push(
                       s.key === "psy"
@@ -114,19 +114,21 @@ export default function PatientHomeScreen() {
                   }
                   activeOpacity={0.9}
                 >
-                  <Image source={{ uri: s.image }} style={styles.serviceImage} />
-                  <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]} style={styles.serviceOverlayGradient} />
+                  <View style={styles.serviceInner}>
+                    <Image source={{ uri: s.image }} style={styles.serviceImage} />
+                    <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]} style={styles.serviceOverlayGradient} />
 
-                  <View style={styles.serviceTop}>
-                    <View style={styles.serviceIconWrap}>
-                      <IconComp size={16} color="white" />
+                    <View style={styles.serviceTop}>
+                      <View style={styles.serviceIconWrap}>
+                        <IconComp size={16} color="white" />
+                      </View>
+                      {s.tag ? <Text style={styles.tagPill}>{s.tag}</Text> : null}
                     </View>
-                    {s.tag ? <Text style={styles.tagPill}>{s.tag}</Text> : null}
-                  </View>
 
-                  <View style={styles.serviceTextWrap}>
-                    <Text style={styles.serviceLabel}>{s.label}</Text>
-                    <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
+                    <View style={styles.serviceTextWrap}>
+                      <Text style={styles.serviceLabel}>{s.label}</Text>
+                      <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
+                    </View>
                   </View>
                 </TouchableOpacity>
               );
@@ -282,10 +284,16 @@ const styles = StyleSheet.create({
     width: "48.5%",
     aspectRatio: 1,
     borderRadius: 22,
-    overflow: "hidden",
+    overflow: "visible",
     justifyContent: "flex-end",
     padding: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 6,
   },
+  serviceInner: { flex: 1, borderRadius: 18, overflow: "hidden" },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   serviceOverlay: { ...StyleSheet.absoluteFillObject },
   serviceOverlayGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%" },
