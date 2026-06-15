@@ -115,16 +115,16 @@ export default function PatientHomeScreen() {
                   activeOpacity={0.9}
                 >
                   <Image source={{ uri: s.image }} style={styles.serviceImage} />
-                  <View style={[styles.serviceOverlay, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
+                  <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]} style={styles.serviceOverlayGradient} />
 
                   <View style={styles.serviceTop}>
                     <View style={styles.serviceIconWrap}>
                       <IconComp size={16} color="white" />
                     </View>
-                    {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : null}
+                    {s.tag ? <Text style={styles.tagPill}>{s.tag}</Text> : null}
                   </View>
 
-                  <View>
+                  <View style={styles.serviceTextWrap}>
                     <Text style={styles.serviceLabel}>{s.label}</Text>
                     <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
                   </View>
@@ -281,33 +281,35 @@ const styles = StyleSheet.create({
   serviceCard: {
     width: "48.5%",
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
     justifyContent: "flex-end",
-    padding: 10,
+    padding: 12,
   },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   serviceOverlay: { ...StyleSheet.absoluteFillObject },
-  serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  serviceOverlayGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%" },
+  serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 8 },
   serviceIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
-  tag: {
-    fontSize: 9,
-    color: "white",
-    backgroundColor: "rgba(255,255,255,0.25)",
+  tagPill: {
+    fontSize: 10,
+    color: Colors.textPrimary,
+    backgroundColor: "rgba(255,255,255,0.95)",
     borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     fontWeight: "600",
   },
-  serviceLabel: { color: "white", fontSize: 14, fontWeight: "700" },
-  serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 10 },
+  serviceTextWrap: { paddingHorizontal: 6, paddingBottom: 10 },
+  serviceLabel: { color: "white", fontSize: 16, fontWeight: "800" },
+  serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 12 },
 
 
   // Service circles (image as background)
