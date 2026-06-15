@@ -280,10 +280,10 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   serviceCard: {
     width: "48.5%",
-    height: 110,
-    borderRadius: 20,
+    aspectRatio: 1,
+    borderRadius: 16,
     overflow: "hidden",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     padding: 10,
   },
   serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
