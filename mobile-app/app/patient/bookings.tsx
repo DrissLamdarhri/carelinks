@@ -362,7 +362,7 @@ export default function PatientBookingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: "#F1EDDE" },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 26 },
   title: {
     fontSize: 24,
