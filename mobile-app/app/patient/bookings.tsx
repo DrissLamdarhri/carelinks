@@ -362,7 +362,7 @@ export default function PatientBookingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.white },
+  root: { flex: 1, backgroundColor: "#F7F9FC" },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 26 },
   title: {
     fontSize: 24,
@@ -410,19 +410,11 @@ const styles = StyleSheet.create({
   },
   emptyCtaText: { color: "white", fontSize: 13, fontWeight: "600" },
   card: {
-    backgroundColor: Colors.card,
-    borderRadius: 18,
+    backgroundColor: "white",
+    borderRadius: 16,
     padding: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 2,
   },
-
   headRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   badge: {
     fontSize: 11,
@@ -435,7 +427,7 @@ const styles = StyleSheet.create({
   bodyRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: { width: 42, height: 42, borderRadius: 21 },
   avatarFallback: {
-    backgroundColor: Colors.surfaceWarm,
+    backgroundColor: "#F7F9FC",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,

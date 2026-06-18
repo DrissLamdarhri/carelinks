@@ -65,7 +65,7 @@ export function MyBookings() {
   const displayed = tab === "upcoming" ? upcoming : past;
 
   return (
-    <div className="flex flex-col h-full bg-[#EDE5CC]">
+    <div className="flex flex-col h-full bg-[#F7F9FC]">
       {/* Header */}
       <div className="bg-white px-5 pt-12 pb-4 border-b border-[#F0F0F0]">
         <div className="flex items-center gap-3 mb-4">
@@ -177,7 +177,7 @@ export function MyBookings() {
                   style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-[#EDE5CC] flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 rounded-2xl bg-[#F7F9FC] flex items-center justify-center flex-shrink-0">
                       <span className="text-[#0D0870] font-bold">
                         {proLabel
                           .split(" ")
@@ -234,7 +234,7 @@ export function MyBookings() {
                             state: { bookingId: b.id, booking: b },
                           })
                         }
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EDE5CC] text-[#0D0870] text-[12px]"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F9FC] text-[#0D0870] text-[12px]"
                         style={{ fontWeight: 600 }}
                       >
                         <Star size={12} fill="#0D0870" />
