@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import Svg, {
   Defs,
@@ -10,14 +10,24 @@ import Svg, {
   G,
   Text as SvgText,
 } from 'react-native-svg';
-import Animated, {
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  useAnimatedProps,
-} from 'react-native-reanimated';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+// dynamic reanimated require to avoid crash when API differs
+let Reanimated: any = null;
+let AnimatedCircle: any = Circle;
+let useSharedValue: any = null;
+let withRepeat: any = null;
+let withTiming: any = null;
+let useAnimatedProps: any = null;
+try {
+  Reanimated = require('react-native-reanimated');
+  AnimatedCircle = Reanimated.createAnimatedComponent ? Reanimated.createAnimatedComponent(Circle) : Circle;
+  useSharedValue = Reanimated.useSharedValue;
+  withRepeat = Reanimated.withRepeat;
+  withTiming = Reanimated.withTiming;
+  useAnimatedProps = Reanimated.useAnimatedProps;
+} catch (e) {
+  Reanimated = null;
+  AnimatedCircle = Circle;
+}
 
 const cities = [
   { name: 'Meknès', nameAr: 'مكناس', x: 235, y: 210, major: true },
@@ -48,49 +58,77 @@ const contours = [
   'M 95,318 Q 168,316 240,318 Q 316,320 375,314',
 ];
 
-export default function MapSectionNative() {
+export default function MapSectionNative({
+  lat = 33.5731,
+  lng = -5.5398,
+  radiusKm = 5,
+  onPress,
+  primaryColor = '#00d4ff',
+}: {
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
+  onPress?: (lat: number, lng: number) => void;
+  primaryColor?: string;
+}) {
   // pulse cycles 0 -> 3 continuously (3s loop)
-  const pulse = useSharedValue(0);
+  let pulse: any = null;
+  const [layout, setLayout] = useState({ w: 440, h: 360 });
 
-  useEffect(() => {
-    pulse.value = withRepeat(withTiming(3, { duration: 3000 }), -1);
-  }, [pulse]);
 
   const pinX = 235;
   const pinY = 210;
 
-  // animated props for 3 rings (offset 0,1,2)
-  const ring0 = useAnimatedProps(() => {
-    // progress 0..1
-    const p = ((pulse.value + 0) % 3) / 3;
-    const r = 8 + p * 52;
-    const op = Math.max(0, 1 - p * 1.4);
-    return {
-      r,
-      strokeOpacity: op,
-    } as any;
-  });
-  const ring1 = useAnimatedProps(() => {
-    const p = ((pulse.value + 1) % 3) / 3;
-    const r = 8 + p * 52;
-    const op = Math.max(0, 1 - p * 1.4);
-    return {
-      r,
-      strokeOpacity: op,
-    } as any;
-  });
-  const ring2 = useAnimatedProps(() => {
-    const p = ((pulse.value + 2) % 3) / 3;
-    const r = 8 + p * 52;
-    const op = Math.max(0, 1 - p * 1.4);
-    return {
-      r,
-      strokeOpacity: op,
-    } as any;
-  });
+  const onLayout = (e: any) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width && height) setLayout({ w: width, h: height });
+  };
+
+  const handleResponderRelease = (e: any) => {
+    const { locationX, locationY } = e.nativeEvent;
+    const relX = layout.w ? locationX / layout.w : 0.5;
+    const relY = layout.h ? locationY / layout.h : 0.5;
+    const nextLat = (lat || 33.5731) + (0.5 - relY) * 0.08;
+    const nextLng = (lng || -5.5398) + (relX - 0.5) * 0.08;
+    onPress?.(nextLat, nextLng);
+  };
+
+  // animated props for 3 rings (offset 0,1,2) - fallback if reanimated missing
+  const hasReanimated = !!Reanimated && !!useSharedValue && !!withRepeat && !!withTiming && !!useAnimatedProps;
+  if (hasReanimated) {
+    pulse = useSharedValue(0);
+    useEffect(() => {
+      if (pulse) pulse.value = withRepeat(withTiming(3, { duration: 3000 }), -1);
+    }, [pulse]);
+  }
+
+  let ring0: any = null;
+  let ring1: any = null;
+  let ring2: any = null;
+
+  if (hasReanimated && pulse && useAnimatedProps) {
+    ring0 = useAnimatedProps(() => {
+      const p = ((pulse.value + 0) % 3) / 3;
+      const r = 8 + p * 52;
+      const op = Math.max(0, 1 - p * 1.4);
+      return { r, strokeOpacity: op } as any;
+    });
+    ring1 = useAnimatedProps(() => {
+      const p = ((pulse.value + 1) % 3) / 3;
+      const r = 8 + p * 52;
+      const op = Math.max(0, 1 - p * 1.4);
+      return { r, strokeOpacity: op } as any;
+    });
+    ring2 = useAnimatedProps(() => {
+      const p = ((pulse.value + 2) % 3) / 3;
+      const r = 8 + p * 52;
+      const op = Math.max(0, 1 - p * 1.4);
+      return { r, strokeOpacity: op } as any;
+    });
+  }
 
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrapper} onLayout={onLayout} onStartShouldSetResponder={() => true} onResponderRelease={handleResponderRelease}>
       {/* Background gradient */}
       <View style={styles.bg} />
 
@@ -139,9 +177,19 @@ export default function MapSectionNative() {
         <Circle cx={pinX} cy={pinY} r={38} fill="none" stroke="#00d4ff" strokeWidth={4} strokeOpacity={0.07} />
 
         {/* animated rings */}
-        <AnimatedCircle animatedProps={ring0} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={1.5} />
-        <AnimatedCircle animatedProps={ring1} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={1.2} />
-        <AnimatedCircle animatedProps={ring2} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={0.9} />
+        {hasReanimated && ring0 ? (
+          <>
+            <AnimatedCircle animatedProps={ring0} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={1.5} />
+            <AnimatedCircle animatedProps={ring1} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={1.2} />
+            <AnimatedCircle animatedProps={ring2} cx={pinX} cy={pinY} fill="none" stroke="#00d4ff" strokeWidth={0.9} />
+          </>
+        ) : (
+          <>
+            <Circle cx={pinX} cy={pinY} r={8} fill="none" stroke="#00d4ff" strokeWidth={1.5} strokeOpacity={0.6} />
+            <Circle cx={pinX} cy={pinY} r={24} fill="none" stroke="#00d4ff" strokeWidth={1.2} strokeOpacity={0.35} />
+            <Circle cx={pinX} cy={pinY} r={40} fill="none" stroke="#00d4ff" strokeWidth={0.9} strokeOpacity={0.18} />
+          </>
+        )}
 
         {/* city dots + soft halo */}
         {cities.map((city) => (
