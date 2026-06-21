@@ -18,13 +18,8 @@ import {
 import { MapPin, Navigation } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { geo } from "@/lib/db/geo";
-import MapSectionNative from './map/MapSectionNative';
-
-// Debug helper: verify what was imported at runtime (type should be 'function')
-if (typeof MapSectionNative === 'object') {
-  // eslint-disable-next-line no-console
-  console.warn('MapSectionNative imported as object — will attempt to use default property', MapSectionNative);
-}
+import * as _MapSectionNative from './map/MapSectionNative';
+const MapSectionNative: any = (_MapSectionNative as any)?.default ?? _MapSectionNative;
 
 
 // ── Chargement conditionnel de react-native-maps ──────────────────────────────
