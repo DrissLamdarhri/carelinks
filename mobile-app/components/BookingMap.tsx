@@ -257,53 +257,17 @@ export function BookingMap({
 
   return (
     <View style={styles.wrap}>
-      {HAS_MAPS ? (
-        // ── Vraie carte Google Maps ────────────────────────────────────────
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
-          provider={PROVIDER_GOOGLE}
-          customMapStyle={CARELINK_MAP_STYLE}
-          initialRegion={{
-            latitude: initialLat,
-            longitude: initialLng,
-            latitudeDelta: DEFAULT_DELTA,
-            longitudeDelta: DEFAULT_DELTA,
-          }}
-          showsCompass={false}
-          showsTraffic={false}
-          toolbarEnabled={false}
-        >
-          <Circle
-            center={markerCoord}
-            radius={radiusKm * 1000}
-            strokeColor={`${primaryColor}44`}
-            fillColor={`${primaryColor}0E`}
-            strokeWidth={1.5}
-          />
-          <Marker
-            coordinate={markerCoord}
-            draggable
-            onDragEnd={handleDragEnd}
-            anchor={{ x: 0.5, y: 1 }}
-            tracksViewChanges={false}
-          >
-            <CarelinkPin color={primaryColor} />
-          </Marker>
-        </MapView>
-      ) : (
-        // ── Fallback: MapSectionNative (nouveau design)
-        <MapSectionNative
-          lat={markerCoord.latitude}
-          lng={markerCoord.longitude}
-          radiusKm={radiusKm}
-          primaryColor={primaryColor}
-          onPress={(nextLat, nextLng) => {
-            setMarkerCoord({ latitude: nextLat, longitude: nextLng });
-            onChange?.(nextLat, nextLng);
-          }}
-        />
-      )}
+      {/* Custom InDrive-style map (replaces Google fallback) */}
+      <MapSectionNative
+        lat={markerCoord.latitude}
+        lng={markerCoord.longitude}
+        radiusKm={radiusKm}
+        primaryColor={primaryColor}
+        onPress={(nextLat, nextLng) => {
+          setMarkerCoord({ latitude: nextLat, longitude: nextLng });
+          onChange?.(nextLat, nextLng);
+        }}
+      />
 
       {/* Bouton GPS */}
       <TouchableOpacity
