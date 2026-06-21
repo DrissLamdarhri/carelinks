@@ -18,7 +18,7 @@ import {
 import { MapPin, Navigation } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { geo } from "@/lib/db/geo";
-import MapSectionNative from "@/components/map/MapSectionNative";
+import MapSectionNative from './map/MapSectionNative';
 
 // ── Chargement conditionnel de react-native-maps ──────────────────────────────
 // Si le package n'est pas installé, on utilise le fallback SVG.
