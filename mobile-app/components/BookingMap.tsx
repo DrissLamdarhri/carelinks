@@ -18,8 +18,7 @@ import {
 import { MapPin, Navigation } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { geo } from "@/lib/db/geo";
-import * as _MapSectionNative from './map/MapSectionNative';
-const MapSectionNative: any = (_MapSectionNative as any)?.default ?? _MapSectionNative;
+import MapSectionNative from '../src/components/map/MapSectionNative';
 
 
 // ── Chargement conditionnel de react-native-maps ──────────────────────────────
