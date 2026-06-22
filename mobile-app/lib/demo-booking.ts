@@ -140,3 +140,15 @@ export function buildDemoMessages(bookingId: string): Message[] {
     },
   ];
 }
+
+// Parse demo booking IDs like "demo-{serviceKey}-{ts}" and return the serviceKey (or null)
+export function getDemoSpecialty(bookingId: string | null | undefined): string | null {
+  if (!bookingId) return null;
+  try {
+    const parts = String(bookingId).split('-');
+    if (parts.length >= 2 && parts[0] === 'demo') return parts[1] || null;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
