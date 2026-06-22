@@ -44,7 +44,13 @@ export default function WaitingOffersScreen() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const serviceKey = booking?.specialty ?? (isDemoBooking && bookingId ? getDemoSpecialty(bookingId) : null);
   const isKine = isKineService(serviceKey);
-  const theme = useMemo(() => getServiceTheme(serviceKey), [serviceKey]);
+  const theme = useMemo(() => getServiceTheme(serviceKey) ?? ({
+    primary: Colors.primary,
+    surface: Colors.surfaceWarm,
+    surfaceStrong: Colors.surfaceWarm,
+    inputBorder: Colors.border,
+    badgeBg: Colors.surfaceWarm,
+  }), [serviceKey]);
   const radarBorder = isKine ? "rgba(6,95,70,0.24)" : "rgba(13,8,112,0.24)";
 
   const pulse1 = useRef(new Animated.Value(0)).current;

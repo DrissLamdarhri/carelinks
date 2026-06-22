@@ -87,7 +87,13 @@ export default function PatientRequestScreen() {
     () => (serviceKey === "kine" ? kineCareTypes : nurseCareTypes),
     [serviceKey]
   );
-  const theme = useMemo(() => getServiceTheme(serviceKey), [serviceKey]);
+  const theme = useMemo(() => getServiceTheme(serviceKey) ?? ({
+    primary: Colors.primary,
+    surface: Colors.surfaceWarm,
+    surfaceStrong: Colors.surfaceWarm,
+    inputBorder: Colors.border,
+    badgeBg: Colors.surfaceWarm,
+  }), [serviceKey]);
   const [careType, setCareType] = useState(0);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
