@@ -36,3 +36,11 @@ export const Gradients = {
   yoga: ["#0891B2", "#06B6D4"] as const,
   kine: ["#065F46", "#059669"] as const,
 };
+
+// Kiné-specific color set used by patient kiné screens
+export const KineColors = {
+  primary: '#065F46',
+  surfaceStrong: '#ECFDF5',
+  inputBorder: '#D1FAE5',
+  badgeBg: '#D1FAE5',
+};
