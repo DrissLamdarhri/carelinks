@@ -12,10 +12,12 @@
     "android": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --android --host lan",
     "ios": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --ios --host lan",
     "web": "set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --web",
+    "tunnel:fallback": "node ./scripts/start-tunnel-fallback.js",
     "build": "eas build",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit"
   },
+
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/dm-serif-display": "^0.4.2",
