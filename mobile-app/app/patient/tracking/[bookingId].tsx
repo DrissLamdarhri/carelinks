@@ -275,7 +275,7 @@ export default function LiveTrackingScreen() {
         >
           <ProPin
             pro={trackingPro}
-            animT={animT}
+            // animT={animT}
             isSelected={selPro === trackingPro.id}
             onSelect={handleSelect}
           />

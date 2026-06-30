@@ -1,31 +1,19 @@
 /**
- * CareLink — BookingMap  (v4)
- * Full feature parity with carelinks_map_enhanced.jsx, in React Native.
+ * CareLink — BookingMap  (v5 — fast + polished)
+ * ────────────────────────────────────────────────────────────────────────────
+ * PERFORMANCE: panning drives an Animated.ValueXY with useNativeDriver,
+ * moving the already-rendered StaticMapLayer. No SVG path recomputation
+ * during drag — that was the entire source of the lag.
  *
- * Features:
- *   • Draggable map with pan inertia (GestureHandler PanGestureHandler)
- *   • ProPin circles with pulsing rings + float + card popup
- *   • PatientPin teardrop with halo pulse
- *   • "Carte" / "Liste" tabs
- *   • Address bar (rotating demo + real reverse geocode)
- *   • GPS / locate button (snaps back to centre)
- *   • Pro list bottom sheet (tap syncs with map selection)
- *
- * Drop-in replacement — same outer props as original BookingMap.
+ * DESIGN: same premium look as before — pulsing profile circles, popup
+ * cards, dashed radius ring, address bar, GPS button, Carte/Liste tabs.
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  GestureResponderEvent,
   PanResponder,
   ScrollView,
   StyleSheet,
@@ -33,43 +21,32 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LocateFixed, Star } from "lucide-react-native";
+import { LocateFixed } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { geo } from "@/lib/db/geo";
 import {
   MAP_CENTER,
   NAVY,
-  centerWithOffset,
   project,
   specialtyColor,
-  type LatLng,
-  type Offset,
 } from "./map/engine";
-import { MapCanvas } from "./map/MapCanvas";
+import { StaticMapLayer } from "./map/StaticMapLayer";
 import { PatientPin, ProPin, type ProPinData } from "./map/Pins";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const ZOOM  = 7500;
-const BOUND = 260;
+const ZOOM     = 7500;
+const BOUND    = 130; // max pan distance in px before rubber-banding
 const SCREEN_W = Dimensions.get("window").width;
-const MAP_H = 320;
+const MAP_H    = 320;
 
-// ── Demo pros (used if no real data passed in) ────────────────────────────────
 const DEMO_PROS: ProPinData[] = [
-  { id:"fz", initials:"FZ", name:"Fatima Zahra",  shortName:"Fatima Z.",  specialty:"Infirmière",      distanceKm:0.8, rating:4.9, priceMad:180, lat:34.044, lng:-4.993 },
-  { id:"km", initials:"KM", name:"Karim Mansour", shortName:"Karim M.",   specialty:"Kinésithérapeute",distanceKm:1.4, rating:4.8, priceMad:220, lat:34.040, lng:-4.984 },
-  { id:"sr", initials:"SR", name:"Samira Rifai",  shortName:"Samira R.",  specialty:"Psychologue",     distanceKm:2.1, rating:4.7, priceMad:350, lat:34.033, lng:-5.017 },
+  { id:"fz", initials:"FZ", name:"Fatima Zahra",  shortName:"Fatima Z.",  specialty:"Infirmière",       distanceKm:0.8, rating:4.9, priceMad:180, lat:34.044, lng:-4.993 },
+  { id:"km", initials:"KM", name:"Karim Mansour", shortName:"Karim M.",   specialty:"Kinésithérapeute", distanceKm:1.4, rating:4.8, priceMad:220, lat:34.040, lng:-4.984 },
+  { id:"sr", initials:"SR", name:"Samira Rifai",  shortName:"Samira R.",  specialty:"Psychologue",      distanceKm:2.1, rating:4.7, priceMad:350, lat:34.033, lng:-5.017 },
 ];
 
-// Rotating demo addresses
-const DEMO_ADDRESSES = [
-  "Rue Ibn Batouta, Fès",
-  "Bd Hassan II, Fès",
-  "Quartier Narjiss, Fès",
-  "Médina, Fès",
-];
+const DEMO_ADDRESSES = ["Rue Ibn Batouta, Fès", "Bd Hassan II, Fès", "Quartier Narjiss, Fès", "Médina, Fès"];
 
-// ── Reverse geocode (Nominatim, free) ─────────────────────────────────────────
 async function nominatim(lat: number, lng: number): Promise<string | null> {
   try {
     const r = await fetch(
@@ -83,13 +60,10 @@ async function nominatim(lat: number, lng: number): Promise<string | null> {
   } catch { return null; }
 }
 
-// ── Pro list row ──────────────────────────────────────────────────────────────
-function ProListRow({
-  pro, isSelected, onPress, tab,
-}: { pro: ProPinData; isSelected: boolean; onPress: () => void; tab: number }) {
+// ── List rows (unchanged design) ──────────────────────────────────────────────
+function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSelected: boolean; onPress: () => void; tab: number }) {
   const color = specialtyColor(pro.specialty);
   if (tab === 1) {
-    // "Liste" tab — full card with Réserver button
     return (
       <View style={list.card}>
         <View style={[list.cardAvatar, { backgroundColor: color }]}>
@@ -102,9 +76,7 @@ function ProListRow({
               <Text style={list.cardSpec}>{pro.specialty}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={[list.cardPrice, { color }]}>
-                {pro.priceMad}<Text style={list.cardPriceSub}> MAD</Text>
-              </Text>
+              <Text style={[list.cardPrice, { color }]}>{pro.priceMad}<Text style={list.cardPriceSub}> MAD</Text></Text>
               <Text style={list.cardRating}>★{pro.rating} · {pro.distanceKm.toFixed(1)}km</Text>
             </View>
           </View>
@@ -120,24 +92,16 @@ function ProListRow({
       </View>
     );
   }
-
-  // "Carte" tab — compact row
   return (
-    <TouchableOpacity
-      style={[list.row, isSelected && { backgroundColor: "#F8F8FF" }]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
+    <TouchableOpacity style={[list.row, isSelected && { backgroundColor: "#F8F8FF" }]} onPress={onPress} activeOpacity={0.75}>
       <View style={[list.rowAvatar, { backgroundColor: color }]}>
         <Text style={list.rowAvatarText}>{pro.initials}</Text>
       </View>
       <View style={list.rowInfo}>
         <Text style={list.rowName}>{pro.name}</Text>
         <Text style={list.rowSub}>
-          <Text style={{ color: "#22C55E", fontSize: 10 }}>● </Text>
-          {pro.specialty}
-          <Text style={{ color: "#DDD" }}> · </Text>
-          {pro.distanceKm.toFixed(1)} km
+          <Text style={{ color: "#22C55E", fontSize: 10 }}>● </Text>{pro.specialty}
+          <Text style={{ color: "#DDD" }}> · </Text>{pro.distanceKm.toFixed(1)} km
         </Text>
       </View>
       <View style={{ alignItems: "flex-end" }}>
@@ -172,238 +136,170 @@ export function BookingMap({
 }: BookingMapProps) {
   const vw = SCREEN_W;
   const vh = height;
-
   const displayPros = pros && pros.length > 0 ? pros : DEMO_PROS;
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [offset,    setOffset]    = useState<Offset>({ x: 0, y: 0 });
-  const [vel,       setVel]       = useState<Offset>({ x: 0, y: 0 });
-  const [dragging,  setDragging]  = useState(false);
-  const [animT,     setAnimT]     = useState(0);
+  // ── Native pan value — this is the performance core ───────────────────────
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const panOffset = useRef({ x: 0, y: 0 }); // last committed offset (JS-side mirror, cheap)
+
   const [selPro,    setSelPro]    = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [address,   setAddress]   = useState(DEMO_ADDRESSES[0]);
-  const [addrIdx,   setAddrIdx]   = useState(0);
   const [locating,  setLocating]  = useState(false);
 
-  const rafRef  = useRef<number | null>(null);
-  const dragRef = useRef({ lastX: 0, lastY: 0, lastT: 0 });
+  // Rotate demo address occasionally — cheap, low-frequency state (not per-frame)
+  React.useEffect(() => {
+    const iv = setInterval(() => {
+      setAddress((prev) => {
+        const idx = DEMO_ADDRESSES.indexOf(prev);
+        return DEMO_ADDRESSES[(idx + 1) % DEMO_ADDRESSES.length];
+      });
+    }, 4200);
+    return () => clearInterval(iv);
+  }, []);
 
-  // ── Animation loop (animT + inertia) ──────────────────────────────────────
-  useEffect(() => {
-    let last = performance.now();
-    const tick = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.05);
-      last = now;
-      setAnimT((t) => t + dt);
-      if (!dragging) {
-        setVel((v) => {
-          const nx = v.x * 0.92;
-          const ny = v.y * 0.92;
-          if (Math.abs(nx) > 0.1 || Math.abs(ny) > 0.1) {
-            setOffset((o) => ({
-              x: Math.max(-BOUND, Math.min(BOUND, o.x - nx * dt * 60)),
-              y: Math.max(-BOUND, Math.min(BOUND, o.y - ny * dt * 60)),
-            }));
-          }
-          return { x: nx, y: ny };
-        });
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [dragging]);
-
-  // ── Rotating demo address ─────────────────────────────────────────────────
-  useEffect(() => {
-    const t = setTimeout(() => setAddrIdx((i) => (i + 1) % DEMO_ADDRESSES.length), 3500);
-    return () => clearTimeout(t);
-  }, [addrIdx]);
-
-  useEffect(() => {
-    setAddress(DEMO_ADDRESSES[addrIdx]);
-  }, [addrIdx]);
-
-  // ── Pan responder ─────────────────────────────────────────────────────────
+  // ── PanResponder — drives pan natively, with rubber-band clamp at release ──
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder:  () => true,
-        onPanResponderGrant: (e) => {
-          const { pageX, pageY } = e.nativeEvent;
-          dragRef.current = { lastX: pageX, lastY: pageY, lastT: Date.now() };
-          setDragging(true);
-          setVel({ x: 0, y: 0 });
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+        onPanResponderGrant: () => {
+          pan.setOffset(panOffset.current);
+          pan.setValue({ x: 0, y: 0 });
           setSelPro(null);
         },
-        onPanResponderMove: (e) => {
-          const { pageX, pageY } = e.nativeEvent;
-          const { lastX, lastY, lastT } = dragRef.current;
-          const dx = pageX - lastX;
-          const dy = pageY - lastY;
-          const dt = Math.max(1, Date.now() - lastT);
-          setVel({ x: (dx / dt) * 14, y: (dy / dt) * 14 });
-          setOffset((o) => ({
-            x: Math.max(-BOUND, Math.min(BOUND, o.x - dx)),
-            y: Math.max(-BOUND, Math.min(BOUND, o.y - dy)),
-          }));
-          dragRef.current = { lastX: pageX, lastY: pageY, lastT: Date.now() };
+        onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+          useNativeDriver: false, // PanResponder gesture itself can't be native, but the resulting pan.x/y ARE consumed natively by StaticMapLayer's transform
+        }),
+        onPanResponderRelease: (_, g) => {
+          pan.flattenOffset();
+          const nx = Math.max(-BOUND, Math.min(BOUND, panOffset.current.x + g.dx));
+          const ny = Math.max(-BOUND, Math.min(BOUND, panOffset.current.y + g.dy));
+          panOffset.current = { x: nx, y: ny };
+
+          // Spring back into clamp bounds + apply light momentum — all native
+          Animated.spring(pan, {
+            toValue: { x: nx, y: ny },
+            useNativeDriver: true,
+            friction: 7,
+            tension: 60,
+            velocity: { x: g.vx * 40, y: g.vy * 40 } as any,
+          }).start();
         },
-        onPanResponderRelease: () => setDragging(false),
-        onPanResponderTerminate: () => setDragging(false),
       }),
-    []
+    [pan]
   );
 
-  // ── GPS snap-back ─────────────────────────────────────────────────────────
+  // ── GPS button — snaps map back to center ─────────────────────────────────
   const handleGPS = useCallback(async () => {
-    // Animate offset back to 0,0 (ease out)
-    const ease = () => {
-      setOffset((o) => {
-        const nx = o.x * 0.78;
-        const ny = o.y * 0.78;
-        if (Math.abs(nx) < 0.5 && Math.abs(ny) < 0.5) return { x: 0, y: 0 };
-        setTimeout(ease, 16);
-        return { x: nx, y: ny };
-      });
-    };
-    ease();
+    panOffset.current = { x: 0, y: 0 };
+    Animated.spring(pan, {
+      toValue: { x: 0, y: 0 },
+      useNativeDriver: true,
+      friction: 8,
+      tension: 70,
+    }).start();
 
-    // Optionally get real GPS
     setLocating(true);
     try {
       const pos = await geo.getCurrentPosition();
       onChange?.(pos.lat, pos.lng);
-    } catch { /* silent */ } finally {
+    } catch { /* permission denied — silent */ } finally {
       setLocating(false);
     }
-  }, [onChange]);
+  }, [onChange, pan]);
 
-  // ── Pro screen positions ──────────────────────────────────────────────────
-  const cx = useMemo(() => centerWithOffset(offset, ZOOM), [offset]);
-
-  const proPositions = useMemo(
-    () =>
-      displayPros.map((pro) => {
-        const p = project({ lat: pro.lat, lng: pro.lng }, cx, ZOOM, vw, vh);
-        const floatY = Math.sin(animT * 0.8 + pro.id.charCodeAt(0) * 0.7) * 4;
-        return { x: p.x, y: p.y + floatY };
-      }),
-    [cx, vw, vh, animT, displayPros]
+  // ── Static screen position for pins (computed once — pins live INSIDE the
+  //    same transform as the map via a wrapping Animated.View, so they pan
+  //    together with zero extra math) ─────────────────────────────────────────
+  const cx = MAP_CENTER;
+  const proScreenPositions = useMemo(
+    () => displayPros.map((pro) => project({ lat: pro.lat, lng: pro.lng }, cx, ZOOM, vw, vh)),
+    [displayPros, vw, vh]
   );
-
-  // Patient pin position
-  const patPt = useMemo(
+  const patientPt = useMemo(
     () => project({ lat: initialLat, lng: initialLng }, cx, ZOOM, vw, vh),
-    [cx, initialLat, initialLng, vw, vh]
+    [initialLat, initialLng, vw, vh]
   );
 
-  const handleSelect = useCallback((id: string) => {
-    setSelPro((s) => (s === id ? null : id));
-  }, []);
+  const handleSelect = useCallback((id: string) => setSelPro((s) => (s === id ? null : id)), []);
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={styles.wrap}>
       {/* ── Tabs ── */}
       <View style={styles.tabBar}>
         {["Carte", "Liste"].map((label, i) => (
-          <TouchableOpacity
-            key={label}
-            style={[styles.tab, activeTab === i && styles.tabActive]}
-            onPress={() => setActiveTab(i)}
-          >
-            <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>
-              {label}
-            </Text>
+          <TouchableOpacity key={label} style={[styles.tab, activeTab === i && styles.tabActive]} onPress={() => setActiveTab(i)}>
+            <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {/* ── Map area ── */}
-      <View
-        style={[styles.mapArea, { height: vh }]}
-        {...panResponder.panHandlers}
-      >
-        {/* SVG map canvas */}
-        <MapCanvas
-          offset={offset}
-          vw={vw}
-          vh={vh}
-          zoom={ZOOM}
-          showRadius
-          radiusKm={radiusKm}
-          primaryColor={primaryColor}
-          markerLat={initialLat}
-          markerLng={initialLng}
-        />
+      <View style={[styles.mapArea, { height: vh }]} {...panResponder.panHandlers}>
+        {/* Static map — pans via native transform, never re-renders SVG */}
+        <StaticMapLayer vw={vw} vh={vh} zoom={ZOOM} pan={pan} />
 
-        {/* Address bar */}
+        {/* Pins layer — moves WITH the map via the same Animated transform,
+            so dragging the map drags pins perfectly in sync at zero extra cost */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
+          ]}
+          pointerEvents="box-none"
+        >
+          {/* Radius ring — drawn as a simple themed View, not SVG, so it's cheap */}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.radiusRing,
+              {
+                left: patientPt.x - (radiusKm / 111) * ZOOM,
+                top:  patientPt.y - (radiusKm / 111) * ZOOM,
+                width:  (radiusKm / 111) * ZOOM * 2,
+                height: (radiusKm / 111) * ZOOM * 2,
+                borderRadius: (radiusKm / 111) * ZOOM,
+                borderColor: primaryColor,
+                backgroundColor: primaryColor + "08",
+              },
+            ]}
+          />
+
+          {/* Pro pins */}
+          {displayPros.map((pro, i) => {
+            const p = proScreenPositions[i];
+            return (
+              <View
+                key={pro.id}
+                style={[styles.pinAbs, { left: p.x - 25, top: p.y - 25, zIndex: selPro === pro.id ? 50 : 30 }]}
+              >
+                <ProPin pro={pro} isSelected={selPro === pro.id} onSelect={handleSelect} />
+              </View>
+            );
+          })}
+
+          {/* Patient pin */}
+          <View pointerEvents="none" style={[styles.patAbs, { left: patientPt.x - 18, top: patientPt.y - 50 }]}>
+            <PatientPin color={primaryColor} />
+          </View>
+        </Animated.View>
+
+        {/* ── Overlay UI (fixed — does not pan) ── */}
         <View style={styles.searchBar} pointerEvents="box-none">
           <View style={[styles.searchDot, { backgroundColor: primaryColor }]} />
           <Text style={styles.searchText} numberOfLines={1}>{address}</Text>
-          <TouchableOpacity
-            style={[styles.modBtn, { borderColor: primaryColor + "30" }]}
-            onPress={() => {}}
-          >
+          <TouchableOpacity style={[styles.modBtn, { borderColor: primaryColor + "30" }]} onPress={() => {}}>
             <Text style={[styles.modBtnText, { color: primaryColor }]}>Modifier</Text>
           </TouchableOpacity>
         </View>
 
-        {/* GPS button */}
-        <TouchableOpacity
-          style={styles.gpsBtn}
-          onPress={handleGPS}
-          disabled={locating}
-        >
-          {locating ? (
-            <ActivityIndicator size="small" color={primaryColor} />
-          ) : (
-            <LocateFixed size={16} color={primaryColor} />
-          )}
+        <TouchableOpacity style={styles.gpsBtn} onPress={handleGPS} disabled={locating}>
+          {locating ? <ActivityIndicator size="small" color={primaryColor} /> : <LocateFixed size={16} color={primaryColor} />}
         </TouchableOpacity>
 
-        {/* Pro pins */}
-        {displayPros.map((pro, i) => {
-          const { x, y } = proPositions[i];
-          // Cull pins that are off screen
-          if (x < -80 || x > vw + 80 || y < -100 || y > vh + 80) return null;
-          return (
-            <View
-              key={pro.id}
-              style={[
-                styles.pinAbs,
-                {
-                  left: x - 25,
-                  top:  y - 25,
-                  zIndex: selPro === pro.id ? 50 : 30,
-                },
-              ]}
-              // Prevent map pan from swallowing pro pin taps
-              onStartShouldSetResponder={() => true}
-            >
-              <ProPin
-                pro={pro}
-                animT={animT}
-                isSelected={selPro === pro.id}
-                onSelect={handleSelect}
-              />
-            </View>
-          );
-        })}
-
-        {/* Patient pin */}
-        <View
-          style={[styles.patAbs, { left: patPt.x - 18, top: patPt.y - 50 }]}
-          pointerEvents="none"
-        >
-          <PatientPin color={primaryColor} />
-        </View>
-
-        {/* Map credit */}
-        <Text style={styles.credit}>Fès · CareLink</Text>
+        <Text style={styles.credit} pointerEvents="none">Fès · CareLink</Text>
       </View>
 
       {/* ── Bottom sheet ── */}
@@ -412,20 +308,10 @@ export function BookingMap({
           <View style={styles.sheetHandle} />
           {activeTab === 0 ? (
             displayPros.map((pro) => (
-              <ProListRow
-                key={pro.id}
-                pro={pro}
-                isSelected={selPro === pro.id}
-                onPress={() => handleSelect(pro.id)}
-                tab={0}
-              />
+              <ProListRow key={pro.id} pro={pro} isSelected={selPro === pro.id} onPress={() => handleSelect(pro.id)} tab={0} />
             ))
           ) : (
-            <ScrollView
-              style={{ maxHeight: 220 }}
-              contentContainerStyle={{ padding: 10, gap: 8 }}
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView style={{ maxHeight: 220 }} contentContainerStyle={{ padding: 10, gap: 8 }} showsVerticalScrollIndicator={false}>
               {displayPros.map((pro) => (
                 <ProListRow key={pro.id} pro={pro} isSelected={false} onPress={() => {}} tab={1} />
               ))}
@@ -440,182 +326,68 @@ export function BookingMap({
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   wrap: {
-    width: "100%",
-    backgroundColor: Colors.surfaceWarm,
-    borderRadius: 20,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    width: "100%", backgroundColor: Colors.surfaceWarm, borderRadius: 20, overflow: "hidden",
+    shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
-
-  // Tabs
-  tabBar: {
-    flexDirection: "row",
-    padding: 8,
-    gap: 8,
-    backgroundColor: Colors.surfaceWarm,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: "rgba(13,8,112,0.06)",
-  },
+  tabBar: { flexDirection: "row", padding: 8, gap: 8, backgroundColor: Colors.surfaceWarm },
+  tab: { flex: 1, paddingVertical: 7, borderRadius: 12, alignItems: "center", backgroundColor: "rgba(13,8,112,0.06)" },
   tabActive: { backgroundColor: NAVY },
   tabText: { fontSize: 12, fontWeight: "700", color: NAVY },
   tabTextActive: { color: "#FFFFFF" },
 
-  // Map
-  mapArea: {
-    width: "100%",
-    overflow: "hidden",
-    position: "relative",
-  },
+  mapArea: { width: "100%", overflow: "hidden", position: "relative" },
 
-  // Address bar
+  radiusRing: { position: "absolute", borderWidth: 1.5, borderStyle: "dashed" },
+
   searchBar: {
-    position: "absolute",
-    top: 12, left: 12, right: 62,
-    height: 42,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderRadius: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 13,
-    gap: 8,
-    zIndex: 40,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    position: "absolute", top: 12, left: 12, right: 62, height: 42,
+    backgroundColor: "rgba(255,255,255,0.96)", borderRadius: 22,
+    flexDirection: "row", alignItems: "center", paddingHorizontal: 13, gap: 8, zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 5,
   },
   searchDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
   searchText: { flex: 1, fontSize: 12, fontWeight: "600", color: NAVY },
-  modBtn: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingHorizontal: 9,
-    paddingVertical: 2,
-  },
+  modBtn: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 2 },
   modBtnText: { fontSize: 10, fontWeight: "700" },
 
-  // GPS
   gpsBtn: {
-    position: "absolute",
-    top: 12, right: 12,
-    width: 42, height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 40,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    position: "absolute", top: 12, right: 12, width: 42, height: 42, borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.96)", alignItems: "center", justifyContent: "center", zIndex: 40,
+    shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 5,
   },
 
-  // Pro pins
   pinAbs: { position: "absolute" },
-
-  // Patient pin
   patAbs: { position: "absolute", zIndex: 35 },
 
-  // Credit
-  credit: {
-    position: "absolute",
-    bottom: 6, right: 8,
-    fontSize: 9,
-    color: "rgba(13,8,112,0.3)",
-    fontWeight: "500",
-  },
+  credit: { position: "absolute", bottom: 6, right: 8, fontSize: 9, color: "rgba(13,8,112,0.3)", fontWeight: "500" },
 
-  // Bottom sheet
-  sheet: {
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
-  },
-  sheetHandle: {
-    width: 36, height: 4,
-    borderRadius: 2,
-    backgroundColor: "#E0E0E0",
-    alignSelf: "center",
-    marginVertical: 10,
-  },
+  sheet: { backgroundColor: "#FFFFFF", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E0E0E0", alignSelf: "center", marginVertical: 10 },
 });
 
-// ── List styles ───────────────────────────────────────────────────────────────
 const list = StyleSheet.create({
-  // Carte tab row
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    gap: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#F0F0F0",
-  },
-  rowAvatar: {
-    width: 40, height: 40,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 16, gap: 12, borderBottomWidth: 0.5, borderBottomColor: "#F0F0F0" },
+  rowAvatar: { width: 40, height: 40, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowAvatarText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   rowInfo: { flex: 1 },
   rowName: { fontSize: 13, fontWeight: "700", color: "#111" },
-  rowSub:  { fontSize: 11, color: "#888", marginTop: 1 },
-  rowPrice:  { fontSize: 14, fontWeight: "700" },
+  rowSub: { fontSize: 11, color: "#888", marginTop: 1 },
+  rowPrice: { fontSize: 14, fontWeight: "700" },
   rowRating: { fontSize: 10, color: "#AAA", textAlign: "right", marginTop: 1 },
 
-  // Liste tab card
-  card: {
-    backgroundColor: "#FAFAF8",
-    borderRadius: 14,
-    padding: 12,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-    borderWidth: 0.5,
-    borderColor: "#F0EDE8",
-    marginBottom: 8,
-  },
-  cardAvatar: {
-    width: 44, height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
+  card: { backgroundColor: "#FAFAF8", borderRadius: 14, padding: 12, flexDirection: "row", gap: 12, alignItems: "flex-start", borderWidth: 0.5, borderColor: "#F0EDE8", marginBottom: 8 },
+  cardAvatar: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   cardAvatarText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  cardBody:  { flex: 1 },
-  cardHead:  { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  cardName:  { fontSize: 13, fontWeight: "700", color: "#111" },
-  cardSpec:  { fontSize: 11, color: "#888", marginTop: 1 },
+  cardBody: { flex: 1 },
+  cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  cardName: { fontSize: 13, fontWeight: "700", color: "#111" },
+  cardSpec: { fontSize: 11, color: "#888", marginTop: 1 },
   cardPrice: { fontSize: 14, fontWeight: "700" },
   cardPriceSub: { fontSize: 10, fontWeight: "500" },
   cardRating: { fontSize: 10, color: "#AAA" },
   cardActions: { flexDirection: "row", gap: 6, marginTop: 8 },
-  reserveBtn: {
-    flex: 1, paddingVertical: 7,
-    borderRadius: 10,
-    alignItems: "center",
-  },
+  reserveBtn: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: "center" },
   reserveBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  profileBtn: {
-    paddingVertical: 7, paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: "center",
-  },
+  profileBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
   profileBtnText: { fontSize: 11, fontWeight: "700" },
 });
