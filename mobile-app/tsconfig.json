@@ -17,7 +17,7 @@
       "dom",
       "dom.iterable"
     ],
-    "baseUrl": ".",
+    // "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
