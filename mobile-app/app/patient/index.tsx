@@ -289,8 +289,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 12,
   },
-  serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
-  serviceOverlay: { ...StyleSheet.absoluteFillObject },
+  serviceImage: { ...StyleSheet.absoluteFill, width: undefined, height: undefined },
+  serviceOverlay: { ...StyleSheet.absoluteFill },
   serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
     width: 36,

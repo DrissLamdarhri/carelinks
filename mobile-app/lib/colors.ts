@@ -5,8 +5,8 @@ export const Colors = {
   primaryDark: "#090551",
   accent: "#5BB8D4",
   accentSoft: "#8ECFDF",
-  surfaceWarm: "#EDE5CC",
-
+  // surfaceWarm: "#EDE5CC",
+  surfaceWarm:"#F6F5F0",
   // Surfaces
   background: "#F6F5F0",
   card: "#FFFFFF",
