@@ -33,7 +33,6 @@ import {
   mockPatientBooking,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
-import { useAuth } from "@/lib/auth-context";
 
 const serviceIconMap = {
   syringe: Syringe,
@@ -44,13 +43,7 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
-  const { profile } = useAuth();
-  const city = profile?.city ?? mockPatientProfile.city ?? MOROCCAN_CITIES[0];
-  const displayName =
-    profile?.firstName || profile?.lastName
-      ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
-      : "Bienvenue";
-  const avatar = profile?.avatar || mockPatientProfile.avatar;
+  const city = mockPatientProfile.city;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -60,10 +53,12 @@ export default function PatientHomeScreen() {
 
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image source={{ uri: avatar }} style={styles.avatar} />
+            <Image source={{ uri: mockPatientProfile.avatar }} style={styles.avatar} />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
-              <Text style={styles.userName}>{displayName}</Text>
+              <Text style={styles.userName}>
+                {mockPatientProfile.firstName} {mockPatientProfile.lastName}
+              </Text>
             </View>
           </View>
           <View style={styles.headerActions}>
@@ -95,48 +90,51 @@ export default function PatientHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Choisissez votre service</Text>
-        <View style={{ paddingVertical: 6, paddingHorizontal: 2 }}>
-          <View style={styles.grid}>
-            {primaryServices.map((s) => {
-              const IconComp = serviceIconMap[s.icon as keyof typeof serviceIconMap] ?? Syringe;
-              return (
-                <TouchableOpacity
-                  key={s.key}
-                  style={styles.serviceCard}
-                  onPress={() =>
-                    router.push(
-                      s.key === "psy"
-                        ? "/patient/psychologist"
-                        : s.key === "yoga"
-                        ? "/patient/yoga"
-                        : `/patient/request?service=${s.key}`
-                    )
-                  }
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.serviceInner}>
-                    <View style={styles.serviceImageWrap}>
-                      <LinearGradient colors={(Gradients as any)[s.gradient]} style={styles.serviceImageBg} />
-                      <Image source={{ uri: s.image }} style={[styles.serviceImage, { opacity: 0.9 }]} />
-                      <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.6)"]} style={styles.serviceImageGradient} />
+        <View style={styles.grid}>
+          {primaryServices.map((s) => {
+            const Icon = serviceIconMap[s.icon];
+            const gradient =
+              s.gradient === "nurse"
+                ? Gradients.nurse
+                : s.gradient === "psy"
+                ? Gradients.psy
+                : s.gradient === "yoga"
+                ? Gradients.yoga
+                : Gradients.kine;
+            return (
+              <TouchableOpacity
+                key={s.key}
+                style={styles.serviceCard}
+                onPress={() =>
+                  router.push(
+                    s.key === "psy"
+                      ? "/patient/psychologist"
+                      : s.key === "yoga"
+                      ? "/patient/yoga"
+                      : `/patient/request?service=${s.key}`
+                  )
+                }
+              >
+                <Image source={{ uri: s.image }} style={styles.serviceImage} />
+                <LinearGradient
+                  colors={[gradient[0], "rgba(0,0,0,0.42)"]}
+                  style={styles.serviceOverlay}
+                />
 
-                      <View style={styles.serviceTop}>
-                        <View style={styles.serviceIconWrap}>
-                          <IconComp size={14} color="white" />
-                        </View>
-                        {s.tag ? <Text style={styles.tagPill}>{s.tag}</Text> : null}
-                      </View>
-
-                      <View style={styles.serviceTextWrapOverlay}>
-                        <Text style={styles.serviceLabel}>{s.label}</Text>
-                        <Text style={styles.serviceSub} numberOfLines={1}>{s.sub}</Text>
-                      </View>
-                    </View>
+                <View style={styles.serviceTop}>
+                  <View style={styles.serviceIconWrap}>
+                    <Icon size={18} color="white" />
                   </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : <View />}
+                </View>
+
+                <View>
+                  <Text style={styles.serviceLabel}>{s.label}</Text>
+                  <Text style={styles.serviceSub}>{s.sub}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -220,7 +218,7 @@ export default function PatientHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.white },
+  root: { flex: 1, backgroundColor: Colors.background },
   header: { paddingHorizontal: 20, paddingTop: 42, paddingBottom: 28, overflow: "visible" },
   headerCircle1: {
     position: "absolute",
@@ -282,66 +280,37 @@ const styles = StyleSheet.create({
   quickText: { fontSize: 12, fontWeight: "600" },
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 0 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   serviceCard: {
-    width: "49.5%",
-    aspectRatio: 1,
+    width: "48.5%",
+    height: 140,
     borderRadius: 22,
     overflow: "hidden",
-    justifyContent: "flex-end",
-    padding: 4,
+    justifyContent: "space-between",
+    padding: 12,
   },
-  serviceInner: { flex: 1, borderRadius: 18, overflow: "hidden", flexDirection: "column" },
-  serviceImageWrap: { flex: 1, overflow: "hidden", position: "relative" },
-  serviceImageBg: { ...StyleSheet.absoluteFillObject },
-  serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined, resizeMode: "cover" },
-  serviceImageGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: "50%" },
-  serviceTop: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  serviceImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
+  serviceOverlay: { ...StyleSheet.absoluteFillObject },
+  serviceTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   serviceIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
-  tagPill: {
+  tag: {
     fontSize: 10,
-    color: Colors.textPrimary,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    color: "white",
+    backgroundColor: "rgba(255,255,255,0.25)",
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     fontWeight: "600",
   },
-  serviceTextWrapOverlay: { position: "absolute", left: 10, right: 10, bottom: 10 },
-  serviceLabel: { color: "white", fontSize: 16, fontWeight: "800" },
-  serviceSub: { color: "rgba(255,255,255,0.9)", fontSize: 12 },
-
-
-
-  serviceShadow: { shadowColor: "#000", shadowOpacity: 0.08, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 3 },
-
-
-
-  // Service circles (image as background)
-  serviceCircleWrap: {
-    width: 92,
-    alignItems: "center",
-    marginRight: 12,
-  },
-  serviceCircle: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    overflow: "hidden",
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  serviceCircleImage: { width: "100%", height: "100%", resizeMode: "cover" },
-  serviceLabelDarkCenter: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginTop: 8, textAlign: "center" },
-  serviceSubDarkCenter: { color: Colors.textMuted, fontSize: 11, textAlign: "center" },
+  serviceLabel: { color: "white", fontSize: 16, fontWeight: "700" },
+  serviceSub: { color: "rgba(255,255,255,0.8)", fontSize: 11 },
   cta: {
     height: 54,
     borderRadius: 20,

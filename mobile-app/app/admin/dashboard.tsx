@@ -48,6 +48,14 @@ export default function AdminDashboardScreen() {
       </View>
 
       <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Gestion des réservations</Text>
+        <Text style={styles.panelText}>Consultez toutes les réservations et rendez-vous de psychologue en temps réel.</Text>
+        <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/bookings")}>
+          <Text style={styles.ctaText}>📋 Gerer les réservations</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.panel}>
         <Text style={styles.panelTitle}>Configuration</Text>
         <Text style={styles.panelText}>Tarification, zones géographiques, validation KYC et gestion des litiges sont disponibles ici dans la version mobile.</Text>
         <View style={styles.ctaRow}>
