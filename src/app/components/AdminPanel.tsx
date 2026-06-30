@@ -253,24 +253,43 @@ export function AdminPanel() {
         img: "",
       })));
 
-      // All bookings table — join via patients → profiles (bookings.patient_id → patients → profiles)
+      // All bookings table — from admin_booking_logs with patient & professional info
       const { data: bookingsAll } = await supabase
-        .from("bookings")
-        .select("id,specialty,status,scheduled_at,created_at,final_price_mad,patients!patient_id(profiles!id(full_name))")
+        .from("admin_booking_logs")
+        .select("id,booking_id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,price,alert_level,created_at")
         .order("created_at", { ascending: false })
         .limit(100);
+      
+      // Fetch patient names
+      const patientIds = [...new Set((bookingsAll ?? []).map((b: any) => b.patient_id))];
+      const { data: patientProfiles } = patientIds.length > 0 ? await supabase
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", patientIds) : { data: [] };
+      const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+      
+      // Fetch professional names
+      const proIds = [...new Set((bookingsAll ?? []).map((b: any) => b.professional_id).filter(Boolean))];
+      const { data: proProfiles } = proIds.length > 0 ? await supabase
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", proIds) : { data: [] };
+      const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+      
       const statusFr: Record<string, string> = {
         open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
         completed: "Terminé", cancelled: "Annulé",
       };
       setLiveAllBookings((bookingsAll ?? []).map((b: any) => ({
-        id: "#" + b.id.slice(0, 6).toUpperCase(),
-        patient: b.patients?.profiles?.full_name ?? "—",
-        pro: "—",
+        id: "#" + b.booking_id.slice(0, 6).toUpperCase(),
+        patient: patientMap[b.patient_id] ?? "—",
+        pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
         service: labelMap[b.specialty] ?? b.specialty,
         date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-        price: (b.final_price_mad ?? 0) + " MAD",
+        price: (b.price ?? 0) + " MAD",
         status: statusFr[b.status] ?? b.status,
+        alertLevel: b.alert_level,
+        urgency: b.urgency,
       })));
 
       // Yoga sessions — instructor_id → professionals → profiles (two-hop join)
@@ -1368,7 +1387,7 @@ export function AdminPanel() {
                   <table className="w-full">
                     <thead>
                       <tr style={{ background: "#F8F8FC" }}>
-                        {["ID", "Patient", "Professionnel", "Service", "Date", "Prix", "Statut", "Actions"].map((h) => (
+                        {["ID", "Patient", "Professionnel", "Service", "Date", "Prix", "Priorité", "Statut", "Actions"].map((h) => (
                           <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
                             {h}
                           </th>
@@ -1376,22 +1395,43 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllBookings).map((b) => (
-                        <tr key={b.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
-                          <td className="px-5 py-4 text-xs text-[#888780]" style={{ fontFamily: "monospace" }}>{b.id}</td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{b.patient}</td>
-                          <td className="px-5 py-4 text-sm text-[#888780]">{b.pro}</td>
-                          <td className="px-5 py-4 text-sm text-[#888780]">{b.service}</td>
-                          <td className="px-5 py-4 text-sm text-[#888780]">{b.date}</td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.price}</td>
-                          <td className="px-5 py-4"><StatusBadge status={b.status} /></td>
-                          <td className="px-5 py-4">
-                            <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
-                              <Eye size={14} className="text-[#888780]" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {(liveAllBookings).map((b) => {
+                        const alertColors: Record<string, { bg: string; color: string }> = {
+                          critical: { bg: "#FCA5A5", color: "#991B1B" },
+                          high: { bg: "#FEF08A", color: "#9A3412" },
+                          normal: { bg: "#F3F4F6", color: "#6B7280" },
+                        };
+                        const alertColor = alertColors[b.alertLevel] || alertColors.normal;
+                        const alertLabels: Record<string, string> = {
+                          critical: "🚨 CRITIQUE",
+                          high: "⚠️ ÉLEVÉE",
+                          normal: "ℹ️ NORMAL",
+                        };
+                        return (
+                          <tr key={b.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
+                            <td className="px-5 py-4 text-xs text-[#888780]" style={{ fontFamily: "monospace" }}>{b.id}</td>
+                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{b.patient}</td>
+                            <td className="px-5 py-4 text-sm text-[#888780]">{b.pro}</td>
+                            <td className="px-5 py-4 text-sm text-[#888780]">{b.service}</td>
+                            <td className="px-5 py-4 text-sm text-[#888780]">{b.date}</td>
+                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.price}</td>
+                            <td className="px-5 py-4">
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs"
+                                style={{ background: alertColor.bg, color: alertColor.color, fontWeight: 600 }}
+                              >
+                                {alertLabels[b.alertLevel] || "—"}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4"><StatusBadge status={b.status} /></td>
+                            <td className="px-5 py-4">
+                              <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
+                                <Eye size={14} className="text-[#888780]" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

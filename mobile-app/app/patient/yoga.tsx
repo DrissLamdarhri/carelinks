@@ -6,10 +6,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Calendar, Clock3, Heart, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
+import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
@@ -60,13 +65,73 @@ const sessions = [
 
 export default function YogaCatalogScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Tous");
   const [likes, setLikes] = useState<Record<string, boolean>>({ s2: true });
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
 
   const filteredSessions = useMemo(() => {
     if (activeFilter === "Tous") return sessions;
     return sessions.filter((session) => session.level === activeFilter);
   }, [activeFilter]);
+
+  const handleReserveYoga = async (session: typeof sessions[0]) => {
+    if (!user?.id) {
+      Alert.alert("Erreur", "Veuillez vous connecter pour réserver");
+      return;
+    }
+
+    setLoadingSessionId(session.id);
+    try {
+      // Créer la réservation
+      const { data: booking, error } = await supabase
+        .from("bookings")
+        .insert([
+          {
+            patient_id: user.id,
+            specialty: "yoga_instructor",
+            status: "matched",
+            urgency: "normal",
+            scheduled_at: new Date().toISOString(), // À améliorer avec la vraie date
+            address: "Meknès, Maroc", // À améliorer avec l'adresse du patient
+            notes: `Réservation yoga: ${session.name} - ${session.instructor}`,
+            budget_min_mad: session.price,
+            budget_max_mad: session.price,
+            final_price_mad: session.price,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (booking) {
+        // Notifier l'admin automatiquement
+        await notifyAdminNewBooking(booking);
+
+        Alert.alert(
+          "✅ Réservation confirmée!",
+          `${session.name} réservé chez ${session.instructor}.\n\nLa réservation a été envoyée à l'administrateur.`,
+          [
+            {
+              text: "Voir mes réservations",
+              onPress: () => router.push("/patient/bookings"),
+            },
+            {
+              text: "Fermer",
+              onPress: () => setLoadingSessionId(null),
+            },
+          ]
+        );
+      }
+    } catch (err) {
+      console.error("Erreur lors de la réservation:", err);
+      Alert.alert("Erreur", "Impossible de créer la réservation. Essayez de nouveau.");
+      setLoadingSessionId(null);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -151,8 +216,16 @@ export default function YogaCatalogScreen() {
                 <Text style={styles.price}>
                   {session.price} <Text style={styles.priceUnit}>MAD / séance</Text>
                 </Text>
-                <TouchableOpacity style={styles.bookBtn}>
-                  <Text style={styles.bookBtnText}>Réserver</Text>
+                <TouchableOpacity 
+                  style={[styles.bookBtn, loadingSessionId === session.id && styles.bookBtnDisabled]}
+                  onPress={() => handleReserveYoga(session)}
+                  disabled={loadingSessionId === session.id}
+                >
+                  {loadingSessionId === session.id ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.bookBtnText}>Réserver</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -257,4 +330,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bookBtnText: { color: "white", fontSize: 13, fontWeight: "600" },
+  bookBtnDisabled: { opacity: 0.6 },
 });
