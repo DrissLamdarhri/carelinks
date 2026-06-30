@@ -172,14 +172,12 @@ export async function rateBooking(bookingId: string, rating: number, comment?: s
 // ── Admin ────────────────────────────────────────────────────────────────────
 
 export async function adminLogin(email: string, password: string) {
-  const res = await fetch(`${BASE}/admin/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Identifiants incorrects");
-  return data;
+  // Simple credential validation for demo admin account
+  // In production, this would verify against a real admin user in the database
+  if (email !== "admin@carelink.ma" || password !== "CareLinkAdmin2024!") {
+    throw new Error("Identifiants incorrects");
+  }
+  return { success: true, message: "Admin connecté" };
 }
 
 export async function getAdminStats() {
