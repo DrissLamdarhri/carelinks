@@ -7,7 +7,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --clear --host lan",
-    "start:tunnel": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --tunnel",
+    "start:tunnel": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && node ./scripts/start-tunnel-fallback.js",
     "start:online": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --host lan",
     "start:usb": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --clear --host localhost",
     "android": "set \"REACT_NATIVE_PACKAGER_HOSTNAME=192.168.11.104\" && set \"EXPO_NO_DEPENDENCY_VALIDATION=true\" && expo start --android --host lan",
