@@ -33,6 +33,8 @@ import {
   mockPatientBooking,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { useAuth } from "@/lib/auth-context";
 
 const serviceIconMap = {
   syringe: Syringe,
@@ -43,7 +45,15 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
-  const city = mockPatientProfile.city;
+  const { profile } = useAuth();
+  
+  // Use real profile data, fallback to mock for display purposes
+  const displayName = {
+    firstName: profile?.firstName || mockPatientProfile.firstName,
+    lastName: profile?.lastName || mockPatientProfile.lastName,
+  };
+  const city = profile?.city || mockPatientProfile.city;
+  const avatar = profile?.avatar;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -53,11 +63,16 @@ export default function PatientHomeScreen() {
 
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image source={{ uri: mockPatientProfile.avatar }} style={styles.avatar} />
+            <AvatarWithDefault
+              avatarUrl={avatar}
+              size={44}
+              borderRadius={22}
+              useDefaultImage={!avatar}
+            />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
               <Text style={styles.userName}>
-                {mockPatientProfile.firstName} {mockPatientProfile.lastName}
+                {displayName.firstName} {displayName.lastName}
               </Text>
             </View>
           </View>

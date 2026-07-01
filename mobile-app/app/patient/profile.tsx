@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import {
   ChevronRight,
   CreditCard,
@@ -16,6 +16,8 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "expo-router";
 import { db } from "@/lib/db/dal";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuSections: Array<{
   title: string;
@@ -44,10 +46,11 @@ const menuSections: Array<{
 
 export default function PatientProfileScreen() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const [bookingsCount, setBookingsCount] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
   const [avgRating, setAvgRating] = useState<string>("—");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -65,6 +68,32 @@ export default function PatientProfileScreen() {
     };
     void loadStats();
   }, [user?.id]);
+
+  const handleUploadAvatar = async () => {
+    if (!user?.id) return;
+    
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (!avatarUrl) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const success = await updateProfileAvatar(user.id, avatarUrl);
+      if (success) {
+        await refreshProfile();
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const displayName = profile
     ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
@@ -91,15 +120,23 @@ export default function PatientProfileScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitials}>{initials}</Text>
-              </View>
-            )}
-            <TouchableOpacity style={styles.editBtn}>
-              <Edit3 size={10} color="white" />
+            <AvatarWithDefault
+              avatarUrl={avatar}
+              initials={initials}
+              size={64}
+              borderRadius={32}
+              useDefaultImage={!avatar}
+            />
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={handleUploadAvatar}
+              disabled={uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Edit3 size={10} color="white" />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -191,20 +228,6 @@ const styles = StyleSheet.create({
   },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
-  avatar: { width: 64, height: 64, borderRadius: 32 },
-  avatarFallback: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#E9ECF7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarInitials: {
-    color: Colors.primary,
-    fontSize: 18,
-    fontWeight: "700",
-  },
   editBtn: {
     position: "absolute",
     right: -1,

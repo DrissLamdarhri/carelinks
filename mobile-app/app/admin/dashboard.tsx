@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Users, Briefcase, CalendarClock, Star, AlertTriangle } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { supabase } from "@/lib/supabase";
 
 const kpis = [
   { label: "Utilisateurs", value: "1,247", icon: Users },
@@ -11,14 +13,56 @@ const kpis = [
   { label: "Note moyenne", value: "4.8", icon: Star },
 ];
 
-const alerts = [
-  "12 documents KYC en attente",
+// Alerts now include a live KYC counter
+// The first element will be populated from the professionals table (verification_status = 'pending')
+// and kept in sync via a realtime channel.
+
+const defaultAlerts = [
   "3 litiges nécessitent une décision",
   "2 professionnels suspendus aujourd’hui",
 ];
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
+  const [pendingKyc, setPendingKyc] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPending = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("professionals")
+          .select("id", { count: "exact", head: true })
+          .eq("verification_status", "pending");
+        if (error) throw error;
+        if (mounted) setPendingKyc(count ?? 0);
+      } catch (e) {
+        console.error("loadPendingKyc error:", e);
+      }
+    };
+    void loadPending();
+
+    const channel = supabase
+      .channel("professionals:pending")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "professionals", filter: "verification_status=eq.pending" },
+        () => {
+          void loadPending();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const alerts = [
+    `${pendingKyc} documents KYC en attente`,
+    ...defaultAlerts,
+  ];
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>

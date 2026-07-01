@@ -82,6 +82,24 @@ export default function KycModerationQueueScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadQueue();
+      const channel = supabase
+        .channel(`professionals:kyc`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "professionals",
+            filter: `verification_status=eq.pending`,
+          },
+          () => {
+            void loadQueue();
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
     }, [loadQueue])
   );
 
@@ -104,6 +122,18 @@ export default function KycModerationQueueScreen() {
         .update({ verification_status: decision })
         .eq("id", professionalId);
       if (proError) throw proError;
+
+      try {
+        const { error: auditError } = await supabase.rpc("log_audit", {
+          p_action: decision === "approved" ? "kyc_approve" : "kyc_reject",
+          p_table: "professionals",
+          p_target: professionalId,
+          p_details: { document_id: documentId, decision },
+        });
+        if (auditError) console.error("log_audit failed:", auditError);
+      } catch (e) {
+        console.error("log_audit RPC error:", e);
+      }
 
       Alert.alert(
         "Mise à jour",

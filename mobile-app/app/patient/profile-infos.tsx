@@ -8,12 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ArrowLeft, Calendar, MapPin, Phone, User } from "lucide-react-native";
+import { ArrowLeft, Calendar, MapPin, Phone, User, Edit3 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { showToast } from "@/lib/toast";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const genderOptions = [
   { label: "Femme", value: "female" },
@@ -23,9 +25,10 @@ const genderOptions = [
 
 export default function PatientProfileInfosScreen() {
   const router = useRouter();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState("");
@@ -71,6 +74,32 @@ export default function PatientProfileInfosScreen() {
 
   const fullName = useMemo(() => `${firstName} ${lastName}`.trim(), [firstName, lastName]);
   const validDob = !dob || /^\d{4}-\d{2}-\d{2}$/.test(dob.trim());
+
+  const handleUploadAvatar = async () => {
+    if (!user?.id) return;
+    
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (!avatarUrl) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const success = await updateProfileAvatar(user.id, avatarUrl);
+      if (success) {
+        await refreshProfile();
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!user?.id || saving) return;
@@ -121,6 +150,30 @@ export default function PatientProfileInfosScreen() {
 
       {!loading ? (
         <View style={styles.card}>
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarWrap}>
+              <AvatarWithDefault
+                avatarUrl={profile?.avatar}
+                initials={profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?"}
+                size={80}
+                borderRadius={40}
+                useDefaultImage={!profile?.avatar}
+              />
+              <TouchableOpacity
+                style={styles.avatarEditBtn}
+                onPress={handleUploadAvatar}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Edit3 size={12} color="white" />
+                )}
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.avatarLabel}>Cliquez pour changer votre photo</Text>
+          </View>
+
           <Text style={styles.label}>Prénom</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
@@ -231,6 +284,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0F0F0",
     marginBottom: 12,
+  },
+  avatarSection: {
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  avatarWrap: {
+    position: "relative",
+    marginBottom: 12,
+  },
+  avatarEditBtn: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "white",
+  },
+  avatarLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
   },
   label: { color: Colors.textMuted, fontSize: 12, fontWeight: "600", marginBottom: 6, marginTop: 10 },
   inputWrap: {

@@ -47,6 +47,32 @@ CREATE POLICY "Admins can view all booking logs" ON admin_booking_logs
     )
   );
 
+-- Admin write policies: restrict insert/update/delete to admin users (triggers run with SECURITY DEFINER)
+CREATE POLICY "Admins can insert booking logs" ON admin_booking_logs
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can update booking logs" ON admin_booking_logs
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can delete booking logs" ON admin_booking_logs
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
 -- Trigger pour mettre à jour updated_at
 CREATE TRIGGER update_admin_booking_logs_updated_at
   BEFORE UPDATE ON admin_booking_logs
@@ -55,7 +81,10 @@ CREATE TRIGGER update_admin_booking_logs_updated_at
 
 -- Fonction helper pour créer un log lors d'une nouvelle réservation
 CREATE OR REPLACE FUNCTION log_booking_to_admin()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
 BEGIN
   INSERT INTO admin_booking_logs (
     booking_id,
@@ -92,7 +121,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Trigger pour logger les nouvelles réservations
 CREATE TRIGGER booking_created_trigger
@@ -102,7 +131,10 @@ CREATE TRIGGER booking_created_trigger
 
 -- Trigger pour mettre à jour le log lors d'un changement de statut
 CREATE OR REPLACE FUNCTION update_booking_log_on_status_change()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
 BEGIN
   IF NEW.status != OLD.status THEN
     UPDATE admin_booking_logs
@@ -111,7 +143,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE TRIGGER booking_status_change_trigger
   AFTER UPDATE ON bookings

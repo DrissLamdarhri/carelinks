@@ -54,5 +54,5 @@ begin
 end; $$;
 
 drop trigger if exists trg_guard_pro_availability on public.professionals;
-create trigger trg_guard_pro_availability before update on public.professionals
+create trigger trg_guard_pro_availability before insert or update on public.professionals
   for each row execute function public.guard_pro_availability();
