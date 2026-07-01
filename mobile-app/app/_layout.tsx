@@ -1,103 +1,86 @@
 /**
- * Root layout — mirrors web architecture
- * Wraps the entire app with providers (Auth, I18n)
- * Sets up navigation structure based on user role
+ * CareLink — Root Layout
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Added vs old version:
+ *   • Linking.addEventListener("url", ...) — handles the case where the app
+ *     is ALREADY open when Google redirects back. Without this, the deep-link
+ *     fires but nothing navigates to /auth/callback and the user is stuck.
+ *   • When the URL matches our OAuth callback pattern we push /auth/callback
+ *     so the callback screen does the code-exchange.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { DMSans_400Regular, DMSans_500Medium } from "@expo-google-fonts/dm-sans";
 import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/lib/auth-context";
 import { I18nProvider } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
+import { configureNotifications } from "@/lib/push-native";
 
 SplashScreen.preventAutoHideAsync();
+configureNotifications();
+
+function DeepLinkHandler() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Case A: app was CLOSED, opened via deep-link (handled by callback screen itself)
+    // Case B: app was OPEN in background — we need to push the callback screen
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (url.includes("auth/callback")) {
+        // Push to the callback screen which reads the URL and exchanges the code
+        router.push("/auth/callback");
+      }
+    });
+
+    return () => subscription.remove();
+  }, [router]);
+
+  return null;
+}
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
+  const [fontsLoaded] = useFonts({
     DMSans_400Regular,
     DMSans_500Medium,
     DMSerifDisplay_400Regular,
   });
-  const [forceReady, setForceReady] = useState(false);
-  const appReady = fontsLoaded || Boolean(fontError) || forceReady;
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync().catch(() => {});
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
-    if (fontError) {
-      console.error("Failed to load fonts:", fontError);
-    }
-  }, [fontError]);
-
-  useEffect(() => {
-    if (fontsLoaded || fontError) return;
-    const timer = setTimeout(() => {
-      console.warn("Font loading timed out, continuing without custom fonts.");
-      setForceReady(true);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
-    const handleUrl = async (url: string) => {
-      const parsed = Linking.parse(url);
-      const code = typeof parsed.queryParams?.code === "string" ? parsed.queryParams.code : null;
-      if (!code) return;
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) {
-        console.error("OAuth session exchange failed:", error);
-      }
-    };
-
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleUrl(url);
-      }
-    });
-
-    const subscription = Linking.addEventListener("url", ({ url }) => {
-      handleUrl(url);
-    });
-
-    return () => subscription.remove();
-  }, []);
+  }, [fontsLoaded]);
 
   return (
     <AuthProvider>
       <I18nProvider>
-        <SafeAreaProvider>
-          {appReady ? (
-            <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                }}
-              >
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="auth" options={{ headerShown: false }} />
-                <Stack.Screen name="patient" options={{ headerShown: false }} />
-                <Stack.Screen name="pro" options={{ headerShown: false }} />
-                <Stack.Screen name="admin" options={{ headerShown: false }} />
-              </Stack>
-            </SafeAreaView>
-          ) : (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0D0870" }}>
-              <ActivityIndicator size="large" color="#EDE5CC" />
-            </View>
-          )}
-        </SafeAreaProvider>
+        {fontsLoaded ? (
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="auth" options={{ headerShown: false }} />
+            <Stack.Screen name="patient" options={{ headerShown: false }} />
+            <Stack.Screen name="pro" options={{ headerShown: false }} />
+            <Stack.Screen name="admin" options={{ headerShown: false }} />
+          </Stack>
+        ) : (
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#0D0870",
+            }}
+          >
+            <ActivityIndicator size="large" color="#EDE5CC" />
+          </View>
+        )}
+        {/* Handles deep-links when app is already running in background */}
+        <DeepLinkHandler />
       </I18nProvider>
     </AuthProvider>
   );

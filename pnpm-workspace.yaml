@@ -1,7 +1,7 @@
 packages:
   - '.'
   - 'shared'
-  - 'mobile'
+  - 'mobile-app'
 allowBuilds:
   '@tailwindcss/oxide': true
   esbuild: true
