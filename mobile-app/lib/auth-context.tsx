@@ -373,6 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           phone: options?.phone ?? "",
           city: options?.city ?? "",
+          intended_role: role === "pro" ? "professional" : "patient",
         },
       },
     });
