@@ -22,7 +22,8 @@ function exec(cmd, args) {
 
 (async function main() {
   console.log('Attempting: expo start --tunnel (will fallback to --lan if tunnel fails)');
-  const tryTunnel = await exec('npx', ['expo', 'start', '--tunnel']);
+  // Use an explicit fallback port to avoid interactive prompts when 8081 is busy
+  const tryTunnel = await exec('npx', ['expo', 'start', '--tunnel', '--port', '8082']);
   if (tryTunnel.code === 0) return;
 
   const combined = (tryTunnel.out || '') + '\n' + (tryTunnel.err || '');
@@ -32,8 +33,8 @@ function exec(cmd, args) {
     console.warn('\nexpo start --tunnel exited with code', tryTunnel.code, '- falling back to LAN.');
   }
 
-  // Run with LAN host (uses package.json "start" conventions if preferred)
-  const fallback = await exec('npx', ['expo', 'start', '--lan']);
+  // Run with LAN host (uses package.json "start" conventions if preferred). Use same explicit port.
+  const fallback = await exec('npx', ['expo', 'start', '--lan', '--port', '8082']);
   if (fallback.code !== 0) {
     console.error('\nFallback also failed. See output above.');
     process.exit(fallback.code || 1);
