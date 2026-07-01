@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   cardImageWrap: { height: 146, position: "relative" },
   cardImage: { width: "100%", height: "100%" },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
   levelBadge: {

@@ -20,7 +20,6 @@ import {
   Activity,
   Bone,
   Droplets,
-  Lungs,
   RotateCcw,
   ShieldCheck,
   HandMetal,
@@ -34,7 +33,7 @@ import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
-const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Lungs, ShieldCheck] as const;
+const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
 
 const nurseCareTypes = [
   "Pansement",

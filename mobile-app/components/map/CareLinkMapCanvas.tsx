@@ -228,7 +228,7 @@ export function CareLinkMapCanvas({
         width={vw}
         height={vh}
         onPress={onPress ? handlePress : undefined}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       >
         <Defs>
           <ClipPath id="mapBounds">

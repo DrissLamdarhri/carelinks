@@ -276,7 +276,6 @@ export default function WaitingOffersScreen() {
             <LiveBidsFeed
               bookingId={bookingId ?? ""}
               mockBids={isDemoBooking ? pendingBids : undefined}
-              theme={theme}
               onAccepted={() => {
                 if (bookingId) router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
               }}

@@ -124,6 +124,7 @@ function PatientTabs() {
       <Tabs.Screen name="provider/[id]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/index" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="tracking/[bookingId]C" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="rating/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="payment/[bookingId]" options={hiddenFullScreenOptions} />
 

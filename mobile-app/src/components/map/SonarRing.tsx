@@ -21,7 +21,8 @@ export default function SonarRing({ size = 160, color = 'rgba(0,212,255,0.4)', d
 
   useEffect(() => {
     // animate progress 0 -> 1 repeatedly
-    progress.value = withRepeat(withTiming(1, { duration, easing: Easing.out }), -1, false);
+    // Use a concrete easing function
+    progress.value = withRepeat(withTiming(1, { duration, easing: Easing.out(Easing.ease) }), -1, false);
   }, [duration, progress]);
 
   const animatedStyle = useAnimatedStyle(() => {

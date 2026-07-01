@@ -112,11 +112,11 @@ export function MapCanvas({
       : 0;
 
   return (
-    <View style={[StyleSheet.absoluteFillObject, { overflow: "hidden" }]}>
+    <View style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
       <Svg
         width={vw}
         height={vh}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       >
         <Defs>
           <RadialGradient id="vig" cx="50%" cy="50%" r="70%">

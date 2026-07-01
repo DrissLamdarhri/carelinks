@@ -303,6 +303,7 @@ const styles = StyleSheet.create({
   monthNavBtnDisabled: { opacity: 0.4 },
   monthNavBtnText: { fontSize: 18, color: Colors.textPrimary, fontWeight: "700" },
   monthHeader: { fontSize: 16, color: Colors.textPrimary, fontWeight: "700", marginHorizontal: 8 },
+  monthGroup: { marginBottom: 12 },
   rowChips: { flexDirection: "row", gap: 8, marginBottom: 14 },
   dayChip: {
     width: 52,

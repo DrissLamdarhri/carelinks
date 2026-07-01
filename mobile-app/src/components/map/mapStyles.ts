@@ -7,7 +7,7 @@ export const mapStyles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 0,
   },
   topLeftMode: {

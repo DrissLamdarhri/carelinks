@@ -268,10 +268,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   bg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'transparent',
     // gradient mimic using a solid background to preserve perf; complex gradients are in Svg
-    background: undefined as any,
+    // (no-op placeholder)
   },
   svg: {
     position: 'absolute',

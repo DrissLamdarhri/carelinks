@@ -142,10 +142,12 @@ export type ProPinData = {
 type ProPinProps = {
   pro: ProPinData;
   isSelected: boolean;
-  onPress: (id: string) => void;
+  onPress?: (id: string) => void;
+  onSelect?: (id: string) => void;
+  animT?: number;
 };
 
-export function ProPin({ pro, isSelected, onPress }: ProPinProps) {
+export function ProPin({ pro, isSelected, onPress, onSelect }: ProPinProps) {
   const color = specialtyColor(pro.specialty);
   const badgeColor = pro.isEnRoute ? Colors.accent : Colors.success;
   const pulseColor = pro.isEnRoute ? Colors.accent : color;
@@ -171,7 +173,10 @@ export function ProPin({ pro, isSelected, onPress }: ProPinProps) {
     return () => loop.stop();
   }, [floatAnim]);
 
-  const handlePress = useCallback(() => onPress(pro.id), [onPress, pro.id]);
+  const handlePress = useCallback(() => {
+    if (onSelect) return onSelect(pro.id);
+    if (onPress) return onPress(pro.id);
+  }, [onSelect, onPress, pro.id]);
 
   return (
     <TouchableOpacity

@@ -138,6 +138,7 @@ type ProPinProps = {
   pro: ProPinData;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  animT?: number;
 };
 
 export const ProPin = React.memo(function ProPin({ pro, isSelected, onSelect }: ProPinProps) {

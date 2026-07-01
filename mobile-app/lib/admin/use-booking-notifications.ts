@@ -16,10 +16,10 @@ export function useBookingNotifications(bookingId: string | null, userId: string
   useEffect(() => {
     if (!bookingId || !userId) return;
 
-    // Subscribe to booking changes
-    const subscription = supabase
+    // Subscribe to booking changes (supabase realtime v2 typing differs from older API)
+    const subscription = (supabase as any)
       .from(`bookings:id=eq.${bookingId}`)
-      .on("*", (payload) => {
+      .on("*", (payload: any) => {
         const booking = payload.new as Booking;
 
         if (payload.eventType === "INSERT") {
