@@ -13,9 +13,11 @@ const INACTIVE = "#B0B0B0";
 
 function PatientTabs() {
   const insets = useSafeAreaInsets();
-  const tabBottomPadding =
-    Platform.OS === "ios" ? Math.max(insets.bottom, 8) : Math.max(insets.bottom, 14);
-  const tabBarHeight = 50 + tabBottomPadding;
+  // Normalize bottom inset: ensure a small minimum and cap to avoid excess space on some Android devices
+  const safeInset = Math.min(Math.max(insets.bottom || 0, 8), 18);
+  const tabBottomPadding = Platform.OS === "ios" ? Math.max(safeInset, 8) : safeInset;
+  const BASE_TAB_HEIGHT = 56; // slightly larger base for better touch targets
+  const tabBarHeight = BASE_TAB_HEIGHT + tabBottomPadding;
   const iconWrap = (focused: boolean) => ({
     width: 34,
     height: 34,
