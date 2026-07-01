@@ -376,7 +376,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       },
     });
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase signUp error:", error);
+      throw new Error(error?.message ?? "Erreur serveur lors de l'inscription. Vérifiez la configuration Supabase.");
+    }
     if (data.user) {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
