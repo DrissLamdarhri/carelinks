@@ -325,7 +325,7 @@ $$;
 
 -- ── profiles : chacun lit/édite le sien ; admins voient tout ───────────────
 create policy "profiles_self_read"  on public.profiles for select using (auth.uid() = id or public.current_role() = 'admin');
-create policy "profiles_self_write" on public.profiles for update using (auth.uid() = id);
+create policy "profiles_self_write" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
 create policy "profiles_insert"     on public.profiles for insert with check (auth.uid() = id);
 create policy "profiles_admin_all"  on public.profiles for all    using (public.current_role() = 'admin');
 

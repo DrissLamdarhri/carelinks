@@ -33,8 +33,11 @@ function DeepLinkHandler() {
     // Case B: app was OPEN in background — we need to push the callback screen
     const subscription = Linking.addEventListener("url", ({ url }) => {
       if (url.includes("auth/callback")) {
-        // Push to the callback screen which reads the URL and exchanges the code
-        router.push("/auth/callback");
+        // Push to callback with the incoming URL so code exchange works reliably
+        router.push({
+          pathname: "/auth/callback",
+          params: { oauthUrl: encodeURIComponent(url) },
+        });
       }
     });
 

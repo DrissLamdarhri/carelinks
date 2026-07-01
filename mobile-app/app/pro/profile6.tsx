@@ -111,11 +111,7 @@ export default function ProProfileScreen() {
 
       <View style={styles.headerCard}>
         <View style={styles.profileRow}>
-          <Image
-            source={typeof avatar === "string" ? { uri: avatar } : avatar}
-            style={styles.avatar}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: avatar }} style={styles.avatar} resizeMode="cover" />
           <View style={styles.profileMeta}>
             <Text style={styles.name}>{displayName}</Text>
             {email ? <Text style={styles.email}>{email}</Text> : null}
