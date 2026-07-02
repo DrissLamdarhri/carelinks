@@ -1,5 +1,3 @@
 // Supabase configuration
-// TODO: Replace with your actual Supabase project details
-
-export const projectId = "your-project-id";
-export const publicAnonKey = "your-public-anon-key";
+export const projectId = "wjhzrovmktekfcjohhrw";
+export const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqaHpyb3Zta3Rla2Zjam9oaHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1MjIyNjIsImV4cCI6MjA5MzA5ODI2Mn0.9JBvgWZVxrxsWMkniVI-MBt84SashdVRq_6tMnfaGYQ";

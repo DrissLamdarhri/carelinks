@@ -237,21 +237,24 @@ export function AdminPanel() {
         .select("id,specialty,verification_status,rating_avg,total_bookings,created_at,profiles!professionals_id_fkey(full_name,city)")
         .order("created_at", { ascending: false })
         .limit(100);
-      setLiveAllPros((prosData ?? []).map((p: any) => ({
-        id: p.id,
-        name: p.profiles?.full_name ?? p.id.slice(0, 8),
-        email: "",
-        type: labelMap[p.specialty] ?? p.specialty,
-        status: p.verification_status === "approved" ? "Vérifié"
-              : p.verification_status === "pending"  ? "En attente"
-              : "Suspendu",
-        bookings: p.total_bookings ?? 0,
-        joined: new Date(p.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }),
-        city: p.profiles?.city ?? "—",
-        rating: p.rating_avg ?? 0,
-        revenue: "—",
-        img: "",
-      })));
+      setLiveAllPros((prosData ?? []).map((p: any) => {
+        const fullName = p.profiles?.full_name || p.id?.slice(0, 8) || "Pro";
+        return {
+          id: p.id || "",
+          name: fullName,
+          email: "",
+          type: labelMap[p.specialty] ?? p.specialty ?? "Autre",
+          status: p.verification_status === "approved" ? "Vérifié"
+                : p.verification_status === "pending"  ? "En attente"
+                : "Suspendu",
+          bookings: p.total_bookings ?? 0,
+          joined: p.created_at ? new Date(p.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }) : "—",
+          city: p.profiles?.city ?? "—",
+          rating: p.rating_avg ?? 0,
+          revenue: "—",
+          img: "",
+        };
+      }));
 
       // All bookings table — from admin_booking_logs with patient & professional info
       const { data: bookingsAll } = await supabase
@@ -666,7 +669,7 @@ export function AdminPanel() {
                     {pending.map((n) => (
                       <div key={n.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F8F8FC] cursor-pointer">
                         <div className="w-8 h-8 rounded-full bg-[#EDE5CC] flex items-center justify-center text-[#0D0870] text-xs" style={{ fontWeight: 700 }}>
-                          {n.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                          {(n.name || "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-[#1A1A1A] truncate" style={{ fontWeight: 500 }}>{n.name}</p>
@@ -829,7 +832,7 @@ export function AdminPanel() {
                   </ResponsiveContainer>
                   )}
                   <div className="flex flex-col gap-1.5 mt-2">
-                    {(liveDistribution).map((d) => (
+                    {(liveDistribution ?? []).map((d) => (
                       <div key={d.name} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
@@ -865,7 +868,7 @@ export function AdminPanel() {
                         formatter={(v: number) => [`${v.toLocaleString()} MAD`]}
                       />
                       <Bar key="bar-revenue" dataKey="value" radius={[6, 6, 0, 0]}>
-                         {liveRevenueByCategory.map((entry, idx) => (
+                         {(liveRevenueByCategory ?? []).map((entry, idx) => (
                            <Cell key={`bar-cell-${idx}`} fill={categoryColors[entry.name as ServiceCategory]?.bar ?? "#0D0870"} />
                          ))}
                        </Bar>
@@ -975,7 +978,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllBookings).slice(0, 4).map((b) => (
+                      {(liveAllBookings ?? []).slice(0, 4).map((b) => (
                         <tr key={b.id} className="border-t border-[#F0F0F0]">
                           <td className="py-3 pr-4 text-xs text-[#888780]">{b.id}</td>
                           <td className="py-3 pr-4 text-xs text-[#1A1A1A]" style={{ fontWeight: 500 }}>{b.patient}</td>
@@ -998,7 +1001,7 @@ export function AdminPanel() {
             <div>
               <div className="flex items-center justify-between mb-5">
                 <div>
-                  <p className="text-sm text-[#888780]">{(liveUsers).length} patients inscrits</p>
+                  <p className="text-sm text-[#888780]">{(liveUsers ?? []).length} patients inscrits</p>
                 </div>
                 <div className="flex gap-2">
                   <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
@@ -1037,7 +1040,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveUsers)
+                      {(liveUsers ?? [])
                         .filter((u) => u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase()))
                         .map((u) => (
                           <tr key={u.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
@@ -1138,7 +1141,7 @@ export function AdminPanel() {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {n.specialties.map((s) => (
+                          {(n.specialties ?? []).map((s) => (
                             <span key={s} className="text-xs px-2.5 py-1 rounded-full" style={{ background: "#EDE5CC", color: "#0D0870", fontWeight: 500 }}>
                               {s}
                             </span>
@@ -1203,7 +1206,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllPros).map((p) => (
+                      {(liveAllPros ?? []).map((p) => (
                         <tr key={p.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-3">
@@ -1214,7 +1217,7 @@ export function AdminPanel() {
                                   className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
                                   style={{ background: "#5BB8D4", fontWeight: 700 }}
                                 >
-                                  {p.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                                  {(p.name || "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                                 </div>
                               )}
                               <div>
@@ -1395,7 +1398,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllBookings).map((b) => {
+                      {(liveAllBookings ?? []).map((b) => {
                         const alertColors: Record<string, { bg: string; color: string }> = {
                           critical: { bg: "#FCA5A5", color: "#991B1B" },
                           high: { bg: "#FEF08A", color: "#9A3412" },

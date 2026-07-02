@@ -38,6 +38,8 @@ const authStorage: AuthStorage =
 let _supabase: SupabaseClient | null = null;
 
 function validateSupabaseEnv() {
+  console.log("[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY value:", process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+  console.log("[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:", SUPABASE_ANON_KEY.length);
   if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "******" || SUPABASE_ANON_KEY.length < 20) {
     const msg =
       "EXPO_PUBLIC_SUPABASE_ANON_KEY is not set or looks invalid. Set EXPO_PUBLIC_SUPABASE_ANON_KEY in your environment (expo start) to your Supabase anon/public key.";

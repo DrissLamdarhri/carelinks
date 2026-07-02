@@ -9,12 +9,8 @@ import {
   View,
   Image,
 } from "react-native";
-<<<<<<< HEAD
 import { ArrowLeft, Calendar, MapPin, Phone, User, Edit3 } from "lucide-react-native";
-=======
 import * as ImagePicker from "expo-image-picker";
-import { ArrowLeft, Calendar, MapPin, Phone, User, Camera } from "lucide-react-native";
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
 import { useRouter } from "expo-router";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
@@ -191,7 +187,6 @@ export default function PatientProfileInfosScreen() {
       ) : null}
 
       {!loading ? (
-<<<<<<< HEAD
         <View style={styles.card}>
           <View style={styles.avatarSection}>
             <View style={styles.avatarWrap}>
@@ -205,42 +200,17 @@ export default function PatientProfileInfosScreen() {
               <TouchableOpacity
                 style={styles.avatarEditBtn}
                 onPress={handleUploadAvatar}
-=======
-        <>
-          <View style={styles.avatarSection}>
-            <View style={styles.avatarContainer}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
-              ) : (
-                <Image source={DEFAULT_AVATAR} style={styles.avatar} />
-              )}
-              <TouchableOpacity 
-                style={styles.changeAvatarBtn}
-                onPress={handlePickImage}
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
                 disabled={uploadingAvatar}
               >
                 {uploadingAvatar ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-<<<<<<< HEAD
                   <Edit3 size={12} color="white" />
                 )}
               </TouchableOpacity>
             </View>
             <Text style={styles.avatarLabel}>Cliquez pour changer votre photo</Text>
           </View>
-
-=======
-                  <Camera size={14} color="white" />
-                )}
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.avatarHint}>Appuyez pour changer votre photo</Text>
-          </View>
-
-          <View style={styles.card}>
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
           <Text style={styles.label}>Prénom</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
@@ -319,7 +289,6 @@ export default function PatientProfileInfosScreen() {
             })}
           </View>
         </View>
-        </>
       ) : null}
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}

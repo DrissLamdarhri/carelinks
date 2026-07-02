@@ -405,22 +405,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     options?: { phone?: string; city?: string }
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", role);
+    console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
-          phone: options?.phone ?? "",
-          city: options?.city ?? "",
+          phone: options?.phone || null,
+          city: options?.city || null,
           intended_role: role === "pro" ? "professional" : "patient",
+          role: role === "pro" ? "professional" : "patient", // Also pass as 'role' for the trigger
         },
       },
     });
     if (error) {
-      console.error("Supabase signUp error:", error);
+      console.error("[Auth] Signup error details:", {
+        code: error.code,
+        message: error.message,
+        status: error.status,
+        fullError: JSON.stringify(error),
+      });
       throw new Error(error?.message ?? "Erreur serveur lors de l'inscription. Vérifiez la configuration Supabase.");
     }
+    console.log("[Auth] Signup successful, user:", data.user?.id);
     if (data.user) {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,

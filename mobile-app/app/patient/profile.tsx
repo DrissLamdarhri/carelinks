@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
-=======
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import {
   ChevronRight,
   CreditCard,
@@ -114,6 +109,7 @@ export default function PatientProfileScreen() {
   const email = profile?.email || "—";
   const phone = profile?.phone || "—";
   const city = profile?.city || "—";
+  const initials = profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?";
 
   const spentLabel = useMemo(() => {
     return totalSpent.toLocaleString("fr-MA");
@@ -129,7 +125,6 @@ export default function PatientProfileScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-<<<<<<< HEAD
             <AvatarWithDefault
               avatarUrl={avatar}
               initials={initials}
@@ -147,18 +142,6 @@ export default function PatientProfileScreen() {
               ) : (
                 <Edit3 size={10} color="white" />
               )}
-=======
-            <Image
-              source={avatar ? { uri: avatar } : DEFAULT_AVATAR}
-              style={styles.avatar}
-              resizeMode="cover"
-            />
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() => router.push("/patient/profile-infos")}
-            >
-              <Edit3 size={10} color="white" />
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
             </TouchableOpacity>
           </View>
 
@@ -250,10 +233,6 @@ const styles = StyleSheet.create({
   },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
-<<<<<<< HEAD
-=======
-  avatar: { width: 64, height: 64, borderRadius: 32 },
->>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
   editBtn: {
     position: "absolute",
     right: -1,

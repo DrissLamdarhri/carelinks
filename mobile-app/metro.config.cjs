@@ -3,6 +3,22 @@ const fs = require("fs");
 const { getDefaultConfig } = require("expo/metro-config");
 
 const config = getDefaultConfig(__dirname);
+
+// Windows file watcher fix: disable watchman completely
+if (process.platform === "win32") {
+  config.watchman = false;
+  config.resolver.useWatchman = false;
+  config.fileMapCacheDir = null;
+  config.resetCache = true;
+}
+
+// Disable watch mode entirely
+config.reporter = {
+  update: () => {},
+};
+
+config.maxWorkers = 2;
+
 const defaultResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {

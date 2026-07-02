@@ -173,13 +173,22 @@ returns trigger
 language plpgsql
 security definer
 as $$
+declare
+  v_role user_role;
 begin
+  -- Safely cast role from metadata, defaulting to 'patient' if invalid
+  v_role := CASE
+    WHEN new.raw_user_meta_data->>'role' IN ('patient', 'professional', 'admin') 
+      THEN (new.raw_user_meta_data->>'role')::user_role
+    ELSE 'patient'::user_role
+  END;
+
   insert into public.profiles (id, full_name, avatar_url, role, email)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', new.email),
     new.raw_user_meta_data->>'avatar_url',
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'patient'),
+    v_role,
     new.email
   )
   on conflict (id) do nothing;
