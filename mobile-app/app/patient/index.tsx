@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import {
   View,
   Text,
@@ -6,9 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  Linking,
+  Linking,  
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   MapPin,
@@ -23,7 +24,7 @@ import {
   MessageCircle,
   Phone,
 } from "lucide-react-native";
-import { Colors, Gradients } from "@/lib/colors";
+import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
 import {
   MOROCCAN_CITIES,
   mockPatientProfile,
@@ -33,8 +34,13 @@ import {
   mockPatientBooking,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+<<<<<<< HEAD
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { useAuth } from "@/lib/auth-context";
+=======
+import { useAuth } from "@/lib/auth-context";
+import { useCallback } from "react";
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
 
 const serviceIconMap = {
   syringe: Syringe,
@@ -45,6 +51,7 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
+<<<<<<< HEAD
   const { profile } = useAuth();
   
   // Use real profile data, fallback to mock for display purposes
@@ -54,6 +61,26 @@ export default function PatientHomeScreen() {
   };
   const city = profile?.city || mockPatientProfile.city;
   const avatar = profile?.avatar;
+=======
+  const { profile, refreshProfile } = useAuth();
+  
+  // Refresh profile when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProfile();
+    }, [refreshProfile])
+  );
+  
+  // Use real profile data with fallback to mock data
+  const displayName = profile?.firstName || profile?.lastName 
+    ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+    : mockPatientProfile.firstName + " " + mockPatientProfile.lastName;
+  
+  const avatarUri = profile?.avatar || DEFAULT_AVATAR;
+  
+  // Use user's city from profile if available
+  const city = profile?.city || mockPatientProfile.city;
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -63,16 +90,27 @@ export default function PatientHomeScreen() {
 
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
+<<<<<<< HEAD
             <AvatarWithDefault
               avatarUrl={avatar}
               size={44}
               borderRadius={22}
               useDefaultImage={!avatar}
+=======
+            <Image 
+              key={avatarUri} 
+              source={typeof avatarUri === 'string' ? { uri: avatarUri } : avatarUri} 
+              style={styles.avatar} 
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
             />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
               <Text style={styles.userName}>
+<<<<<<< HEAD
                 {displayName.firstName} {displayName.lastName}
+=======
+                {displayName}
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
               </Text>
             </View>
           </View>

@@ -79,7 +79,7 @@ export default function RootLayout() {
       <I18nProvider>
         <SafeAreaProvider>
           {appReady ? (
-            <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+            <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
               <Stack
                 screenOptions={{
                   headerShown: false,

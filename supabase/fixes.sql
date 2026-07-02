@@ -253,7 +253,73 @@ end $$;
 
 
 -- =====================================================================
--- BLOCK 5 — Promote your admin account
+-- BLOCK 5 — Fix RLS policy for profiles insert & update (auth signup trigger)
+-- =====================================================================
+
+-- Drop the old restrictive insert policy that blocks the signup trigger
+-- The trigger runs as `security definer` but auth.uid() may be NULL during
+-- auth.users insert, causing RLS check to fail. Solution: allow INSERT when
+-- auth.uid() IS NULL (system operations) or when auth.uid() = id
+drop policy if exists "profiles_insert" on public.profiles;
+create policy "profiles_insert" on public.profiles
+  for insert with check (
+    auth.uid() IS NULL
+    or auth.uid() = id
+    or public.current_role() = 'admin'
+  );
+
+-- Drop the old policy and recreate it with explicit WITH CHECK
+drop policy if exists "profiles_self_write" on public.profiles;
+create policy "profiles_self_write" on public.profiles 
+  for update using (auth.uid() = id) 
+  with check (auth.uid() = id);
+
+
+-- =====================================================================
+-- BLOCK 6 — Avatars storage bucket + policies
+-- =====================================================================
+
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do update
+set public = excluded.public;
+
+drop policy if exists "avatar_public_read" on storage.objects;
+create policy "avatar_public_read"
+on storage.objects for select
+using (bucket_id = 'avatars');
+
+drop policy if exists "avatar_upload_own" on storage.objects;
+create policy "avatar_upload_own"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "avatar_update_own" on storage.objects;
+create policy "avatar_update_own"
+on storage.objects for update to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "avatar_delete_own" on storage.objects;
+create policy "avatar_delete_own"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+
+-- =====================================================================
+-- BLOCK 7 — Promote your admin account
 -- IMPORTANT: replace the email below with YOUR admin email, then uncomment.
 -- =====================================================================
 

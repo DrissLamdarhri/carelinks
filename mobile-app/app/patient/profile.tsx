@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+=======
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
 import {
   ChevronRight,
   CreditCard,
@@ -12,9 +17,9 @@ import {
   Star,
   User,
 } from "lucide-react-native";
-import { Colors } from "@/lib/colors";
+import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
@@ -51,6 +56,13 @@ export default function PatientProfileScreen() {
   const [totalSpent, setTotalSpent] = useState(0);
   const [avgRating, setAvgRating] = useState<string>("—");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Refresh profile when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProfile();
+    }, [refreshProfile])
+  );
 
   useEffect(() => {
     const loadStats = async () => {
@@ -98,9 +110,6 @@ export default function PatientProfileScreen() {
   const displayName = profile
     ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
     : "Mon profil";
-  const initials = profile
-    ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` || "?"
-    : "?";
   const avatar = profile?.avatar ?? "";
   const email = profile?.email || "—";
   const phone = profile?.phone || "—";
@@ -120,6 +129,7 @@ export default function PatientProfileScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
+<<<<<<< HEAD
             <AvatarWithDefault
               avatarUrl={avatar}
               initials={initials}
@@ -137,6 +147,18 @@ export default function PatientProfileScreen() {
               ) : (
                 <Edit3 size={10} color="white" />
               )}
+=======
+            <Image
+              source={avatar ? { uri: avatar } : DEFAULT_AVATAR}
+              style={styles.avatar}
+              resizeMode="cover"
+            />
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => router.push("/patient/profile-infos")}
+            >
+              <Edit3 size={10} color="white" />
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
             </TouchableOpacity>
           </View>
 
@@ -228,6 +250,10 @@ const styles = StyleSheet.create({
   },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
+<<<<<<< HEAD
+=======
+  avatar: { width: 64, height: 64, borderRadius: 32 },
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
   editBtn: {
     position: "absolute",
     right: -1,

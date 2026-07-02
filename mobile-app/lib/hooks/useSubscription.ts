@@ -75,8 +75,19 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       // Offline reconciliation: pull the canonical state from the server.
-      const current = await db.subscriptions.getForUser(user.id);
-      applySubscription(current);
+      // db.subscriptions may not be available — query the subscriptions table directly
+      try {
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (error) throw error;
+        applySubscription(data ?? null);
+      } catch (err) {
+        // If subscriptions table not present or error, clear subscription
+        applySubscription(null);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de charger l'abonnement.");

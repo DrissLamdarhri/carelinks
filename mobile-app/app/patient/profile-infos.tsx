@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -7,12 +7,19 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
+<<<<<<< HEAD
 import { ArrowLeft, Calendar, MapPin, Phone, User, Edit3 } from "lucide-react-native";
+=======
+import * as ImagePicker from "expo-image-picker";
+import { ArrowLeft, Calendar, MapPin, Phone, User, Camera } from "lucide-react-native";
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
 import { useRouter } from "expo-router";
-import { Colors } from "@/lib/colors";
+import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { storage } from "@/lib/db/storage";
 import { showToast } from "@/lib/toast";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
@@ -38,6 +45,40 @@ export default function PatientProfileInfosScreen() {
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<string>("");
   const [email, setEmail] = useState("");
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  const handlePickImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setUploadingAvatar(true);
+        setErrorMessage(null);
+        try {
+          if (!user?.id) throw new Error("User not authenticated");
+          const publicUrl = await storage.uploadAvatar(user.id, asset.uri, asset.mimeType || "image/jpeg");
+          await db.profiles.update(user.id, { avatar_url: publicUrl });
+          setAvatarUri(publicUrl);
+          // Small delay to ensure database consistency
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await refreshProfile();
+          showToast("Avatar mis à jour.");
+        } catch (error) {
+          setErrorMessage(error instanceof Error ? error.message : "Erreur lors du chargement de l'avatar.");
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sélection de l'image.");
+    }
+  }, [user?.id, refreshProfile]);
 
   useEffect(() => {
     let active = true;
@@ -46,19 +87,20 @@ export default function PatientProfileInfosScreen() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        const [profile, patient] = await Promise.all([
+        const [profileData, patient] = await Promise.all([
           db.profiles.get(user.id),
           db.patients.get(user.id),
         ]);
         if (!active) return;
-        const nameParts = (profile.full_name ?? "").split(" ");
+        const nameParts = (profileData.full_name ?? "").split(" ");
         setFirstName(nameParts[0] ?? "");
         setLastName(nameParts.slice(1).join(" "));
-        setPhone(profile.phone ?? "");
-        setCity(profile.city ?? "");
-        setEmail(profile.email ?? user.email ?? "");
+        setPhone(profileData.phone ?? "");
+        setCity(profileData.city ?? "");
+        setEmail(profileData.email ?? user.email ?? "");
         setDob(patient?.date_of_birth ?? "");
         setGender(patient?.gender ?? "");
+        setAvatarUri(profileData.avatar_url ?? null);
       } catch (error) {
         if (!active) return;
         setErrorMessage(error instanceof Error ? error.message : "Profil indisponible.");
@@ -149,6 +191,7 @@ export default function PatientProfileInfosScreen() {
       ) : null}
 
       {!loading ? (
+<<<<<<< HEAD
         <View style={styles.card}>
           <View style={styles.avatarSection}>
             <View style={styles.avatarWrap}>
@@ -162,11 +205,25 @@ export default function PatientProfileInfosScreen() {
               <TouchableOpacity
                 style={styles.avatarEditBtn}
                 onPress={handleUploadAvatar}
+=======
+        <>
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarContainer}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              ) : (
+                <Image source={DEFAULT_AVATAR} style={styles.avatar} />
+              )}
+              <TouchableOpacity 
+                style={styles.changeAvatarBtn}
+                onPress={handlePickImage}
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
                 disabled={uploadingAvatar}
               >
                 {uploadingAvatar ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
+<<<<<<< HEAD
                   <Edit3 size={12} color="white" />
                 )}
               </TouchableOpacity>
@@ -174,6 +231,16 @@ export default function PatientProfileInfosScreen() {
             <Text style={styles.avatarLabel}>Cliquez pour changer votre photo</Text>
           </View>
 
+=======
+                  <Camera size={14} color="white" />
+                )}
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.avatarHint}>Appuyez pour changer votre photo</Text>
+          </View>
+
+          <View style={styles.card}>
+>>>>>>> ce47948cb601263513ae8f517a5befcadfba5ec7
           <Text style={styles.label}>Prénom</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
@@ -252,6 +319,7 @@ export default function PatientProfileInfosScreen() {
             })}
           </View>
         </View>
+        </>
       ) : null}
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -277,6 +345,40 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular" },
   center: { paddingVertical: 40, alignItems: "center" },
+  avatarSection: {
+    alignItems: "center",
+    marginBottom: 20,
+    paddingVertical: 12,
+  },
+  avatarContainer: {
+    position: "relative",
+    marginBottom: 8,
+  },
+  avatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: Colors.primary,
+  },
+  changeAvatarBtn: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  avatarHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
+  },
   card: {
     backgroundColor: "white",
     borderRadius: 16,

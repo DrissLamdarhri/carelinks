@@ -44,3 +44,6 @@ export const KineColors = {
   inputBorder: '#D1FAE5',
   badgeBg: '#D1FAE5',
 };
+
+// Default avatar for users without profile images
+export const DEFAULT_AVATAR = require("@/assets/DefaultProfile.png");

@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { DMSans_400Regular, DMSans_500Medium } from "@expo-google-fonts/dm-sans";
 import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { useFonts } from "expo-font";
@@ -33,8 +34,11 @@ function DeepLinkHandler() {
     // Case B: app was OPEN in background — we need to push the callback screen
     const subscription = Linking.addEventListener("url", ({ url }) => {
       if (url.includes("auth/callback")) {
-        // Push to the callback screen which reads the URL and exchanges the code
-        router.push("/auth/callback");
+        // Push to callback with the incoming URL so code exchange works reliably
+        router.push({
+          pathname: "/auth/callback",
+          params: { oauthUrl: encodeURIComponent(url) },
+        });
       }
     });
 
@@ -60,27 +64,31 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <I18nProvider>
-        {fontsLoaded ? (
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="auth" options={{ headerShown: false }} />
-            <Stack.Screen name="patient" options={{ headerShown: false }} />
-            <Stack.Screen name="pro" options={{ headerShown: false }} />
-            <Stack.Screen name="admin" options={{ headerShown: false }} />
-          </Stack>
-        ) : (
-          <View
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#0D0870",
-            }}
-          >
-            <ActivityIndicator size="large" color="#EDE5CC" />
-          </View>
-        )}
-        {/* Handles deep-links when app is already running in background */}
-        <DeepLinkHandler />
+        <SafeAreaProvider>
+          {fontsLoaded ? (
+            <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="auth" options={{ headerShown: false }} />
+                <Stack.Screen name="patient" options={{ headerShown: false }} />
+                <Stack.Screen name="pro" options={{ headerShown: false }} />
+                <Stack.Screen name="admin" options={{ headerShown: false }} />
+              </Stack>
+            </SafeAreaView>
+          ) : (
+            <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#0D0870",
+              }}
+            >
+              <ActivityIndicator size="large" color="#EDE5CC" />
+            </View>
+          )}
+          {/* Handles deep-links when app is already running in background */}
+          <DeepLinkHandler />
+        </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>
   );

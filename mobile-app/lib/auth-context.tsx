@@ -16,6 +16,7 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { getOAuthRedirectUrl } from "@/lib/auth-redirect";
@@ -123,7 +124,8 @@ async function fetchProfileFromSupabase(
     .select("*")
     .eq("id", userId)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) throw error;
+  if (!data) return null;
 
   const nameParts = (data.full_name ?? "").split(" ");
   const method = data.mfa_method === "totp" || data.mfa_method === "sms" ? data.mfa_method : null;
@@ -166,6 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchProfile = async (authUser: User): Promise<UserProfile | null> => {
+    const metadataAvatarUrl =
+      (authUser.user_metadata?.picture as string | undefined) ??
+      (authUser.user_metadata?.avatar_url as string | undefined) ??
+      null;
+
     let p = await fetchProfileFromSupabase(authUser.id);
     if (!p) {
       const intendedRole = await AsyncStorage.getItem("carelink_intended_role");
@@ -178,15 +185,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const phone =
         (authUser.user_metadata?.phone as string | undefined) ?? "";
       const city = (authUser.user_metadata?.city as string | undefined) ?? "";
-      const { error: profileError } = await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").insert({
         id: authUser.id,
         role,
         full_name: fullName,
         language: "fr",
         phone: phone || null,
         city: city || null,
+        avatar_url: metadataAvatarUrl || null,
       });
-      if (profileError) throw profileError;
+      if (profileError && profileError.code !== "23505") throw profileError;
 
       if (role === "patient") {
         const { error: patientError } = await supabase
@@ -201,6 +209,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       p = await fetchProfileFromSupabase(authUser.id);
+    } else if (!p.avatar && metadataAvatarUrl) {
+      const { error: avatarError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: metadataAvatarUrl })
+        .eq("id", authUser.id);
+      if (avatarError) throw avatarError;
+      p = { ...p, avatar: metadataAvatarUrl };
     }
     if (p) setProfile(p);
     return p;
@@ -229,6 +244,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
     });
+  };
+
+  const exchangeOAuthCodeFromUrl = async (redirectUrl: string) => {
+    const { queryParams } = Linking.parse(redirectUrl);
+    const rawOAuthError = queryParams?.error_description ?? queryParams?.error;
+    const oauthError =
+      typeof rawOAuthError === "string"
+        ? rawOAuthError
+        : Array.isArray(rawOAuthError) && rawOAuthError.length > 0
+          ? rawOAuthError[0]
+          : null;
+    if (oauthError) {
+      throw new Error(oauthError);
+    }
+
+    const rawCode = queryParams?.code;
+    const code =
+      typeof rawCode === "string"
+        ? rawCode
+        : Array.isArray(rawCode) && rawCode.length > 0
+          ? rawCode[0]
+          : null;
+    if (!code) return;
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
   };
 
   const resolveMfaRequirement = async (p: UserProfile | null): Promise<boolean> => {
@@ -305,14 +346,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { role: intendedRole, mfaRequired: false };
     }
 
-    if (data.url && WebBrowser) {
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        redirectTo
-      );
-      if (result.type !== "success") {
-        throw new Error("Connexion Google annulée.");
-      }
+    if (!data.url || !WebBrowser) throw new Error("Navigateur OAuth indisponible.");
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success") throw new Error("Connexion Google annulée.");
+    if (!result.url) throw new Error("URL de redirection OAuth manquante.");
+    const { data: existingSessionData } = await supabase.auth.getSession();
+    if (!existingSessionData.session) {
+      await exchangeOAuthCodeFromUrl(result.url);
     }
 
     const oauthSession = await awaitSessionFromOAuth();

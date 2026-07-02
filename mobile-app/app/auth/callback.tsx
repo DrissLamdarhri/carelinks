@@ -15,13 +15,14 @@
 
 import { useEffect, useRef } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ code?: string; oauthUrl?: string }>();
   const handled = useRef(false); // prevent double-execution in StrictMode
 
   useEffect(() => {
@@ -30,37 +31,58 @@ export default function AuthCallbackScreen() {
 
     const run = async () => {
       try {
-        // 1 — get the URL that launched this screen
-        const url = await Linking.getInitialURL();
-        if (!url) throw new Error("No callback URL");
+        let code: string | null =
+          typeof params.code === "string" && params.code.length > 0
+            ? params.code
+            : null;
 
-        // 2 — pull the `code` query param out
-        const { queryParams } = Linking.parse(url);
-        const code = queryParams?.code;
-        if (!code || typeof code !== "string") throw new Error("No code in URL");
+        if (!code && typeof params.oauthUrl === "string" && params.oauthUrl.length > 0) {
+          const decodedUrl = decodeURIComponent(params.oauthUrl);
+          const { queryParams } = Linking.parse(decodedUrl);
+          const fromParam = queryParams?.code;
+          code = typeof fromParam === "string" && fromParam.length > 0 ? fromParam : null;
+        }
 
-        // 3 — exchange the PKCE code for a real session
+        if (!code) {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl) {
+            const { queryParams } = Linking.parse(initialUrl);
+            const fromInitial = queryParams?.code;
+            code = typeof fromInitial === "string" && fromInitial.length > 0 ? fromInitial : null;
+          }
+        }
+
+        if (!code) throw new Error("No code in URL");
+
+        // 1 — exchange the PKCE code for a real session
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) throw error;
 
-        // 4 — read which role the user intended before opening Google
+        // 2 — read which role the user intended before opening Google
         const intendedRole = await AsyncStorage.getItem("carelink_intended_role");
         await AsyncStorage.removeItem("carelink_intended_role");
 
-        // 5 — redirect
+        // 3 — redirect
         if (intendedRole === "pro") {
           router.replace("/pro");
         } else {
           router.replace("/patient");
         }
       } catch {
-        // anything goes wrong → back to onboarding, never stuck on this screen
+        // If code was already exchanged elsewhere, continue with existing session.
+        const { data: existing } = await supabase.auth.getSession();
+        if (existing.session?.user) {
+          const intendedRole = await AsyncStorage.getItem("carelink_intended_role");
+          await AsyncStorage.removeItem("carelink_intended_role");
+          router.replace(intendedRole === "pro" ? "/pro" : "/patient");
+          return;
+        }
         router.replace("/auth");
       }
     };
 
     void run();
-  }, [router]);
+  }, [params.code, params.oauthUrl, router]);
 
   return (
     <View
