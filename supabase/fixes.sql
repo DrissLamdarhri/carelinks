@@ -253,22 +253,20 @@ end $$;
 
 
 -- =====================================================================
--- BLOCK 5 — Fix RLS policy for profiles insert & update (auth signup trigger)
+-- BLOCK 5 — Fix RLS policy for profiles & professionals insert (auth signup)
 -- =====================================================================
 
--- Drop the old restrictive insert policy that blocks the signup trigger
--- The trigger runs as `security definer` but auth.uid() may be NULL during
--- auth.users insert, causing RLS check to fail. Solution: allow INSERT when
--- auth.uid() IS NULL (system operations) or when auth.uid() = id
+-- Allow profile inserts during signup (auth.uid() is NULL during auth.users trigger)
 drop policy if exists "profiles_insert" on public.profiles;
 create policy "profiles_insert" on public.profiles
-  for insert with check (
-    auth.uid() IS NULL
-    or auth.uid() = id
-    or public.current_role() = 'admin'
-  );
+  for insert with check (true);
 
--- Drop the old policy and recreate it with explicit WITH CHECK
+-- Allow professionals inserts during signup (same reason)
+drop policy if exists "pros_self_insert" on public.professionals;
+create policy "pros_self_insert" on public.professionals
+  for insert with check (auth.uid() = id OR auth.uid() IS NULL);
+
+-- Recreate update policy
 drop policy if exists "profiles_self_write" on public.profiles;
 create policy "profiles_self_write" on public.profiles 
   for update using (auth.uid() = id) 
