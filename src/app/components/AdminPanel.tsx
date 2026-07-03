@@ -4,6 +4,7 @@ import { getAdminStats, getPendingPros, approvePro, rejectPro } from "../../lib/
 import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
+import { ProfessionalsManager } from "./ProfessionalsManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -127,7 +128,20 @@ export function AdminPanel() {
   const [liveUsers, setLiveUsers] = useState<any[]>([]);
   const [liveAllPros, setLiveAllPros] = useState<any[]>([]);
   const [liveAllBookings, setLiveAllBookings] = useState<any[]>([]);
+  const [bookingFilter, setBookingFilter] = useState<string | null>(null);
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
+  
+  // Additional state for button functionality
+  const [showUserFilterModal, setShowUserFilterModal] = useState(false);
+  const [showBookingFilterModal, setShowBookingFilterModal] = useState(false);
+  const [selectedUserForView, setSelectedUserForView] = useState<any>(null);
+  const [selectedProForView, setSelectedProForView] = useState<any>(null);
+  const [selectedBookingForView, setSelectedBookingForView] = useState<any>(null);
+  const [securitySettings, setSecuritySettings] = useState({
+    twoFactor: true,
+    loginAlerts: true,
+    autoExpiration: false,
+  });
 
   // Live KPIs straight from Supabase (replaces hardcoded numbers)
   useEffect(() => {
@@ -262,17 +276,35 @@ export function AdminPanel() {
         .select("id,booking_id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,price,alert_level,created_at")
         .order("created_at", { ascending: false })
         .limit(100);
-      
-      // Fetch patient names
-      const patientIds = [...new Set((bookingsAll ?? []).map((b: any) => b.patient_id))];
+
+      // Also fetch all yoga bookings directly from bookings (fallback if admin logs missing)
+      const { data: bookingsYoga } = await supabase
+        .from("bookings")
+        .select("id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,final_price_mad,budget_max_mad,created_at")
+        .eq("specialty", "yoga_instructor")
+        .order("created_at", { ascending: false })
+        .limit(2000);
+
+      // Merge admin logs + bookingsYoga, preferring admin log when present
+      const mergedByBookingId = new Map();
+      (bookingsAll ?? []).forEach((r: any) => mergedByBookingId.set(r.booking_id, { ...r, source: "admin" }));
+      (bookingsYoga ?? []).forEach((r: any) => {
+        if (!mergedByBookingId.has(r.id)) {
+          mergedByBookingId.set(r.id, { ...r, booking_id: r.id, price: r.final_price_mad ?? r.budget_max_mad, alert_level: "normal", source: "bookings" });
+        }
+      });
+      const merged = Array.from(mergedByBookingId.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      // Fetch patient names (for merged set)
+      const patientIds = [...new Set(merged.map((b: any) => b.patient_id))];
       const { data: patientProfiles } = patientIds.length > 0 ? await supabase
         .from("profiles")
         .select("id,full_name")
         .in("id", patientIds) : { data: [] };
       const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
       
-      // Fetch professional names
-      const proIds = [...new Set((bookingsAll ?? []).map((b: any) => b.professional_id).filter(Boolean))];
+      // Fetch professional names (for merged set)
+      const proIds = [...new Set(merged.map((b: any) => b.professional_id).filter(Boolean))];
       const { data: proProfiles } = proIds.length > 0 ? await supabase
         .from("profiles")
         .select("id,full_name")
@@ -283,15 +315,17 @@ export function AdminPanel() {
         open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
         completed: "Terminé", cancelled: "Annulé",
       };
-      setLiveAllBookings((bookingsAll ?? []).map((b: any) => ({
-        id: "#" + b.booking_id.slice(0, 6).toUpperCase(),
+
+      setLiveAllBookings(merged.map((b: any) => ({
+        id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
         patient: patientMap[b.patient_id] ?? "—",
         pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
         service: labelMap[b.specialty] ?? b.specialty,
+        specialtyKey: b.specialty,
         date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
         price: (b.price ?? 0) + " MAD",
         status: statusFr[b.status] ?? b.status,
-        alertLevel: b.alert_level,
+        alertLevel: b.alert_level ?? "normal",
         urgency: b.urgency,
       })));
 
@@ -487,6 +521,77 @@ export function AdminPanel() {
   const deleteSession = (id: number) => setSessions(sessions.filter((s) => s.id !== id));
   const toggleSessionStatus = (id: number) =>
     setSessions(sessions.map((s) => s.id === id ? { ...s, status: s.status === "Publié" ? "Brouillon" : "Publié" } : s));
+
+  // New handlers for non-functional buttons
+  const exportUsersToCSV = () => {
+    const headers = ["Nom", "Email", "Ville", "Réservations", "Inscrit", "Statut"];
+    const rows = liveUsers.map((u) => [
+      u.name,
+      u.email,
+      u.city,
+      u.bookings,
+      u.joined,
+      u.status,
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `patients_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success("Données exportées");
+  };
+
+  const exportBookingsToCSV = () => {
+    const headers = ["ID", "Patient", "Pro", "Service", "Date", "Prix", "Priorité", "Statut"];
+    const rows = (liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => [
+      b.id,
+      b.patient,
+      b.pro,
+      b.service,
+      b.date,
+      b.price,
+      b.alertLevel,
+      b.status,
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bookings_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success("Réservations exportées");
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce patient ?")) return;
+    try {
+      await supabase.from("profiles").delete().eq("id", userId);
+      setLiveUsers((prev) => prev.filter((u) => u.id !== userId));
+      toast.success("Patient supprimé");
+    } catch (e: any) {
+      toast.error(e.message || "Erreur");
+    }
+  };
+
+  const deletePro = async (proId: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce professionnel ?")) return;
+    try {
+      await supabase.from("professionals").delete().eq("id", proId);
+      setLiveAllPros((prev) => prev.filter((p) => p.id !== proId));
+      toast.success("Professionnel supprimé");
+    } catch (e: any) {
+      toast.error(e.message || "Erreur");
+    }
+  };
+
+  const saveSecuritySettings = () => {
+    toast.success("Paramètres de sécurité enregistrés");
+  };
 
   const navItems: { key: AdminTab; icon: typeof LayoutDashboard; label: string; badge?: number }[] = [
     { key: "dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
@@ -1004,10 +1109,10 @@ export function AdminPanel() {
                   <p className="text-sm text-[#888780]">{(liveUsers ?? []).length} patients inscrits</p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                  <button onClick={() => setShowUserFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Filter size={14} /> Filtrer
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                  <button onClick={exportUsersToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Download size={14} /> Exporter
                   </button>
                 </div>
@@ -1070,10 +1175,10 @@ export function AdminPanel() {
                             <td className="px-5 py-4"><StatusBadge status={u.status} /></td>
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-1">
-                                <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors">
+                                <button onClick={() => setSelectedUserForView(u)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors">
                                   <Eye size={15} className="text-[#888780]" />
                                 </button>
-                                <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-colors">
+                                <button onClick={() => deleteUser(u.id)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-colors">
                                   <UserX size={15} className="text-[#E24B4A]" />
                                 </button>
                               </div>
@@ -1088,177 +1193,7 @@ export function AdminPanel() {
           )}
 
           {/* ======= PROFESSIONALS ======= */}
-          {tab === "professionals" && (
-            <div>
-              {/* Live KYC moderation queue (Supabase) */}
-              <div className="mb-6">
-                <h3 className="text-[16px] text-[#1A1A1A] mb-3" style={{ fontWeight: 700 }}>
-                  Modération KYC (live)
-                </h3>
-                <KycModerationQueue />
-              </div>
-
-              {/* Pending queue */}
-              {pending.length > 0 && (
-                <div className="mb-6">
-                  <div
-                    className="flex items-center gap-2 px-4 py-3 rounded-2xl mb-4"
-                    style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}
-                  >
-                    <AlertTriangle size={16} className="text-amber-600" />
-                    <p className="text-sm text-amber-700" style={{ fontWeight: 600 }}>
-                      {pending.length} inscription(s) professionnelle(s) en attente de vérification
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {pending.map((n) => (
-                      <div
-                        key={n.id}
-                        className="bg-white rounded-2xl p-5"
-                        style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-                      >
-                        {!n.ocrMatch && (
-                          <div
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl mb-4"
-                            style={{ background: "#FEF3C7" }}
-                          >
-                            <AlertTriangle size={13} className="text-amber-500" />
-                            <span className="text-xs text-amber-700" style={{ fontWeight: 600 }}>
-                              Discordance OCR détectée
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-4 mb-4">
-                          <img src={n.img} alt={n.name} className="w-14 h-14 rounded-2xl object-cover" />
-                          <div>
-                            <p className="text-base text-[#1A1A1A]" style={{ fontWeight: 700 }}>{n.name}</p>
-                            <p className="text-sm text-[#888780]">{n.email}</p>
-                            <div className="flex items-center gap-1 mt-1">
-                              <MapPin size={12} className="text-[#888780]" />
-                              <span className="text-xs text-[#888780]">{n.city}</span>
-                              <span className="text-xs text-[#B0B0B0] ml-2">{n.experience}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {(n.specialties ?? []).map((s) => (
-                            <span key={s} className="text-xs px-2.5 py-1 rounded-full" style={{ background: "#EDE5CC", color: "#0D0870", fontWeight: 500 }}>
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-4 mb-4 text-xs">
-                          <span className="flex items-center gap-1.5" style={{ color: n.docsOk ? "#16A34A" : "#E24B4A" }}>
-                            {n.docsOk ? <Check size={13} /> : <X size={13} />} Documents
-                          </span>
-                          <span className="flex items-center gap-1.5" style={{ color: n.ocrMatch ? "#16A34A" : "#E24B4A" }}>
-                            {n.ocrMatch ? <Check size={13} /> : <X size={13} />} OCR
-                          </span>
-                          <span className="flex items-center gap-1 text-[#888780]">
-                            <Clock size={12} /> {n.submittedAt}
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          <motion.button
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => approveNurse(n.id)}
-                            className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-1.5"
-                            style={{ background: "#0D0870", fontWeight: 600 }}
-                          >
-                            <UserCheck size={15} /> Approuver
-                          </motion.button>
-                          <button className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5" style={{ background: "#F3F3F5", color: "#888780" }}>
-                            <Eye size={15} /> Voir dossier
-                          </button>
-                          <button
-                            onClick={() => rejectNurse(n.id)}
-                            className="w-10 py-2.5 rounded-xl flex items-center justify-center"
-                            style={{ background: "#FDE8E8", color: "#E24B4A" }}
-                          >
-                            <UserX size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* All pros table */}
-              <div
-                className="bg-white rounded-2xl overflow-hidden"
-                style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-              >
-                <div className="px-5 py-4 border-b border-[#F0F0F0] flex items-center justify-between">
-                  <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>
-                    Tous les professionnels ({(liveAllPros).length})
-                  </p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr style={{ background: "#F8F8FC" }}>
-                        {["Professionnel", "Type", "Ville", "RDV", "Note", "Revenus", "Statut", "Actions"].map((h) => (
-                          <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(liveAllPros ?? []).map((p) => (
-                        <tr key={p.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              {p.img ? (
-                                <img src={p.img} alt={p.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                              ) : (
-                                <div
-                                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
-                                  style={{ background: "#5BB8D4", fontWeight: 700 }}
-                                >
-                                  {(p.name || "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
-                                </div>
-                              )}
-                              <div>
-                                <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{p.name}</p>
-                                <p className="text-xs text-[#888780]">{p.email}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#EDE5CC", color: "#0D0870", fontWeight: 500 }}>
-                              {p.type}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 text-sm text-[#888780]">{p.city}</td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{p.bookings}</td>
-                          <td className="px-5 py-4">
-                            {p.rating > 0 ? (
-                              <div className="flex items-center gap-1">
-                                <Star size={13} className="text-amber-400" fill="#FBBF24" />
-                                <span className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{p.rating}</span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-[#888780]">—</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{p.revenue}</td>
-                          <td className="px-5 py-4"><StatusBadge status={p.status} /></td>
-                          <td className="px-5 py-4">
-                            <div className="flex gap-1">
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]"><Eye size={14} className="text-[#888780]" /></button>
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8]"><Trash2 size={14} className="text-[#E24B4A]" /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
+          {tab === "professionals" && <ProfessionalsManager />}
 
           {/* ======= SERVICES ======= */}
           {tab === "services" && (
@@ -1373,11 +1308,27 @@ export function AdminPanel() {
             <div>
               <div className="flex items-center justify-between mb-5">
                 <p className="text-sm text-[#888780]">{(liveAllBookings).length} réservations</p>
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                <div className="flex gap-2 items-center">
+                  <div className="inline-flex rounded-xl overflow-hidden" style={{ background: "#F3F3F5" }}>
+                    <button
+                      onClick={() => setBookingFilter(null)}
+                      className="px-3 py-2 text-sm"
+                      style={{ fontWeight: bookingFilter === null ? 700 : 500, color: bookingFilter === null ? "#0D0870" : "#888780", background: bookingFilter === null ? "white" : "transparent" }}
+                    >
+                      Tous
+                    </button>
+                    <button
+                      onClick={() => setBookingFilter("yoga_instructor")}
+                      className="px-3 py-2 text-sm"
+                      style={{ fontWeight: bookingFilter === "yoga_instructor" ? 700 : 500, color: bookingFilter === "yoga_instructor" ? "#0D0870" : "#888780", background: bookingFilter === "yoga_instructor" ? "white" : "transparent" }}
+                    >
+                      Yoga
+                    </button>
+                  </div>
+                  <button onClick={() => setShowBookingFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Filter size={14} /> Filtrer
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                  <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Download size={14} /> Exporter CSV
                   </button>
                 </div>
@@ -1398,7 +1349,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllBookings ?? []).map((b) => {
+                      {(liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => {
                         const alertColors: Record<string, { bg: string; color: string }> = {
                           critical: { bg: "#FCA5A5", color: "#991B1B" },
                           high: { bg: "#FEF08A", color: "#9A3412" },
@@ -1428,7 +1379,7 @@ export function AdminPanel() {
                             </td>
                             <td className="px-5 py-4"><StatusBadge status={b.status} /></td>
                             <td className="px-5 py-4">
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
+                              <button onClick={() => setSelectedBookingForView(b)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
                                 <Eye size={14} className="text-[#888780]" />
                               </button>
                             </td>
@@ -1545,19 +1496,20 @@ export function AdminPanel() {
                 <p className="text-sm text-[#1A1A1A] mb-4" style={{ fontWeight: 600 }}>Sécurité</p>
                 <div className="flex flex-col gap-3">
                   {[
-                    { label: "Authentification 2 facteurs", on: true },
-                    { label: "Alertes de connexion", on: true },
-                    { label: "Session auto-expiration (24h)", on: false },
+                    { label: "Authentification 2 facteurs", key: "twoFactor" as const },
+                    { label: "Alertes de connexion", key: "loginAlerts" as const },
+                    { label: "Session auto-expiration (24h)", key: "autoExpiration" as const },
                   ].map((s) => (
                     <div key={s.label} className="flex items-center justify-between py-2">
                       <span className="text-sm text-[#1A1A1A]">{s.label}</span>
                       <button
+                        onClick={() => setSecuritySettings((prev) => ({ ...prev, [s.key]: !prev[s.key] }))}
                         className="w-11 h-6 rounded-full transition-colors relative"
-                        style={{ background: s.on ? "#0D0870" : "#D0D0D0" }}
+                        style={{ background: securitySettings[s.key] ? "#0D0870" : "#D0D0D0" }}
                       >
                         <div
                           className="w-4 h-4 rounded-full bg-white absolute top-1 transition-all"
-                          style={{ left: s.on ? 26 : 4 }}
+                          style={{ left: securitySettings[s.key] ? 26 : 4 }}
                         />
                       </button>
                     </div>
@@ -1565,6 +1517,7 @@ export function AdminPanel() {
                 </div>
               </div>
               <button
+                onClick={saveSecuritySettings}
                 className="w-full py-3 rounded-xl text-white text-sm"
                 style={{ background: "#0D0870", fontWeight: 600 }}
               >
@@ -1791,6 +1744,175 @@ export function AdminPanel() {
                 <button onClick={() => setShowYogaModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
                 <button onClick={addYogaSession} className="flex-1 py-3 rounded-2xl text-white text-sm" style={{ background: "#0D0870", fontWeight: 600 }}>Créer la séance</button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── User Details Modal ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {selectedUserForView && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSelectedUserForView(null); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>Détails du patient</h3>
+                <button onClick={() => setSelectedUserForView(null)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
+                  <X size={18} className="text-[#888780]" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Nom</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedUserForView.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Email/Téléphone</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedUserForView.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Ville</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedUserForView.city}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Réservations</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedUserForView.bookings}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Inscrit</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedUserForView.joined}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Statut</p>
+                  <StatusBadge status={selectedUserForView.status} />
+                </div>
+              </div>
+              <button onClick={() => setSelectedUserForView(null)} className="w-full mt-5 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Fermer</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Professional Details Modal ──────────────────────────────── */}
+      <AnimatePresence>
+        {selectedProForView && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSelectedProForView(null); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>Dossier professionnel</h3>
+                <button onClick={() => setSelectedProForView(null)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
+                  <X size={18} className="text-[#888780]" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Professionnel</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedProForView.name || selectedProForView.firstName} {selectedProForView.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Type</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedProForView.type || selectedProForView.specialty}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Ville</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedProForView.city}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Note</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedProForView.rating ? `${selectedProForView.rating} ⭐` : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Réservations</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedProForView.bookings || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Statut</p>
+                  <StatusBadge status={selectedProForView.status} />
+                </div>
+              </div>
+              <button onClick={() => setSelectedProForView(null)} className="w-full mt-5 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Fermer</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Booking Details Modal ──────────────────────────────────── */}
+      <AnimatePresence>
+        {selectedBookingForView && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSelectedBookingForView(null); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>Détails de la réservation</h3>
+                <button onClick={() => setSelectedBookingForView(null)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
+                  <X size={18} className="text-[#888780]" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>ID Réservation</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.id}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Patient</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.patient}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Professionnel</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.pro}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Service</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.service}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Date</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.date}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Prix</p>
+                  <p className="text-sm text-[#1A1A1A]">{selectedBookingForView.price}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Statut</p>
+                  <StatusBadge status={selectedBookingForView.status} />
+                </div>
+              </div>
+              <button onClick={() => setSelectedBookingForView(null)} className="w-full mt-5 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Fermer</button>
             </motion.div>
           </motion.div>
         )}

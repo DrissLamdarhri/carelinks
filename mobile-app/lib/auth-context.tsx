@@ -88,7 +88,7 @@ interface AuthContextValue {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
   ) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
   verifyMfaTotp: (code: string, factorId?: string) => Promise<void>;
@@ -402,7 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", role);
     console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
@@ -414,6 +414,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           phone: options?.phone || null,
           city: options?.city || null,
+          profession: options?.profession || null,
+          services: options?.services || null,
           intended_role: role === "pro" ? "professional" : "patient",
           role: role === "pro" ? "professional" : "patient", // Also pass as 'role' for the trigger
         },
@@ -448,7 +450,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         const { error: professionalError } = await supabase
           .from("professionals")
-          .upsert({ id: data.user.id, specialty: "nurse" });
+          .upsert({
+            id: data.user.id,
+            specialty: options?.profession || "nurse",
+          });
         if (professionalError) throw professionalError;
       }
     }

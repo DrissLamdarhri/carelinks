@@ -1025,6 +1025,74 @@ app.get("/make-server-aa5d1aa6/admin/notifications", async (c) => {
 });
 
 // POST /admin/login  → validate admin credentials (simple secret-based)
+
+// POST /admin/log-booking  → ensure admin_booking_logs + admin notifications exist (service-role)
+app.post("/make-server-aa5d1aa6/admin/log-booking", async (c) => {
+  try {
+    const authUser = await getAuthUser(c);
+    if (!authUser) return c.json({ error: "Non autorisé" }, 401);
+    const body = await c.req.json();
+    const bookingId = body?.booking_id || body?.id;
+    if (!bookingId) return c.json({ error: "booking_id requis" }, 400);
+
+    const sb = supabaseAdmin();
+    const { data: booking, error: bErr } = await sb
+      .from("bookings")
+      .select("*")
+      .eq("id", bookingId)
+      .single();
+    if (bErr || !booking) return c.json({ error: "Réservation introuvable" }, 404);
+
+    // Only the booking owner or an admin may request server-side logging
+    const isAdmin = await requireAdmin(c);
+    if (booking.patient_id !== authUser.id && !isAdmin) return c.json({ error: "Accès refusé" }, 403);
+
+    // Check if an admin log already exists
+    const { data: existing } = await sb.from("admin_booking_logs").select("id").eq("booking_id", bookingId).single();
+    if (!existing) {
+      const alertLevel = booking.specialty === "psychologist" && (booking.urgency === "urgent" || booking.urgency === "emergency")
+        ? "critical"
+        : (booking.specialty === "psychologist" || booking.urgency === "urgent" || booking.urgency === "emergency")
+        ? "high"
+        : "normal";
+
+      await sb.from("admin_booking_logs").insert({
+        booking_id: booking.id,
+        patient_id: booking.patient_id,
+        professional_id: booking.professional_id,
+        specialty: booking.specialty,
+        status: booking.status,
+        urgency: booking.urgency,
+        scheduled_at: booking.scheduled_at,
+        address: booking.address,
+        price: booking.final_price_mad ?? booking.budget_max_mad,
+        notes: booking.notes,
+        is_psychologist: booking.specialty === "psychologist",
+        alert_level: alertLevel,
+        notification_sent_at: new Date().toISOString(),
+      });
+    }
+
+    // Create a notification row for each admin so AdminPanel (notifications subscription) picks it up
+    const { data: admins } = await sb.from("profiles").select("id").eq("role", "admin");
+    const adminIds = (admins ?? []).map((a: any) => a.id).filter(Boolean);
+    if (adminIds.length) {
+      const notifs = adminIds.map((id: string) => ({
+        user_id: id,
+        kind: "admin_booking",
+        title: "Nouvelle réservation",
+        body: `Nouvelle réservation ${booking.specialty}`,
+        payload: { booking_id: booking.id },
+      }));
+      await sb.from("notifications").insert(notifs);
+    }
+
+    return c.json({ success: true });
+  } catch (e) {
+    console.log("admin/log-booking exception", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
 app.post("/make-server-aa5d1aa6/admin/login", async (c) => {
   const { email, password } = await c.req.json();
   if (email === "admin@carelink.ma" && password === "CareLinkAdmin2024!") {
