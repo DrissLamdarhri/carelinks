@@ -40,19 +40,22 @@ export async function notifyAdminNewBooking(booking: Booking): Promise<void> {
       alertLevel = "high";
     }
 
-    // Skip client-side insert into admin_booking_logs: Row-Level Security prevents non-admin clients from inserting.
-    // The database trigger `booking_created_trigger` will log new bookings server-side.
-    // Keep broadcasting a realtime notification so admins see the new booking immediately.
-    // (Removing the insert avoids the 42501 RLS violation.)
-
-    await broadcastAdminNotification({
-      type: "new_booking",
-      booking_id: booking.id,
-      specialty: booking.specialty,
-      is_psychologist: isPsychologist,
-      alert_level: alertLevel,
-      timestamp: new Date().toISOString(),
-    });
+    // Call server-side function to ensure admin logs & notifications are created (service role write, respects RLS)
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = (data as any)?.session?.access_token;
+      const fnUrl = `${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/admin/log-booking`;
+      await fetch(fnUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({ booking_id: booking.id }),
+      });
+    } catch (e) {
+      console.error("Erreur en appelant la function log-booking:", e);
+    }
   } catch (error) {
     console.error("Erreur lors de la notification admin:", error);
   }
