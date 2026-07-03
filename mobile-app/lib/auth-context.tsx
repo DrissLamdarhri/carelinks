@@ -88,7 +88,7 @@ interface AuthContextValue {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
   verifyMfaTotp: (code: string, factorId?: string) => Promise<void>;
@@ -396,13 +396,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { role: p?.role ?? intendedRole, mfaRequired };
   };
 
-  // ── Email/password sign-up ──────────────────────────────────────────────────
   const signUpWithEmail = async (
     email: string,
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", role);
     console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
@@ -456,6 +455,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             years_experience: options?.experience ? parseInt(options.experience) : 0,
           });
         if (professionalError) throw professionalError;
+        
+        // Insert documents if provided
+        if (options?.documents && options.documents.length > 0) {
+          try {
+            const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/server`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                professional_id: data.user.id,
+                documents: options.documents,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              console.error("[Auth] Error inserting documents:", result.error);
+            } else {
+              console.log("[Auth] Documents inserted successfully");
+            }
+          } catch (e) {
+            console.error("[Auth] Exception inserting documents:", e);
+          }
+        }
       }
     }
   };

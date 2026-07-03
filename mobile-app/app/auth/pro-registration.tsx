@@ -69,10 +69,13 @@ export default function ProRegistrationScreen() {
 
   const [diploma, setDiploma] = useState(false);
   const [diplomaUrl, setDiplomaUrl] = useState<string | null>(null);
+  const [diplomaPath, setDiplomaPath] = useState<string | null>(null);
   const [cin, setCin] = useState(false);
   const [cinUrl, setCinUrl] = useState<string | null>(null);
+  const [cinPath, setCinPath] = useState<string | null>(null);
   const [selfie, setSelfie] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
+  const [selfiePath, setSelfiePath] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrDone, setOcrDone] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -116,10 +119,11 @@ export default function ProRegistrationScreen() {
           setUploading(null);
           return;
         }
-        const url = await uploadSelfieToSupabase(form.email || "user", photo.uri);
-        if (url) {
+        const result = await uploadSelfieToSupabase(form.email || "user", photo.uri);
+        if (result) {
           setSelfie(true);
-          setSelfieUrl(url);
+          setSelfieUrl(result.url);
+          setSelfiePath(result.path);
           showToast("Selfie téléchargé avec succès.");
         }
       } else {
@@ -129,15 +133,17 @@ export default function ProRegistrationScreen() {
           setUploading(null);
           return;
         }
-        const url = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
-        if (url) {
+        const result = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
+        if (result) {
           if (type === "diploma") {
             setDiploma(true);
-            setDiplomaUrl(url);
+            setDiplomaUrl(result.url);
+            setDiplomaPath(result.path);
             showToast("Diplôme téléchargé avec succès.");
           } else if (type === "cin") {
             setCin(true);
-            setCinUrl(url);
+            setCinUrl(result.url);
+            setCinPath(result.path);
             showToast("CIN téléchargée avec succès.");
           }
         }
@@ -184,12 +190,24 @@ export default function ProRegistrationScreen() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
+      const documents = [];
+      if (diplomaPath) {
+        documents.push({ doc_type: getDiplomaTitle(), storage_path: diplomaPath });
+      }
+      if (cinPath) {
+        documents.push({ doc_type: "CIN", storage_path: cinPath });
+      }
+      if (selfiePath) {
+        documents.push({ doc_type: "Selfie", storage_path: selfiePath });
+      }
+      
       await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
         services: selectedServices,
         experience: form.experience.trim(),
+        documents: documents.length > 0 ? documents : undefined,
       });
       setSubmitted(true);
     } catch (error) {

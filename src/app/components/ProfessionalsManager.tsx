@@ -39,12 +39,40 @@ export function ProfessionalsManager() {
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [proDocuments, setProDocuments] = useState<any[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>("all");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   useEffect(() => {
     loadProfessionals();
-  }, [filter, specialtyFilter]);
+    
+    // Subscribe to real-time changes on professionals table
+    const subscription = supabase
+      .channel('professionals_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'professionals' },
+        (payload: any) => {
+          console.log('Professional updated:', payload.new);
+          // Update selected pro if it's the one being updated
+          if (selectedPro && payload.new.id === selectedPro.id) {
+            const updatedPro = {
+              ...selectedPro,
+              verification_status: payload.new.verification_status,
+              rejection_reason: payload.new.rejection_reason,
+            };
+            setSelectedPro(updatedPro);
+          }
+          // Refresh professionals list when status changes
+          loadProfessionals();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [filter, specialtyFilter, selectedPro?.id]);
 
   const loadProfessionals = async () => {
     try {
@@ -123,6 +151,7 @@ export function ProfessionalsManager() {
   };
 
   const loadProDocuments = async (proId: string) => {
+    setDocsLoading(true);
     try {
       const { data, error } = await supabase
         .from("pro_documents")
@@ -166,7 +195,16 @@ export function ProfessionalsManager() {
       } catch (_) {
         setProDocuments([]);
       }
+    } finally {
+      setDocsLoading(false);
     }
+  };
+
+  const openDetailsModal = async (pro: Professional) => {
+    setSelectedPro(pro);
+    setShowDetailsModal(true);
+    // Load documents when modal opens
+    await loadProDocuments(pro.id);
   };
 
   const handleApprovePro = async (pro?: Professional) => {
@@ -552,11 +590,7 @@ export function ProfessionalsManager() {
                           </>
                         )}
                         <button
-                          onClick={async () => {
-                            setSelectedPro(pro);
-                            await loadProDocuments(pro.id);
-                            setShowDetailsModal(true);
-                          }}
+                          onClick={() => openDetailsModal(pro)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
                           title="Voir détails"
                         >
@@ -687,26 +721,39 @@ export function ProfessionalsManager() {
 
                 <div className="mb-3">
                   <p className="text-xs text-[#888780] mb-2" style={{ fontWeight: 600 }}>Documents</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {proDocuments.length === 0 ? (
-                      <p className="text-sm text-[#888780]">Aucun document</p>
-                    ) : (
-                      proDocuments.map((d: any) => (
-                        <button key={d.id} onClick={async () => {
-                          try {
-                            const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
-                            if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-                            else toast.error("Impossible d'ouvrir le document");
-                          } catch (e) {
-                            console.error("Error opening doc:", e);
-                            toast.error("Erreur lors de l'ouverture du document");
-                          }
-                        }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#F3F3F5] rounded-xl text-[12px] hover:bg-[#EDE5CC]">
-                          <FileText size={12} /> {d.doc_type} <ExternalLink size={11} />
-                        </button>
-                      ))
-                    )}
-                  </div>
+                  {docsLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0D0870]"></div>
+                      <span className="ml-2 text-xs text-[#888780]">Chargement des documents...</span>
+                    </div>
+                  ) : proDocuments.length === 0 ? (
+                    <div style={{ background: "#F8F8FC", borderRadius: 12, padding: 12 }}>
+                      <p className="text-sm text-[#888780]">Aucun document téléchargé</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {proDocuments.map((d: any) => (
+                        <div key={d.id} style={{ background: "#F8F8FC", borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{d.doc_type}</p>
+                            <p className="text-xs text-[#888780]">{new Date(d.uploaded_at).toLocaleDateString("fr-FR")}</p>
+                          </div>
+                          <button onClick={async () => {
+                            try {
+                              const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
+                              if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                              else toast.error("Impossible d'ouvrir le document");
+                            } catch (e) {
+                              console.error("Error opening doc:", e);
+                              toast.error("Erreur lors de l'ouverture du document");
+                            }
+                          }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#0D0870] text-white rounded-xl text-[12px] hover:opacity-90" style={{ fontWeight: 600 }}>
+                            <FileText size={12} /> Ouvrir
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

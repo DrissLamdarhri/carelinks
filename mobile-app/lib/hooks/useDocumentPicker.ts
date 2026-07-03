@@ -66,7 +66,7 @@ export async function uploadDocumentToSupabase(
   documentName: string,
   documentType: string,
   bucket: string = "pro-documents"
-): Promise<string | null> {
+): Promise<{ url: string; path: string } | null> {
   try {
     const fileExtension = documentName.split(".").pop() || "pdf";
     const fileName = `${userId}/${Date.now()}-${documentName}`;
@@ -111,7 +111,7 @@ export async function uploadDocumentToSupabase(
       .from(bucket)
       .getPublicUrl(fileName);
 
-    return publicUrl.publicUrl;
+    return { url: publicUrl.publicUrl, path: fileName };
   } catch (error) {
     console.error("Error uploading document:", error);
     const errorMsg = error instanceof Error ? error.message : String(error);

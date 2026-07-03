@@ -6,6 +6,8 @@
 import type { Booking } from "@/lib/db/types";
 import { supabase } from "@/lib/supabase";
 
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
+
 export interface AdminBookingLog {
   id: string;
   booking_id: string;

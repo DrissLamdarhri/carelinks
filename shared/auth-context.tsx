@@ -218,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
@@ -238,6 +238,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           specialty: options?.profession || "nurse",
           years_experience: options?.experience ? parseInt(options.experience) : 0,
         });
+        
+        // Insert documents if provided
+        if (options?.documents && options.documents.length > 0) {
+          try {
+            const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/server`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                professional_id: data.user.id,
+                documents: options.documents,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              console.error("[Auth] Error inserting documents:", result.error);
+            } else {
+              console.log("[Auth] Documents inserted successfully");
+            }
+          } catch (e) {
+            console.error("[Auth] Exception inserting documents:", e);
+          }
+        }
       }
     }
   };

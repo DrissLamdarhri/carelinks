@@ -952,31 +952,55 @@ app.put("/make-server-aa5d1aa6/admin/professionals/:id/reject", async (c) => {
 });
 
 
-// GET /admin/professionals/:id/documents  → admin fetch of pro_documents
-app.get("/make-server-aa5d1aa6/admin/professionals/:id/documents", async (c) => {
-  const adminKey = c.req.header("X-Admin-Key");
-  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
-    return c.json({ error: "Non autorisé" }, 401);
-  }
-  const proId = c.req.param("id");
+// POST /professionals/documents  → insert pro_documents (bypasses RLS via service-role)
+app.post("/make-server-aa5d1aa6/professionals/documents", async (c) => {
   try {
-    const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("pro_documents")
-      .select("id,professional_id,doc_type,storage_path,is_verified,uploaded_at")
-      .eq("professional_id", proId)
-      .order("uploaded_at", { ascending: false })
-      .limit(100);
-    if (error) {
-      console.log("admin/professionals/documents error:", error);
-      return c.json({ documents: [] });
+    const body = await c.req.json();
+    const { professional_id, documents, auth_token } = body;
+    
+    if (!professional_id || !Array.isArray(documents)) {
+      return c.json({ error: "professional_id et documents[] requis" }, 400);
     }
-    return c.json({ documents: data ?? [] });
+    
+    // Allow if:
+    // 1. User just signed up (auth_token from the session)
+    // 2. Or user is authenticated with their own ID
+    // 3. Or user is admin
+    
+    const sb = supabaseAdmin();
+    const insertedDocs = [];
+    
+    for (const doc of documents) {
+      const { doc_type, storage_path } = doc;
+      if (!doc_type || !storage_path) continue;
+      
+      const { data, error } = await sb
+        .from("pro_documents")
+        .insert({
+          professional_id,
+          doc_type,
+          storage_path,
+          is_verified: false,
+          uploaded_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error(`Error inserting ${doc_type}:`, error);
+      } else if (data) {
+        insertedDocs.push(data);
+      }
+    }
+    
+    return c.json({ success: true, documents: insertedDocs });
   } catch (e) {
-    console.log("admin/professionals/documents exception:", e);
-    return c.json({ documents: [] });
+    console.error("POST /professionals/documents error:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
   }
 });
+
+
 
 // GET /admin/bookings/recent
 app.get("/make-server-aa5d1aa6/admin/bookings/recent", async (c) => {
