@@ -62,12 +62,13 @@ inCare/
 
 ## 1. Update `pnpm-workspace.yaml`
 
-```yaml
 packages:
   - '.'
   - 'shared'
-  - 'mobile'
-```
+  - 'mobile-app'
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
 
 ---
 

@@ -253,10 +253,20 @@ end $$;
 
 
 -- =====================================================================
--- BLOCK 5 — Fix RLS policy for profiles update (WITH CHECK clause)
+-- BLOCK 5 — Fix RLS policy for profiles & professionals insert (auth signup)
 -- =====================================================================
 
--- Drop the old policy and recreate it with explicit WITH CHECK
+-- Allow profile inserts during signup (auth.uid() is NULL during auth.users trigger)
+drop policy if exists "profiles_insert" on public.profiles;
+create policy "profiles_insert" on public.profiles
+  for insert with check (true);
+
+-- Allow professionals inserts during signup (same reason)
+drop policy if exists "pros_self_insert" on public.professionals;
+create policy "pros_self_insert" on public.professionals
+  for insert with check (auth.uid() = id OR auth.uid() IS NULL);
+
+-- Recreate update policy
 drop policy if exists "profiles_self_write" on public.profiles;
 create policy "profiles_self_write" on public.profiles 
   for update using (auth.uid() = id) 

@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+// Wrapper: try expo start --tunnel, on failure fallback to expo start --lan
+const { spawn } = require('child_process');
+
+function exec(cmd, args) {
+  return new Promise((resolve) => {
+    const ps = spawn(cmd, args, { shell: true });
+    let out = '';
+    let err = '';
+    ps.stdout.on('data', (d) => {
+      process.stdout.write(d);
+      out += d.toString();
+    });
+    ps.stderr.on('data', (d) => {
+      process.stderr.write(d);
+      err += d.toString();
+    });
+    ps.on('close', (code) => resolve({ code, out, err }));
+    ps.on('error', (e) => resolve({ code: 1, out, err: e.message }));
+  });
+}
+
+(async function main() {
+  console.log('Attempting: expo start --tunnel (will fallback to --lan if tunnel fails)');
+  // Use an explicit fallback port to avoid interactive prompts when 8081 is busy
+  const tryTunnel = await exec('npx', ['expo', 'start', '--tunnel', '--port', '8082']);
+  if (tryTunnel.code === 0) return;
+
+  const combined = (tryTunnel.out || '') + '\n' + (tryTunnel.err || '');
+  if (/ngrok|Cannot read properties of undefined \(reading \'body\'\)|TypeError: Cannot read properties of undefined|Body is unusable: Body has already been read/.test(combined)) {
+    console.warn('\nTunnel startup reported a known failure (ngrok/undici). Falling back to LAN mode...');
+  } else {
+    console.warn('\nexpo start --tunnel exited with code', tryTunnel.code, '- falling back to LAN.');
+  }
+
+  // Run with LAN host (uses package.json "start" conventions if preferred). Use same explicit port.
+  const fallback = await exec('npx', ['expo', 'start', '--lan', '--port', '8082']);
+  if (fallback.code !== 0) {
+    console.error('\nFallback also failed. See output above.');
+    process.exit(fallback.code || 1);
+  }
+})();

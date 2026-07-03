@@ -34,6 +34,7 @@ import {
   mockPatientBooking,
 } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { useAuth } from "@/lib/auth-context";
 import { useCallback } from "react";
 
@@ -55,15 +56,13 @@ export default function PatientHomeScreen() {
     }, [refreshProfile])
   );
   
-  // Use real profile data with fallback to mock data
-  const displayName = profile?.firstName || profile?.lastName 
-    ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
-    : mockPatientProfile.firstName + " " + mockPatientProfile.lastName;
-  
-  const avatarUri = profile?.avatar || DEFAULT_AVATAR;
-  
-  // Use user's city from profile if available
+  // Use real profile data, fallback to mock for display purposes
+  const displayName = {
+    firstName: profile?.firstName || mockPatientProfile.firstName,
+    lastName: profile?.lastName || mockPatientProfile.lastName,
+  };
   const city = profile?.city || mockPatientProfile.city;
+  const avatar = profile?.avatar;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -73,15 +72,16 @@ export default function PatientHomeScreen() {
 
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image 
-              key={avatarUri} 
-              source={typeof avatarUri === 'string' ? { uri: avatarUri } : avatarUri} 
-              style={styles.avatar} 
-            />
+              <AvatarWithDefault
+                avatarUrl={avatar}
+                size={44}
+                borderRadius={22}
+                useDefaultImage={!avatar}
+              />
             <View>
               <Text style={styles.greeting}>Bonjour 👋</Text>
               <Text style={styles.userName}>
-                {displayName}
+                {displayName.firstName} {displayName.lastName}
               </Text>
             </View>
           </View>

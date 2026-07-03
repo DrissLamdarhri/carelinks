@@ -28,6 +28,7 @@ import { Colors, KineColors } from "@/lib/colors";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
@@ -190,6 +191,12 @@ export default function PatientRequestScreen() {
 
       if (gps) {
         await geo.setBookingLocation(booking.id, gps.lat, gps.lng);
+      }
+
+      try {
+        await notifyAdminNewBooking(booking);
+      } catch (err) {
+        console.error("notifyAdminNewBooking failed:", err);
       }
 
       router.push(`/patient/waiting/${booking.id}`);

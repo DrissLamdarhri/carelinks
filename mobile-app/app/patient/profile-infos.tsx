@@ -9,14 +9,16 @@ import {
   View,
   Image,
 } from "react-native";
+import { ArrowLeft, Calendar, MapPin, Phone, User, Edit3 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
-import { ArrowLeft, Calendar, MapPin, Phone, User, Camera } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { storage } from "@/lib/db/storage";
 import { showToast } from "@/lib/toast";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const genderOptions = [
   { label: "Femme", value: "female" },
@@ -111,6 +113,32 @@ export default function PatientProfileInfosScreen() {
   const fullName = useMemo(() => `${firstName} ${lastName}`.trim(), [firstName, lastName]);
   const validDob = !dob || /^\d{4}-\d{2}-\d{2}$/.test(dob.trim());
 
+  const handleUploadAvatar = async () => {
+    if (!user?.id) return;
+    
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (!avatarUrl) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const success = await updateProfileAvatar(user.id, avatarUrl);
+      if (success) {
+        await refreshProfile();
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user?.id || saving) return;
     if (!fullName) {
@@ -159,30 +187,30 @@ export default function PatientProfileInfosScreen() {
       ) : null}
 
       {!loading ? (
-        <>
+        <View style={styles.card}>
           <View style={styles.avatarSection}>
-            <View style={styles.avatarContainer}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
-              ) : (
-                <Image source={DEFAULT_AVATAR} style={styles.avatar} />
-              )}
-              <TouchableOpacity 
-                style={styles.changeAvatarBtn}
-                onPress={handlePickImage}
+            <View style={styles.avatarWrap}>
+              <AvatarWithDefault
+                avatarUrl={profile?.avatar}
+                initials={profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?"}
+                size={80}
+                borderRadius={40}
+                useDefaultImage={!profile?.avatar}
+              />
+              <TouchableOpacity
+                style={styles.avatarEditBtn}
+                onPress={handleUploadAvatar}
                 disabled={uploadingAvatar}
               >
                 {uploadingAvatar ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Camera size={14} color="white" />
+                  <Edit3 size={12} color="white" />
                 )}
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarHint}>Appuyez pour changer votre photo</Text>
+            <Text style={styles.avatarLabel}>Cliquez pour changer votre photo</Text>
           </View>
-
-          <View style={styles.card}>
           <Text style={styles.label}>Prénom</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
@@ -261,7 +289,6 @@ export default function PatientProfileInfosScreen() {
             })}
           </View>
         </View>
-        </>
       ) : null}
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -328,6 +355,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0F0F0",
     marginBottom: 12,
+  },
+  avatarSection: {
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  avatarWrap: {
+    position: "relative",
+    marginBottom: 12,
+  },
+  avatarEditBtn: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "white",
+  },
+  avatarLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
   },
   label: { color: Colors.textMuted, fontSize: 12, fontWeight: "600", marginBottom: 6, marginTop: 10 },
   inputWrap: {

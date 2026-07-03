@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import {
   ChevronRight,
   CreditCard,
@@ -16,6 +16,8 @@ import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
+import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuSections: Array<{
   title: string;
@@ -48,6 +50,7 @@ export default function PatientProfileScreen() {
   const [bookingsCount, setBookingsCount] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
   const [avgRating, setAvgRating] = useState<string>("—");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Refresh profile when screen comes into focus
   useFocusEffect(
@@ -73,6 +76,32 @@ export default function PatientProfileScreen() {
     void loadStats();
   }, [user?.id]);
 
+  const handleUploadAvatar = async () => {
+    if (!user?.id) return;
+    
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (!avatarUrl) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const success = await updateProfileAvatar(user.id, avatarUrl);
+      if (success) {
+        await refreshProfile();
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const displayName = profile
     ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
     : "Mon profil";
@@ -80,6 +109,7 @@ export default function PatientProfileScreen() {
   const email = profile?.email || "—";
   const phone = profile?.phone || "—";
   const city = profile?.city || "—";
+  const initials = profile ? `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}` : "?";
 
   const spentLabel = useMemo(() => {
     return totalSpent.toLocaleString("fr-MA");
@@ -95,16 +125,23 @@ export default function PatientProfileScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            <Image
-              source={avatar ? { uri: avatar } : DEFAULT_AVATAR}
-              style={styles.avatar}
-              resizeMode="cover"
+            <AvatarWithDefault
+              avatarUrl={avatar}
+              initials={initials}
+              size={64}
+              borderRadius={32}
+              useDefaultImage={!avatar}
             />
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => router.push("/patient/profile-infos")}
+              onPress={handleUploadAvatar}
+              disabled={uploadingAvatar}
             >
-              <Edit3 size={10} color="white" />
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Edit3 size={10} color="white" />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -196,7 +233,6 @@ const styles = StyleSheet.create({
   },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
-  avatar: { width: 64, height: 64, borderRadius: 32 },
   editBtn: {
     position: "absolute",
     right: -1,

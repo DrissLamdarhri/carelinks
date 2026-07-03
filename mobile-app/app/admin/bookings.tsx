@@ -19,6 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { supabase } from "@/lib/supabase";
 import { fetchAdminBookings, fetchPriorityBookings, fetchBookingStats } from "@/lib/admin/booking-notifications";
 import type { AdminBookingLog } from "@/lib/admin/booking-notifications";
 
@@ -58,9 +59,35 @@ export default function AdminBookingsScreen() {
 
   useEffect(() => {
     loadData();
-    // Recharge les données toutes les 30 secondes
+    // Recharge les données toutes les 30 secondes (fallback)
     const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+
+    // Realtime subscription to admin_booking_logs for instant updates
+    const channel = supabase
+      .channel("admin-booking-logs")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_booking_logs" },
+        (payload) => {
+          setBookings((prev) => {
+            if (payload.eventType === "INSERT") return [payload.new as AdminBookingLog, ...prev];
+            if (payload.eventType === "UPDATE") return prev.map((row) => (row.id === (payload.new as AdminBookingLog).id ? (payload.new as AdminBookingLog) : row));
+            if (payload.eventType === "DELETE") return prev.filter((row) => row.id !== (payload.old as AdminBookingLog).id);
+            return prev;
+          });
+
+          // Update stats live (best-effort)
+          void fetchBookingStats()
+            .then((s) => setStats(s))
+            .catch((e) => console.error("fetchBookingStats error:", e));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleRefresh = async () => {

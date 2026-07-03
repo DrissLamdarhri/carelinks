@@ -23,6 +23,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "updates": {
+      "enabled": false,
+      "url": "",
+      "fallbackToCacheTimeout": 0,
+      "checkOnLaunch": "never"
     }
   }
 }

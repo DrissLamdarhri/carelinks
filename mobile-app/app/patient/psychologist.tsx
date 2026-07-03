@@ -1,8 +1,12 @@
 import { useState, useMemo } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, MapPin, MessageCircle, Star, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useAuth } from "@/lib/auth-context";
+import { db } from "@/lib/db/dal";
+import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
+import { geo } from "@/lib/db/geo";
 
 function buildDates() {
   const result: { day: string; num: string; month: string; isoDate: string }[] = [];
@@ -40,6 +44,8 @@ const consultTypes = [
 
 export default function PsychologistBookingScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [confirming, setConfirming] = useState(false);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
   const [selectedDay, setSelectedDay] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -58,6 +64,52 @@ export default function PsychologistBookingScreen() {
   }, [dates]);
 
   const canConfirm = selectedSlot !== null;
+
+  const handleReservePsych = async () => {
+    if (!user?.id) {
+      Alert.alert("Erreur", "Veuillez vous connecter pour réserver");
+      return;
+    }
+    if (!canConfirm) return;
+    setConfirming(true);
+    try {
+      const slotTime = selectedSlot !== null ? slots[selectedSlot].time : "09:00";
+      const [hour, minute] = slotTime.split(":");
+      const scheduledAt = new Date(`${dates[selectedDay].isoDate}T${hour}:${minute}:00`).toISOString();
+
+      const booking = await db.bookings.create({
+        patient_id: user.id,
+        specialty: "psychologist",
+        status: "matched",
+        urgency: "normal",
+        scheduled_at: scheduledAt,
+        address: "Meknès, Maroc",
+        notes: `Réservation psychologue — ${consultType}`,
+        budget_min_mad: 150,
+        budget_max_mad: 200,
+        final_price_mad: 200,
+      });
+
+      try {
+        await notifyAdminNewBooking(booking);
+      } catch (err) {
+        console.error("notifyAdminNewBooking failed:", err);
+      }
+
+      Alert.alert("✅ Réservation confirmée!", "La réservation a été envoyée à l'administrateur.", [
+        {
+          text: "Voir mes réservations",
+          onPress: () => router.push("/patient/bookings"),
+        },
+        { text: "Fermer", onPress: () => {} },
+      ]);
+    } catch (err) {
+      console.error("Erreur lors de la réservation psy:", err);
+      Alert.alert("Erreur", "Impossible de créer la réservation. Essayez plus tard.");
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -215,13 +267,17 @@ export default function PsychologistBookingScreen() {
 
       <View style={styles.footer}>
         <TouchableOpacity
-          disabled={!canConfirm}
-          onPress={() => router.push("/patient/request?service=psy")}
-          style={[styles.confirmBtn, !canConfirm && styles.confirmBtnDisabled]}
+          disabled={!canConfirm || confirming}
+          onPress={handleReservePsych}
+          style={[styles.confirmBtn, (!canConfirm || confirming) && styles.confirmBtnDisabled]}
         >
-          <Text style={[styles.confirmBtnText, !canConfirm && styles.confirmBtnTextDisabled]}>
-            Confirmer — 200 MAD
-          </Text>
+          {confirming ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={[styles.confirmBtnText, (!canConfirm || confirming) && styles.confirmBtnTextDisabled]}>
+              Confirmer — 200 MAD
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
