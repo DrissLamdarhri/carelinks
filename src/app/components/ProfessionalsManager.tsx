@@ -69,8 +69,32 @@ export function ProfessionalsManager() {
       )
       .subscribe();
 
+    // Fallback: Listen to CustomEvent from AdminPanel for immediate UI updates
+    const handleProStatusChanged = (event: any) => {
+      console.log('CustomEvent pro-status-changed received:', event.detail);
+      const { id, status } = event.detail;
+      
+      // Update professionals list optimistically
+      setProfessionals((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, verification_status: status } : p
+        )
+      );
+      
+      // Update selected professional if it's the one changed
+      if (selectedPro && selectedPro.id === id) {
+        setSelectedPro((s) => s ? { ...s, verification_status: status } : s);
+      }
+      
+      // Refresh in background after a short delay
+      setTimeout(() => loadProfessionals(), 500);
+    };
+    
+    window.addEventListener('pro-status-changed', handleProStatusChanged);
+
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('pro-status-changed', handleProStatusChanged);
     };
   }, [filter, specialtyFilter, selectedPro?.id]);
 
