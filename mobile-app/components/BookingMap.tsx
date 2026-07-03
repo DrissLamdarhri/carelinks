@@ -81,10 +81,20 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
             </View>
           </View>
           <View style={list.cardActions}>
-            <TouchableOpacity style={[list.reserveBtn, { backgroundColor: color }]}>
+            <TouchableOpacity
+              style={[list.reserveBtn, { backgroundColor: color }]}
+              onPress={() => {
+                try { 
+                  // notify parent that user wants to reserve this demo pro
+                  // (parent handles booking creation / navigation)
+                  // @ts-ignore
+                  typeof propsOnReserve !== 'undefined' && propsOnReserve(pro.id);
+                } catch (e) {}
+              }}
+            >
               <Text style={list.reserveBtnText}>Réserver</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[list.profileBtn, { borderColor: color + "44" }]}>
+            <TouchableOpacity style={[list.profileBtn, { borderColor: color + "44" }]}> 
               <Text style={[list.profileBtnText, { color }]}>Profil</Text>
             </TouchableOpacity>
           </View>
@@ -122,7 +132,10 @@ export type BookingMapProps = {
   pros?: ProPinData[];
   height?: number;
   showProList?: boolean;
+  // called when user taps "Réserver" on a listed pro (demo/demo-mode)
+  onReserve?: (proId: string) => void;
 };
+
 
 export function BookingMap({
   initialLat = MAP_CENTER.lat,
@@ -133,6 +146,7 @@ export function BookingMap({
   pros,
   height = MAP_H,
   showProList = true,
+  onReserve: propsOnReserve,
 }: BookingMapProps) {
   const vw = SCREEN_W;
   const vh = height;

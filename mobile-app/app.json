@@ -6,26 +6,24 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#0D0870"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ma.carelink.app"
     },
     "android": {
-      "package": "ma.carelink.app"
+      "package": "ma.carelink.app",
+      "versionCode": 1
     },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-location",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true
     }
   }
 }
+

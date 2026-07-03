@@ -385,10 +385,10 @@ export function CareLinkMap({
             <Path
               d={`M ${proPt.x.toFixed(1)} ${proPt.y.toFixed(1)} L ${markerPt.x.toFixed(1)} ${markerPt.y.toFixed(1)}`}
               fill="none"
-              stroke={Colors.primary}
-              strokeWidth={3}
-              strokeDasharray="8 5"
-              strokeOpacity={0.45}
+              stroke="#6B46C1"
+              strokeWidth={4}
+              strokeDasharray="6 6"
+              strokeOpacity={0.75}
               strokeLinecap="round"
             />
           )}

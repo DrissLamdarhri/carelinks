@@ -203,7 +203,16 @@ export default function PatientRequestScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.mapZone}>
-        <BookingMap radiusKm={5} onChange={(lat, lng) => setCoords({ lat, lng })} />
+        <BookingMap
+          radiusKm={5}
+          onChange={(lat, lng) => setCoords({ lat, lng })}
+          onReserve={(proId) => {
+            // Demo reservation flow: create a short demo booking id and navigate to waiting/tracking
+            const mockBookingId = `demo-${serviceKey}-${proId}-${Date.now()}`;
+            // Slight delay for UX smoothness
+            setTimeout(() => router.push(`/patient/waiting/${mockBookingId}`), 250);
+          }}
+        />
 
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

@@ -30,7 +30,10 @@ export default function ProLayout() {
     href: null,
     tabBarStyle: { display: "none" },
   } as const;
-
+  const hiddenFullScreenOptions = {
+      ...hiddenTabOptions,
+      tabBarStyle: { display: "none" },
+    } as const;
   return (
     <Tabs
       screenOptions={{
@@ -100,23 +103,23 @@ export default function ProLayout() {
       <Tabs.Screen
         name="bids"
         options={{
-          ...hiddenTabOptions,
+          ...hiddenFullScreenOptions,
         }}
       />
       <Tabs.Screen
         name="documents"
         options={{
-          ...hiddenTabOptions,
+          ...hiddenFullScreenOptions,
         }}
       />
       <Tabs.Screen
         name="kyc"
         options={{
-          ...hiddenTabOptions,
+          ...hiddenFullScreenOptions,
         }}
       />
-      <Tabs.Screen name="profile-infos" options={hiddenTabOptions} />
-      <Tabs.Screen name="notifications" options={hiddenTabOptions} />
+      <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
     </Tabs>
   );
 }

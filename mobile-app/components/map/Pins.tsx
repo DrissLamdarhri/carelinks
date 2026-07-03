@@ -34,7 +34,7 @@ function Stars({ rating }: { rating: number }) {
 }
 
 // ── Patient pin (native-driven halo pulse) ────────────────────────────────────
-export function PatientPin({ color = NAVY }: { color?: string }) {
+export function PatientPin({ color = NAVY, label = "Vous" }: { color?: string, label?: string }) {
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -57,6 +57,15 @@ export function PatientPin({ color = NAVY }: { color?: string }) {
         pointerEvents="none"
         style={[pat.halo, { borderColor: color, transform: [{ scale: haloScale }], opacity: haloOpacity }]}
       />
+
+      {label ? (
+       <View style={pat.labelWrap} pointerEvents="none">
+         <View style={[pat.labelPill, { backgroundColor: "#FFFFFF" }]}>
+           <Text style={pat.labelText}>{label}</Text>
+         </View>
+       </View>
+      ) : null}
+
       <View style={[pat.mid, { backgroundColor: color + "16" }]} />
       <View style={[pat.body, { backgroundColor: color }]}>
         <View style={pat.innerDot} />
@@ -70,6 +79,9 @@ export function PatientPin({ color = NAVY }: { color?: string }) {
 const pat = StyleSheet.create({
   wrap: { alignItems: "center", width: 36, height: 54 },
   halo: { position: "absolute", width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, top: -4, left: -5 },
+  labelWrap: { position: "absolute", top: -26, width: 80, alignItems: "center" },
+  labelPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+  labelText: { fontSize: 10, fontWeight: "700", color: "#111" },
   mid: { position: "absolute", width: 34, height: 34, borderRadius: 17, top: 1, left: 1 },
   body: {
     width: 30, height: 30, borderRadius: 15, borderBottomRightRadius: 4,
@@ -200,12 +212,18 @@ export const ProPin = React.memo(function ProPin({ pro, isSelected, onSelect }: 
           <PulseRing color={color + "70"} baseSize={66} delay={0} />
           <PulseRing color={color + "50"} baseSize={66} delay={650} />
 
-          <Animated.View style={[pin.circle, { backgroundColor: color, transform: [{ scale: scaleV }] }]}>
-            {pro.avatarUrl ? (
-              <Image source={{ uri: pro.avatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            ) : (
-              <Text style={pin.circleText}>{pro.initials}</Text>
-            )}
+          <Animated.View style={[pin.circle, { backgroundColor: color + "22", transform: [{ scale: scaleV }] }]}>
+            <View style={pin.avatarInner}>
+              {pro.avatarUrl ? (
+                <Image source={{ uri: pro.avatarUrl }} style={pin.avatarImg} resizeMode="cover" />
+              ) : (
+                <Text style={pin.circleText}>{pro.initials}</Text>
+              )}
+            </View>
+
+            {/* Purple rim when en-route (visual emphasis for tracking) */}
+            {pro.isEnRoute ? <View style={pin.avatarRim} pointerEvents="none" /> : null}
+
             <View style={[pin.badge, { backgroundColor: badge === "cyan" ? "#5BB8D4" : GREEN }]}>
               {badge === "cyan" ? <View style={pin.badgeDot} /> : <Text style={pin.badgeCheck}>✓</Text>}
             </View>
@@ -256,11 +274,20 @@ const pin = StyleSheet.create({
   circleWrap: { width: 50, height: 50, alignItems: "center", justifyContent: "center", position: "relative" },
   pulseRing: { position: "absolute", borderWidth: 1.5 },
   circle: {
-    width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center",
-    borderWidth: 2.5, borderColor: "#FFFFFF", overflow: "hidden",
-    shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5,
+    width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+    // subtle outer rim (handled by avatarInner), keep light bg for degraded cases
+    borderWidth: 0, overflow: "visible",
+    shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
-  circleText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  avatarInner: {
+    width: 48, height: 48, borderRadius: 24, overflow: "hidden",
+    borderWidth: 3, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center",
+    backgroundColor: "#F0F0F0",
+    shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  },
+  avatarImg: { width: "100%", height: "100%" },
+  avatarRim: { position: "absolute", width: 58, height: 58, borderRadius: 29, borderWidth: 2, borderColor: "#6B46C1", top: -1, left: -1 },
+  circleText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", backgroundColor: "transparent" },
 
   badge: {
     position: "absolute", bottom: -1, right: -1, width: 16, height: 16, borderRadius: 8,

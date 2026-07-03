@@ -1,0 +1,37 @@
+{
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    },
+    "preview2": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview3": {
+      "displayName": "preview3",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "aab"
+      }
+    }
+  },
+  "cli": {
+    "version": ">= 5.0.0"
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccount": "~/.android/fastlane/keyfile.json",
+        "track": "internal"
+      }
+    }
+  }
+}
