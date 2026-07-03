@@ -264,15 +264,13 @@ export function AdminPanel() {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      // Also fetch recent yoga bookings directly from bookings (fallback if admin logs missing)
-      const sinceBookings = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      // Also fetch all yoga bookings directly from bookings (fallback if admin logs missing)
       const { data: bookingsYoga } = await supabase
         .from("bookings")
         .select("id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,final_price_mad,budget_max_mad,created_at")
         .eq("specialty", "yoga_instructor")
-        .gte("created_at", sinceBookings)
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(2000);
 
       // Merge admin logs + bookingsYoga, preferring admin log when present
       const mergedByBookingId = new Map();
