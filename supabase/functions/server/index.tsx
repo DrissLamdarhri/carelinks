@@ -951,6 +951,33 @@ app.put("/make-server-aa5d1aa6/admin/professionals/:id/reject", async (c) => {
   return c.json({ success: true });
 });
 
+
+// GET /admin/professionals/:id/documents  → admin fetch of pro_documents
+app.get("/make-server-aa5d1aa6/admin/professionals/:id/documents", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  const proId = c.req.param("id");
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("pro_documents")
+      .select("id,professional_id,doc_type,storage_path,is_verified,uploaded_at")
+      .eq("professional_id", proId)
+      .order("uploaded_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      console.log("admin/professionals/documents error:", error);
+      return c.json({ documents: [] });
+    }
+    return c.json({ documents: data ?? [] });
+  } catch (e) {
+    console.log("admin/professionals/documents exception:", e);
+    return c.json({ documents: [] });
+  }
+});
+
 // GET /admin/bookings/recent
 app.get("/make-server-aa5d1aa6/admin/bookings/recent", async (c) => {
   const adminKey = c.req.header("X-Admin-Key");

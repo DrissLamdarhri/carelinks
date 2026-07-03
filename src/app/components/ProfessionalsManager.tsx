@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { approvePro, rejectPro } from "../../lib/api";
+import { approvePro, rejectPro, getProDocumentsAdmin } from "../../lib/api";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
 type Professional = {
@@ -126,17 +126,46 @@ export function ProfessionalsManager() {
     try {
       const { data, error } = await supabase
         .from("pro_documents")
-        .select("id,doc_type,storage_path,is_verified")
-        .eq("professional_id", proId);
+        .select("id,doc_type,storage_path,is_verified,uploaded_at")
+        .eq("professional_id", proId)
+        .order("uploaded_at", { ascending: false });
+
       if (error) {
-        console.error("Error fetching pro documents:", error);
-        setProDocuments([]);
-        return;
+        console.warn("Error fetching pro documents via RLS:", error);
+        // Try admin API fallback
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          setProDocuments(res.documents ?? []);
+          return;
+        } catch (apiErr) {
+          console.error("Admin API pro documents error:", apiErr);
+          setProDocuments([]);
+          return;
+        }
       }
+
+      if (!data || data.length === 0) {
+        // Fallback in case RLS filtered results
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          if (res.documents && res.documents.length > 0) {
+            setProDocuments(res.documents);
+            return;
+          }
+        } catch (apiErr) {
+          // ignore
+        }
+      }
+
       setProDocuments(data ?? []);
     } catch (e) {
       console.error("Error loading pro documents:", e);
-      setProDocuments([]);
+      try {
+        const res = await getProDocumentsAdmin(proId);
+        setProDocuments(res.documents ?? []);
+      } catch (_) {
+        setProDocuments([]);
+      }
     }
   };
 
@@ -145,13 +174,20 @@ export function ProfessionalsManager() {
     if (!target) return;
     setActionLoading(true);
     try {
-      const { error: updateError } = await supabase
-        .from("professionals")
-        .update({
-          verification_status: "approved",
-          verified_at: new Date().toISOString(),
-        })
-        .eq("id", target.id);
+      const nowIso = new Date().toISOString();
+      let updateError: any = null;
+      try {
+        const { error } = await supabase
+          .from("professionals")
+          .update({
+            verification_status: "approved",
+            verified_at: nowIso,
+          })
+          .eq("id", target.id);
+        updateError = error;
+      } catch (e) {
+        updateError = e;
+      }
 
       if (updateError) {
         // fallback to admin API if direct update blocked by RLS
@@ -162,14 +198,29 @@ export function ProfessionalsManager() {
         }
       }
 
+      // Optimistic UI update
+      setProfessionals((prev) =>
+        prev.map((p) =>
+          p.id === target.id ? { ...p, verification_status: "approved", verified_at: nowIso } : p
+        )
+      );
+      if (selectedPro?.id === target.id) {
+        setSelectedPro((s) => (s ? { ...s, verification_status: "approved", verified_at: nowIso } : s));
+      }
+
       // Mark documents verified as well (best-effort)
-      const { error: docsErr } = await supabase.from("pro_documents").update({ is_verified: true }).eq("professional_id", target.id);
-      if (docsErr) console.warn("Failed to mark docs verified:", docsErr);
+      try {
+        const { error: docsErr } = await supabase.from("pro_documents").update({ is_verified: true }).eq("professional_id", target.id);
+        if (docsErr) console.warn("Failed to mark docs verified:", docsErr);
+      } catch (e) {
+        console.warn("Failed to mark docs verified:", e);
+      }
 
       await sendApprovalNotification(target);
 
       toast.success(`${target.full_name} a été approuvé(e)`);
       setShowDetailsModal(false);
+      // refresh list in background
       loadProfessionals();
     } catch (error) {
       console.error("Error approving professional:", error);
@@ -186,13 +237,19 @@ export function ProfessionalsManager() {
     }
     setActionLoading(true);
     try {
-      const { error: updateError } = await supabase
-        .from("professionals")
-        .update({
-          verification_status: "rejected",
-          rejection_reason: rejectReason,
-        })
-        .eq("id", selectedPro.id);
+      let updateError: any = null;
+      try {
+        const { error } = await supabase
+          .from("professionals")
+          .update({
+            verification_status: "rejected",
+            rejection_reason: rejectReason,
+          })
+          .eq("id", selectedPro.id);
+        updateError = error;
+      } catch (e) {
+        updateError = e;
+      }
 
       if (updateError) {
         try {
@@ -201,6 +258,14 @@ export function ProfessionalsManager() {
           throw updateError;
         }
       }
+
+      // Optimistic UI update
+      setProfessionals((prev) =>
+        prev.map((p) =>
+          p.id === selectedPro.id ? { ...p, verification_status: "rejected", rejection_reason: rejectReason } : p
+        )
+      );
+      setSelectedPro((s) => (s ? { ...s, verification_status: "rejected", rejection_reason: rejectReason } : s));
 
       await sendRejectionNotification(selectedPro, rejectReason);
 

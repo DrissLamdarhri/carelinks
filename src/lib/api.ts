@@ -188,6 +188,10 @@ export async function getPendingPros() {
   return fetchAPI("/admin/professionals/pending", {}, true);
 }
 
+export async function getProDocumentsAdmin(proId: string) {
+  return fetchAPI(`/admin/professionals/${proId}/documents`, {}, true);
+}
+
 export async function approvePro(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/approve`, { method: "PUT" }, true);
 }
