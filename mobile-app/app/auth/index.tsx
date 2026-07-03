@@ -62,23 +62,27 @@ export default function OnboardingScreen() {
             <View style={styles.logoLine} />
           </View>
 
-          {/* Swipeable slides (pagingEnabled for finger scrolling) */}
+          {/* Swipeable slides with improved finger scrolling */}
           <ScrollView
             horizontal
             pagingEnabled
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            snapToInterval={Dimensions.get("window").width - 48}
+            snapToAlignment="center"
             showsHorizontalScrollIndicator={false}
             ref={scrollRef}
             onMomentumScrollEnd={(e) => {
-              const w = Dimensions.get("window").width;
+              const w = Dimensions.get("window").width - 48;
               const page = Math.round(e.nativeEvent.contentOffset.x / w);
-              setStep(page);
+              setStep(Math.min(page, onboardingSlides.length - 1));
             }}
-            contentContainerStyle={{ alignItems: "center" }}
+            contentContainerStyle={{ alignItems: "center", paddingHorizontal: 24 }}
           >
             {onboardingSlides.map((s) => {
               const SlideIcon = iconMap[s.icon];
               return (
-                <View key={s.id} style={{ width: Dimensions.get("window").width - 48, alignItems: "center", paddingHorizontal: 24 }}>
+                <View key={s.id} style={{ width: Dimensions.get("window").width - 48, alignItems: "center" }}>
                   <View style={styles.iconCard}>
                     <SlideIcon size={36} color="white" />
                   </View>
