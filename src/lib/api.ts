@@ -200,6 +200,34 @@ export async function rejectPro(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/reject`, { method: "PUT" }, true);
 }
 
+export async function sendApprovalEmail(email: string, name: string, specialty?: string) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-approval-email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ email, name, specialty }),
+  });
+  return res.json();
+}
+
+export async function sendRejectionEmail(email: string, name: string, reason?: string) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejection-email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ email, name, reason }),
+  });
+  return res.json();
+}
+
 export async function getRecentBookings() {
   return fetchAPI("/admin/bookings/recent", {}, true);
 }
