@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { getAdminStats, getPendingPros, approvePro, rejectPro } from "../../lib/api";
+import { getAdminStats, getPendingPros, approvePro, rejectPro, sendApprovalEmail, sendRejectionEmail, getAdminServices, createAdminService, updateAdminService, deleteAdminService } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
@@ -29,7 +29,7 @@ type AdminTab = "dashboard" | "users" | "professionals" | "services" | "yoga" | 
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
-  id: number; name: string; category: ServiceCategory; icon: string;
+  id: number | string; name: string; category: ServiceCategory; icon: string;
   basePrice: number; duration: number; description: string; active: boolean;
 };
 
@@ -104,6 +104,32 @@ export function AdminPanel() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [sessions, setSessions] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>(initialServices);
+
+  // Load canonical services from public.services (keeps admin UI in sync with mobile)
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await getAdminServices().catch(() => ({ services: [] }));
+        const data = res.services ?? res ?? [];
+        if (!mounted) return;
+        setServices((data ?? []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          category: (s.category as ServiceCategory) ?? "Autre",
+          icon: s.icon ?? "stethoscope",
+          basePrice: s.base_price ?? s.basePrice ?? 0,
+          duration: s.duration ?? 30,
+          description: s.description ?? "",
+          active: s.is_active ?? s.active ?? true,
+        })));
+      } catch (err) {
+        console.warn("AdminPanel: error loading services", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [isAdminAuthed]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState<Omit<Service, "id">>({
@@ -481,31 +507,136 @@ export function AdminPanel() {
     setServiceForm(rest);
     setShowServiceModal(true);
   };
-  const saveService = () => {
+  const saveService = async () => {
     if (!serviceForm.name.trim()) return;
-    if (editingService) {
-      setServices(services.map((s) => s.id === editingService.id ? { ...serviceForm, id: editingService.id } : s));
-    } else {
-      setServices([...services, { ...serviceForm, id: Date.now() }]);
+    try {
+      if (editingService) {
+        const payload = {
+          name: serviceForm.name,
+          category: serviceForm.category,
+          icon: serviceForm.icon,
+          base_price: serviceForm.basePrice,
+          duration: serviceForm.duration,
+          description: serviceForm.description,
+          is_active: serviceForm.active,
+        };
+        await updateAdminService(editingService.id, payload);
+        setServices((prev) => prev.map((s) => s.id === editingService.id ? { ...s, ...{ name: payload.name, category: payload.category, icon: payload.icon ?? s.icon, basePrice: payload.base_price, duration: payload.duration, description: payload.description, active: payload.is_active } } : s));
+        toast.success("Service mis à jour");
+      } else {
+        const payload = {
+          name: serviceForm.name,
+          category: serviceForm.category,
+          icon: serviceForm.icon,
+          base_price: serviceForm.basePrice,
+          duration: serviceForm.duration,
+          description: serviceForm.description,
+          is_active: serviceForm.active,
+        };
+        const res = await createAdminService(payload);
+        const newServiceRaw = (res && (res.service || res)) ?? { ...payload, id: Date.now() };
+        const normalized = {
+          id: newServiceRaw.id,
+          name: newServiceRaw.name,
+          category: newServiceRaw.category,
+          icon: newServiceRaw.icon ?? "stethoscope",
+          basePrice: newServiceRaw.base_price ?? newServiceRaw.basePrice ?? 0,
+          duration: newServiceRaw.duration ?? 30,
+          description: newServiceRaw.description ?? "",
+          active: newServiceRaw.is_active ?? newServiceRaw.active ?? true,
+        };
+        setServices((prev) => [...prev, normalized]);
+        toast.success("Service créé");
+      }
+      setShowServiceModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur en sauvegardant le service');
     }
-    setShowServiceModal(false);
   };
-  const deleteService = (id: number) => setServices(services.filter((s) => s.id !== id));
-  const toggleServiceActive = (id: number) => setServices(services.map((s) => s.id === id ? { ...s, active: !s.active } : s));
+  const deleteService = async (id: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce service ?")) return;
+    try {
+      await deleteAdminService(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Service supprimé");
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur en supprimant le service');
+    }
+  };
+  const toggleServiceActive = async (id: number) => {
+    const s = services.find((x) => x.id === id);
+    if (!s) return;
+    try {
+      await updateAdminService(s.id, { is_active: !s.active });
+      setServices((prev) => prev.map((s2) => s2.id === id ? { ...s2, active: !s2.active } : s2));
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur');
+    }
+  };
   const filteredServices = services.filter((s) => serviceCatFilter === "Tous" || s.category === serviceCatFilter);
 
   // Pending pros — REAL API
   const approveNurse = async (proId: string) => {
     try {
       await approvePro(proId);
+      // remove from pending list in dashboard
       setPending((prev) => prev.filter((n) => n.id !== proId));
+      // update KPI counters if present (optimistic)
+      setLiveKpi((k) => k ? { ...k, activePros: (k.activePros ?? 0) + 1, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
+      // notify other components (ProfessionalsManager) to update UI immediately
+      try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'approved' } })); } catch {}
+
+      // Create in-app notification + send email (best-effort)
+      try {
+        const [{ data: profile }, { data: proRow }] = await Promise.all([
+          supabase.from('profiles').select('full_name,email').eq('id', proId).single(),
+          supabase.from('professionals').select('specialty').eq('id', proId).single(),
+        ]);
+        await supabase.from('notifications').insert({
+          user_id: proId,
+          kind: 'approval',
+          title: 'Compte approuvé',
+          body: 'Votre compte professionnel a été approuvé! Vous pouvez maintenant recevoir des demandes.',
+        });
+        if (profile?.email) {
+          try { await sendApprovalEmail(profile.email, profile.full_name ?? '', proRow?.specialty ?? ''); } catch (e) { console.warn('sendApprovalEmail failed', e); }
+        }
+      } catch (e) {
+        console.warn('Failed to send approval notification/email', e);
+      }
+
       toast.success("Professionnel approuvé !");
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
   const rejectNurse = async (proId: string) => {
     try {
       await rejectPro(proId);
+      // remove from pending list in dashboard
       setPending((prev) => prev.filter((n) => n.id !== proId));
+      // update KPI counters if present (optimistic)
+      setLiveKpi((k) => k ? { ...k, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
+      // notify other components (ProfessionalsManager) to update UI immediately
+      try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'rejected' } })); } catch {}
+
+      // Create in-app notification + send email (best-effort)
+      try {
+        const { data: profile } = await supabase.from('profiles').select('full_name,email').eq('id', proId).single();
+        await supabase.from('notifications').insert({
+          user_id: proId,
+          kind: 'rejection',
+          title: 'Compte rejeté',
+          body: "Votre dossier a été rejeté. Veuillez consulter l'application pour plus d'informations.",
+        });
+        if (profile?.email) {
+          try { await sendRejectionEmail(profile.email, profile.full_name ?? '', 'Dossier rejeté par l\'administration'); } catch (e) { console.warn('sendRejectionEmail failed', e); }
+        }
+      } catch (e) {
+        console.warn('Failed to send rejection notification/email', e);
+      }
+
       toast.info("Professionnel refusé");
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };

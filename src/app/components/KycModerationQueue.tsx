@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
+import { sendApprovalEmail, sendRejectionEmail } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -59,6 +60,24 @@ export function KycModerationQueue() {
         payload: {},
       });
       toast.success(status === "approved" ? "Pro approuvé" : "Pro rejeté");
+
+      // Send email (best-effort) + create notification already done above
+      try {
+        const [{ data: profile }, { data: proRow }] = await Promise.all([
+          supabase.from('profiles').select('full_name,email').eq('id', proId).single(),
+          supabase.from('professionals').select('specialty').eq('id', proId).single(),
+        ]);
+        if (profile?.email) {
+          try {
+            if (status === 'approved') await sendApprovalEmail(profile.email, profile.full_name ?? '', proRow?.specialty ?? '');
+            else await sendRejectionEmail(profile.email, profile.full_name ?? '', 'Votre dossier a été rejeté lors de la modération');
+          } catch (e) { console.warn('send email failed', e); }
+        }
+      } catch (e) { console.warn('failed to fetch profile for email', e); }
+
+      // Broadcast optimistic UI update to other admin components
+      try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status } })); } catch {}
+
       fetchQueue();
     } catch (e: any) {
       toast.error(e.message ?? "Erreur");

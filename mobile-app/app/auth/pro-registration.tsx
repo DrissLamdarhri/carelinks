@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -33,16 +33,60 @@ import {
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
 import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
 import { showToast } from "@/lib/toast";
 
 const professions = ["Psychologue", "Infirmier", "Kinésithérapeute"];
-const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
-const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const startTimes = ["06:00", "07:00", "08:00", "09:00", "10:00"];
 const endTimes = ["16:00", "17:00", "18:00", "19:00", "20:00", "22:00"];
+
+// Dynamic services loaded from public.services (fallback to inline lists when missing)
+const [servicesMap, setServicesMap] = useState<Record<string, string[]>>({});
+
+// Map French category to internal specialty key (keeps compatibility with different schemas)
+const frenchToKey: Record<string, string> = {
+  "Infirmier": "nurse",
+  "Kinésithérapeute": "physiotherapist",
+  "Psychologue": "psychologist",
+};
+
+useEffect(() => {
+  let mounted = true;
+  (async () => {
+    try {
+      const { data, error } = await supabase.from("services").select("name,category,is_active");
+      if (error) {
+        console.warn("Failed to load services:", error);
+        return;
+      }
+      const map: Record<string, string[]> = {};
+      (data ?? []).forEach((s: any) => {
+        if (s.is_active === false) return;
+        const cat = s.category ?? "Autre";
+        map[cat] = map[cat] || [];
+        map[cat].push(s.name);
+        const eng = frenchToKey[cat];
+        if (eng) {
+          map[eng] = map[eng] || [];
+          map[eng].push(s.name);
+        }
+      });
+      if (mounted) setServicesMap(map);
+    } catch (e) {
+      console.warn("Failed to load services:", e);
+    }
+  })();
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+// Hardcoded fallbacks used only when the services table is unavailable
+const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
+const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 
 export default function ProRegistrationScreen() {
   const router = useRouter();
@@ -167,6 +211,9 @@ export default function ProRegistrationScreen() {
   };
 
   const getAvailableServices = (): string[] => {
+    const key = getProfessionSpecialty();
+    const fromMap = servicesMap[key] ?? servicesMap[profession ?? ""] ?? [];
+    if (fromMap && fromMap.length) return fromMap;
     if (profession === "Infirmier") return infirmierServices;
     if (profession === "Kinésithérapeute") return kineServices;
     return [];

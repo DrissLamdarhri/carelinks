@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  ScrollView,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -30,8 +32,15 @@ export default function OnboardingScreen() {
   const slide = onboardingSlides[step];
   const Icon = iconMap[slide.icon];
 
+  const scrollRef = useRef<ScrollView | null>(null);
+  const width = Dimensions.get("window").width;
+
   const next = () => {
-    if (step < lastStep) setStep((s) => s + 1);
+    if (step < lastStep) {
+      const nextIndex = step + 1;
+      scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      setStep(nextIndex);
+    }
   };
 
   return (
@@ -53,11 +62,32 @@ export default function OnboardingScreen() {
             <View style={styles.logoLine} />
           </View>
 
-          <View style={styles.iconCard}>
-            <Icon size={36} color="white" />
-          </View>
-          <Text style={styles.title}>{slide.title}</Text>
-          <Text style={styles.subtitle}>{slide.subtitle}</Text>
+          {/* Swipeable slides (pagingEnabled for finger scrolling) */}
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            ref={scrollRef}
+            onMomentumScrollEnd={(e) => {
+              const w = Dimensions.get("window").width;
+              const page = Math.round(e.nativeEvent.contentOffset.x / w);
+              setStep(page);
+            }}
+            contentContainerStyle={{ alignItems: "center" }}
+          >
+            {onboardingSlides.map((s) => {
+              const SlideIcon = iconMap[s.icon];
+              return (
+                <View key={s.id} style={{ width: Dimensions.get("window").width - 48, alignItems: "center", paddingHorizontal: 24 }}>
+                  <View style={styles.iconCard}>
+                    <SlideIcon size={36} color="white" />
+                  </View>
+                  <Text style={styles.title}>{s.title}</Text>
+                  <Text style={styles.subtitle}>{s.subtitle}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
         </View>
 
         <View style={styles.bottom}>
@@ -94,9 +124,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.secondaryBtnText}>Je suis professionnel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push("/admin")}>
-                <Text style={styles.adminLink}>Admin Panel</Text>
-              </TouchableOpacity>
+              {/* Admin Panel link removed from onboarding for security */}
             </View>
           )}
         </View>

@@ -22,7 +22,7 @@ async function fetchAPI<T = any>(
   const token = await getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(useAdminKey ? { "X-Admin-Key": ADMIN_KEY } : {}),
     ...(options.headers as Record<string, string> || {}),
   };
@@ -203,3 +203,22 @@ export async function rejectPro(proId: string) {
 export async function getRecentBookings() {
   return fetchAPI("/admin/bookings/recent", {}, true);
 }
+
+export async function getAdminServices() {
+  return fetchAPI("/admin/services", {}, true);
+}
+
+export async function createAdminService(payload: {
+  name: string; category: string; icon?: string; base_price: number; duration: number; description?: string; is_active?: boolean;
+}) {
+  return fetchAPI("/admin/services", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateAdminService(id: string | number, updates: any) {
+  return fetchAPI(`/admin/services/${id}`, { method: "PUT", body: JSON.stringify(updates) }, true);
+}
+
+export async function deleteAdminService(id: string | number) {
+  return fetchAPI(`/admin/services/${id}`, { method: "DELETE" }, true);
+}
+

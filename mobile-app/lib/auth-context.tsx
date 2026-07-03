@@ -460,7 +460,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (options?.documents && options.documents.length > 0) {
           try {
             const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
-            const response = await fetch(`${SUPABASE_URL}/functions/v1/server`, {
+            // Call server-side function that inserts pro_documents using service role
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/professionals/documents`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
