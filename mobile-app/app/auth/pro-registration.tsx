@@ -33,8 +33,13 @@ import {
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
+import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
+import { showToast } from "@/lib/toast";
 
-const specialties = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire", "Kinésithérapie"];
+const professions = ["Psychologue", "Infirmier", "Kinésithérapeute"];
+const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
+const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const startTimes = ["06:00", "07:00", "08:00", "09:00", "10:00"];
 const endTimes = ["16:00", "17:00", "18:00", "19:00", "20:00", "22:00"];
@@ -57,14 +62,20 @@ export default function ProRegistrationScreen() {
     password: "",
     showPassword: false,
   });
-  const [selectedSpecs, setSelectedSpecs] = useState<string[]>([]);
-  const [showSpecMenu, setShowSpecMenu] = useState(false);
+  const [profession, setProfession] = useState<string | null>(null);
+  const [showProfessionMenu, setShowProfessionMenu] = useState(false);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [showServiceMenu, setShowServiceMenu] = useState(false);
 
   const [diploma, setDiploma] = useState(false);
+  const [diplomaUrl, setDiplomaUrl] = useState<string | null>(null);
   const [cin, setCin] = useState(false);
+  const [cinUrl, setCinUrl] = useState<string | null>(null);
   const [selfie, setSelfie] = useState(false);
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrDone, setOcrDone] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const [availDays, setAvailDays] = useState<string[]>(["Lun", "Mar", "Mer", "Ven"]);
   const [startTime, setStartTime] = useState("08:00");
@@ -84,29 +95,88 @@ export default function ProRegistrationScreen() {
           form.phone &&
           form.email &&
           form.city &&
-          selectedSpecs.length > 0 &&
+          profession &&
+          (profession === "Psychologue" || selectedServices.length > 0) &&
           form.password.length >= 6
       ),
       diploma && cin && selfie,
       availDays.length > 0,
       agreed,
     ],
-    [agreed, availDays.length, cin, diploma, form.city, form.email, form.firstName, form.lastName, form.password.length, form.phone, selectedSpecs.length, selfie]
+    [agreed, availDays.length, cin, diploma, form.city, form.email, form.firstName, form.lastName, form.password.length, form.phone, profession, selectedServices.length, selfie]
   );
 
-  const handleUpload = (type: "diploma" | "cin" | "selfie") => {
-    if (type === "diploma") setDiploma(true);
-    if (type === "cin") setCin(true);
-    if (type === "selfie") setSelfie(true);
-    const nextDiploma = type === "diploma" ? true : diploma;
-    const nextCin = type === "cin" ? true : cin;
-    if (nextDiploma && nextCin) {
-      setOcrRunning(true);
-      setTimeout(() => {
-        setOcrRunning(false);
-        setOcrDone(true);
-      }, 1700);
+  const handleUpload = async (type: "diploma" | "cin" | "selfie") => {
+    setUploading(type);
+    try {
+      if (type === "selfie") {
+        // Use camera for selfie
+        const photo = await useTakePhoto();
+        if (!photo) {
+          setUploading(null);
+          return;
+        }
+        const url = await uploadSelfieToSupabase(form.email || "user", photo.uri);
+        if (url) {
+          setSelfie(true);
+          setSelfieUrl(url);
+          showToast("Selfie téléchargé avec succès.");
+        }
+      } else {
+        // Use document picker for diploma and CIN
+        const doc = await usePickDocument();
+        if (!doc) {
+          setUploading(null);
+          return;
+        }
+        const url = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
+        if (url) {
+          if (type === "diploma") {
+            setDiploma(true);
+            setDiplomaUrl(url);
+            showToast("Diplôme téléchargé avec succès.");
+          } else if (type === "cin") {
+            setCin(true);
+            setCinUrl(url);
+            showToast("CIN téléchargée avec succès.");
+          }
+        }
+      }
+
+      // Trigger OCR check if diploma and CIN are both uploaded
+      const nextDiploma = type === "diploma" ? true : diploma;
+      const nextCin = type === "cin" ? true : cin;
+      if (nextDiploma && nextCin) {
+        setOcrRunning(true);
+        setTimeout(() => {
+          setOcrRunning(false);
+          setOcrDone(true);
+        }, 1700);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+    } finally {
+      setUploading(null);
     }
+  };
+
+  const getAvailableServices = (): string[] => {
+    if (profession === "Infirmier") return infirmierServices;
+    if (profession === "Kinésithérapeute") return kineServices;
+    return [];
+  };
+
+  const getProfessionSpecialty = (): string => {
+    if (profession === "Infirmier") return "nurse";
+    if (profession === "Kinésithérapeute") return "physiotherapist";
+    if (profession === "Psychologue") return "psychologist";
+    return "nurse";
+  };
+
+  const getDiplomaTitle = (): string => {
+    if (profession === "Infirmier") return "Diplôme d'infirmier";
+    if (profession === "Kinésithérapeute") return "Diplôme de kinésithérapeute";
+    return "Diplôme de psychologue";
   };
 
   const handleSubmit = async () => {
@@ -117,6 +187,8 @@ export default function ProRegistrationScreen() {
       await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
+        profession: getProfessionSpecialty(),
+        services: selectedServices,
       });
       setSubmitted(true);
     } catch (error) {
@@ -249,25 +321,27 @@ export default function ProRegistrationScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Spécialités</Text>
-            <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowSpecMenu((v) => !v)}>
+            <Text style={styles.label}>Profession</Text>
+            <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowProfessionMenu((v) => !v)}>
               <Briefcase size={16} color={Colors.textMuted} />
-              <Text style={[styles.inputInner, { color: selectedSpecs.length ? Colors.textPrimary : Colors.textMuted }]}>
-                {selectedSpecs.length ? `${selectedSpecs.length} sélectionnées` : "Choisir..."}
+              <Text style={[styles.inputInner, { color: profession ? Colors.textPrimary : Colors.textMuted }]}>
+                {profession || "Choisir..."}
               </Text>
               <ChevronDown size={16} color={Colors.textMuted} />
             </TouchableOpacity>
-            {showSpecMenu ? (
+            {showProfessionMenu ? (
               <View style={styles.specMenu}>
-                {specialties.map((item) => {
-                  const active = selectedSpecs.includes(item);
+                {professions.map((item) => {
+                  const active = profession === item;
                   return (
                     <TouchableOpacity
                       key={item}
                       style={styles.specRow}
-                      onPress={() =>
-                        setSelectedSpecs((prev) => (active ? prev.filter((x) => x !== item) : [...prev, item]))
-                      }
+                      onPress={() => {
+                        setProfession(item);
+                        setShowProfessionMenu(false);
+                        setSelectedServices([]);
+                      }}
                     >
                       <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{item}</Text>
                       {active ? <Check size={16} color={Colors.primary} /> : null}
@@ -277,17 +351,49 @@ export default function ProRegistrationScreen() {
               </View>
             ) : null}
 
-            {selectedSpecs.length ? (
-              <View style={styles.tagsRow}>
-                {selectedSpecs.map((item) => (
-                  <View key={item} style={styles.tag}>
-                    <Text style={styles.tagText}>{item}</Text>
-                    <TouchableOpacity onPress={() => setSelectedSpecs((prev) => prev.filter((x) => x !== item))}>
-                      <X size={10} color={Colors.primary} />
-                    </TouchableOpacity>
+            {profession && (profession === "Infirmier" || profession === "Kinésithérapeute") ? (
+              <>
+                <Text style={styles.label}>Types de service</Text>
+                <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowServiceMenu((v) => !v)}>
+                  <Briefcase size={16} color={Colors.textMuted} />
+                  <Text style={[styles.inputInner, { color: selectedServices.length ? Colors.textPrimary : Colors.textMuted }]}>
+                    {selectedServices.length ? `${selectedServices.length} sélectionnés` : "Choisir..."}
+                  </Text>
+                  <ChevronDown size={16} color={Colors.textMuted} />
+                </TouchableOpacity>
+                {showServiceMenu ? (
+                  <View style={styles.specMenu}>
+                    {getAvailableServices().map((item) => {
+                      const active = selectedServices.includes(item);
+                      return (
+                        <TouchableOpacity
+                          key={item}
+                          style={styles.specRow}
+                          onPress={() =>
+                            setSelectedServices((prev) => (active ? prev.filter((x) => x !== item) : [...prev, item]))
+                          }
+                        >
+                          <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{item}</Text>
+                          {active ? <Check size={16} color={Colors.primary} /> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                ))}
-              </View>
+                ) : null}
+
+                {selectedServices.length ? (
+                  <View style={styles.tagsRow}>
+                    {selectedServices.map((item) => (
+                      <View key={item} style={styles.tag}>
+                        <Text style={styles.tagText}>{item}</Text>
+                        <TouchableOpacity onPress={() => setSelectedServices((prev) => prev.filter((x) => x !== item))}>
+                          <X size={10} color={Colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </>
             ) : null}
 
             <Text style={styles.label}>Années d'expérience</Text>
@@ -331,9 +437,10 @@ export default function ProRegistrationScreen() {
             </View>
 
             <UploadCard
-              title={diploma ? "Diplôme téléchargé ✓" : "Diplôme d'infirmier"}
+              title={diploma ? `${getDiplomaTitle()} téléchargé ✓` : getDiplomaTitle()}
               subtitle="Recto & verso · PDF ou image · max 5MB"
               done={diploma}
+              loading={uploading === "diploma"}
               icon={FileText}
               onPress={() => handleUpload("diploma")}
             />
@@ -341,13 +448,15 @@ export default function ProRegistrationScreen() {
               title={cin ? "CIN téléchargée ✓" : "Carte d'Identité Nationale"}
               subtitle="Recto & verso · PDF ou image · max 5MB"
               done={cin}
+              loading={uploading === "cin"}
               icon={CreditCard}
               onPress={() => handleUpload("cin")}
             />
             <UploadCard
               title={selfie ? "Selfie pris ✓" : "Selfie de vérification"}
-              subtitle="Photo avec votre CIN visible"
+              subtitle="Appuyez pour prendre une photo avec caméra"
               done={selfie}
+              loading={uploading === "selfie"}
               icon={Camera}
               onPress={() => handleUpload("selfie")}
             />
@@ -481,7 +590,10 @@ export default function ProRegistrationScreen() {
 
               <SummaryRow label="Ville" value={form.city || "Fès"} />
               <SummaryRow label="Expérience" value={`${form.experience || "6"} ans`} />
-              <SummaryRow label="Spécialités" value={selectedSpecs.length ? selectedSpecs.join(", ") : "Pansement"} />
+              <SummaryRow label="Profession" value={profession || "Non sélectionnée"} />
+              {profession && (profession === "Infirmier" || profession === "Kinésithérapeute") ? (
+                <SummaryRow label="Types de service" value={selectedServices.length ? selectedServices.join(", ") : "Non sélectionné"} />
+              ) : null}
               <SummaryRow label="Disponibilité" value={`${availDays.join(", ")} · ${startTime}-${endTime}`} />
               <SummaryRow label="Tarif minimum" value={`${minPrice} MAD`} />
               <SummaryRow label="Zone" value={`${maxDistance} km autour de ${form.city || "Fès"}`} />
@@ -489,7 +601,7 @@ export default function ProRegistrationScreen() {
 
             <View style={styles.docsStatusCard}>
               <Text style={styles.docsStatusTitle}>Documents</Text>
-              <DocStatus label="Diplôme d'infirmier" ok={diploma} />
+              <DocStatus label={getDiplomaTitle()} ok={diploma} />
               <DocStatus label="Carte d'identité" ok={cin} />
               <DocStatus label="Selfie de vérification" ok={selfie} />
               <DocStatus label="Vérification OCR" ok={ocrDone} />
@@ -544,23 +656,35 @@ function UploadCard({
   done,
   onPress,
   icon: Icon,
+  loading,
 }: {
   title: string;
   subtitle: string;
   done: boolean;
   onPress: () => void;
   icon: React.ComponentType<{ size?: number; color?: string }>;
+  loading?: boolean;
 }) {
   return (
-    <TouchableOpacity style={[styles.uploadCard, done && styles.uploadDone]} onPress={onPress}>
+    <TouchableOpacity 
+      style={[styles.uploadCard, done && styles.uploadDone, loading && styles.uploadLoading]} 
+      onPress={onPress}
+      disabled={loading}
+    >
       <View style={[styles.uploadIcon, done && styles.uploadIconDone]}>
-        {done ? <Check size={22} color="white" /> : <Icon size={22} color={Colors.textMuted} />}
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : done ? (
+          <Check size={22} color="white" />
+        ) : (
+          <Icon size={22} color={Colors.textMuted} />
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.uploadTitle}>{title}</Text>
         <Text style={styles.uploadSubtitle}>{subtitle}</Text>
       </View>
-      {!done ? <Upload size={18} color={Colors.textMuted} /> : null}
+      {!done && !loading ? <Upload size={18} color={Colors.textMuted} /> : null}
     </TouchableOpacity>
   );
 }
@@ -759,6 +883,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   uploadDone: { borderColor: Colors.primary, backgroundColor: Colors.surfaceWarm },
+  uploadLoading: { borderColor: Colors.primary, opacity: 0.7 },
   uploadIcon: {
     width: 52,
     height: 52,

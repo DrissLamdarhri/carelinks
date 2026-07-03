@@ -69,7 +69,8 @@ interface AuthContextValue {
     email: string,
     password: string,
     fullName: string,
-    role: "patient" | "pro"
+    role: "patient" | "pro",
+    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
   ) => Promise<void>;
 }
 
@@ -216,7 +217,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    role: "patient" | "pro"
+    role: "patient" | "pro",
+    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
   ) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
@@ -228,6 +230,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: fullName,
         language: "fr",
       });
+
+      if (role === "pro") {
+        // Create professional record with profession if provided
+        await supabase.from("professionals").upsert({
+          id: data.user.id,
+          specialty: options?.profession || "nurse",
+        });
+      }
     }
   };
 

@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
 import { showToast } from "@/lib/toast";
+import { supabase } from "@/lib/supabase";
 
 export default function ProLoginScreen() {
   const router = useRouter();
@@ -75,6 +76,30 @@ export default function ProLoginScreen() {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle("pro");
+      
+      // Check if professional account exists and is verified
+      if (result.role === "pro") {
+        const { data: proData, error: proError } = await supabase
+          .from("professionals")
+          .select("verification_status")
+          .eq("id", (await supabase.auth.getUser()).data.user?.id)
+          .single();
+
+        if (proError || !proData) {
+          // Professional account not found or error - redirect to signup
+          showToast("Compte professionnel non trouvé. Veuillez d'abord vous inscrire.");
+          router.replace("/auth/pro-registration");
+          return;
+        }
+
+        if (proData.verification_status !== "approved") {
+          // Professional not verified - redirect to upload documents
+          showToast("Votre compte n'est pas encore vérifié. Complétez l'inscription.");
+          router.replace("/auth/pro-registration");
+          return;
+        }
+      }
+
       handleRoleMismatch(result.role);
       if (result.mfaRequired) {
         goToMfaChallenge(result.role ?? "pro");

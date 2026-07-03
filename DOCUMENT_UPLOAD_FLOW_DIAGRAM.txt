@@ -1,0 +1,273 @@
+📱 ARCHITECTURE DES UPLOADS - DIAGRAMME DE FLUX
+═══════════════════════════════════════════════════════════════════════════
+
+PRO REGISTRATION - ÉTAPE 1 (DOCUMENTS)
+───────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      ÉCRAN D'UPLOAD (STEP 1)                            │
+│                                                                          │
+│  📄 DIPLÔME                                                             │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ [PDF/JPG icon]  Diplôme d'infirmier        [Upload icon]         │  │
+│  │ Recto & verso · PDF ou image · max 5MB                           │  │
+│  │ ┌────────────────────┐ ┌────────────────────┐                   │  │
+│  │ │  Diplôme          │ │  [Uploading...]     │                   │  │
+│  │ │  téléchargé ✓     │ │  [Spinner]          │                   │  │
+│  │ └────────────────────┘ └────────────────────┘                   │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  📋 CIN                                                                 │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ [Card icon]  Carte d'Identité Nationale    [Upload icon]        │  │
+│  │ Recto & verso · PDF ou image · max 5MB                           │  │
+│  │ ┌────────────────────────────────────────────────────────────┐   │  │
+│  │ │ Appuyez pour choisir document                             │   │  │
+│  │ └────────────────────────────────────────────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  📸 SELFIE                                                              │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ [Camera icon]  Selfie de vérification      [Camera icon]        │  │
+│  │ Appuyez pour prendre une photo avec caméra                      │  │
+│  │ ┌────────────────────────────────────────────────────────────┐   │  │
+│  │ │ Appuyez pour ouvrir la caméra                              │   │  │
+│  │ └────────────────────────────────────────────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+FLUX UPLOAD DE DOCUMENTS
+───────────────────────────────────────────────────────────────────────────
+
+User clicks "Diplôme"
+       ↓
+┌──────────────────────────────┐
+│  usePickDocument()           │
+│  (document picker hook)      │
+│  ├─ Request permissions      │
+│  └─ Open file selector       │
+└──────────────────────────────┘
+       ↓
+   User selects file
+       ↓
+┌──────────────────────────────────────┐
+│  Validation                          │
+│  ├─ Format: PDF/JPG/PNG?            │
+│  ├─ Size: < 5MB?                    │
+│  └─ Type check                      │
+└──────────────────────────────────────┘
+       ↓
+┌──────────────────────────────────────┐
+│  uploadDocumentToSupabase()          │
+│  ├─ Read file (Base64)              │
+│  ├─ Convert to binary               │
+│  ├─ Upload to bucket                │
+│  │  'kyc-documents'                 │
+│  └─ Get public URL                  │
+└──────────────────────────────────────┘
+       ↓
+┌──────────────────────────────────────┐
+│  State Update                        │
+│  ├─ setDiploma(true)               │
+│  ├─ setDiplomaUrl(url)             │
+│  └─ showToast("Succès")            │
+└──────────────────────────────────────┘
+       ↓
+   UI Updates
+   ├─ ✓ Check mark appears
+   ├─ Color changes to primary
+   └─ Card becomes non-interactive
+
+
+FLUX SELFIE AVEC CAMÉRA
+───────────────────────────────────────────────────────────────────────────
+
+User clicks "Selfie"
+       ↓
+┌──────────────────────────────┐
+│  useTakePhoto()              │
+│  (camera hook)               │
+│  ├─ Request camera permission
+│  └─ Launch native camera app │
+└──────────────────────────────┘
+       ↓
+   ┌─────────────────────────────┐
+   │   📸 NATIVE CAMERA          │
+   │   (system app)              │
+   │                             │
+   │   [Take Picture]   [Cancel] │
+   └─────────────────────────────┘
+       ↓
+   User takes photo
+       ↓
+┌──────────────────────────────────────┐
+│  uploadSelfieToSupabase()            │
+│  ├─ Read image (Base64)             │
+│  ├─ Convert to binary               │
+│  ├─ Upload to 'kyc-documents'       │
+│  │  Filename: selfie-{timestamp}.jpg
+│  └─ Get public URL                  │
+└──────────────────────────────────────┘
+       ↓
+┌──────────────────────────────────────┐
+│  State Update                        │
+│  ├─ setSelfie(true)                │
+│  ├─ setSelfieUrl(url)              │
+│  └─ showToast("Succès")            │
+└──────────────────────────────────────┘
+       ↓
+   UI Updates
+   ├─ ✓ Check mark appears
+   ├─ Color changes
+   └─ Card becomes non-interactive
+
+
+GOOGLE AUTH FLOW - PROFESSIONNEL
+───────────────────────────────────────────────────────────────────────────
+
+User clicks "Google Sign In" (Pro Login)
+       ↓
+┌──────────────────────────────────────┐
+│  signInWithGoogle("pro")             │
+│  ├─ Open Google auth popup          │
+│  └─ Get auth token                  │
+└──────────────────────────────────────┘
+       ↓
+   Google authentication success
+       ↓
+┌──────────────────────────────────────────┐
+│  Check Professional Account              │
+│  SELECT verification_status              │
+│  FROM professionals                      │
+│  WHERE id = auth.user.id                 │
+└──────────────────────────────────────────┘
+       ↓
+       ├─ Professionnel n'existe pas?
+       │  ├─ showToast("Compte non trouvé")
+       │  └─ redirect("/auth/pro-registration")
+       │
+       ├─ verification_status ≠ "approved"?
+       │  ├─ showToast("Non vérifiée")
+       │  └─ redirect("/auth/pro-registration")
+       │
+       └─ verification_status = "approved"?
+          ├─ ✅ Access granted
+          └─ redirect("/pro")
+
+
+SUPABASE STORAGE STRUCTURE
+───────────────────────────────────────────────────────────────────────────
+
+Bucket: kyc-documents
+├─ {user-id}/
+│  ├─ diploma-{timestamp}.pdf
+│  ├─ diploma-{timestamp}.jpg
+│  ├─ cin-{timestamp}.pdf
+│  ├─ cin-{timestamp}.jpg
+│  └─ selfie-{timestamp}.jpg
+└─ {other-user-id}/
+   ├─ diploma-{timestamp}.pdf
+   └─ ...
+
+Access:
+✓ Public URL for viewing
+✓ User restricted to own files (RLS)
+✓ 5MB max per file
+✓ Formats: PDF, JPG, PNG
+
+
+COMPONENT: UploadCard
+───────────────────────────────────────────────────────────────────────────
+
+States:
+┌─────────────────────────────────────────────────────┐
+│ Initial (empty)                                     │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ [icon]  Title text              [Upload ▲]  │   │
+│ │ Subtitle · max 5MB                          │   │
+│ └──────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│ Loading (uploading)                                 │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ [spinner]  Title text                       │   │
+│ │ Subtitle · max 5MB                          │   │
+│ │ (card opacity 0.7)                          │   │
+│ └──────────────────────────────────────────────┘   │
+│ (button disabled)                                  │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│ Done (uploaded successfully)                        │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ [✓]  Title text téléchargé ✓              │   │
+│ │ Subtitle · max 5MB                          │   │
+│ │ (card primary color)                        │   │
+│ └──────────────────────────────────────────────┘   │
+│ (no upload icon)                                   │
+└─────────────────────────────────────────────────────┘
+
+
+ERROR HANDLING
+───────────────────────────────────────────────────────────────────────────
+
+Format Error:
+❌ Toast: "Format non autorisé. Utilisez PDF, JPG ou PNG."
+└─ User can retry with correct format
+
+Size Error:
+❌ Toast: "Le fichier est trop volumineux (max 5MB)."
+└─ User can select smaller file
+
+Permission Denied:
+❌ Toast: "Permission d'accès refusée." (camera/media)
+└─ User must grant permission in device settings
+
+Upload Failed:
+❌ Toast: "Erreur lors de l'upload du document."
+└─ User can retry
+
+Camera Permission:
+❌ Toast: "Permission d'accès à la caméra refusée."
+└─ User must grant permission in device settings
+
+
+VALIDATION RULES
+───────────────────────────────────────────────────────────────────────────
+
+Before Step Completion:
+✅ All 3 documents uploaded (diploma, cin, selfie)
+✅ No missing files
+✅ "Continuer" button ENABLED only when all 3 done
+
+On Submit:
+✅ Document URLs stored in registration data
+✅ Sent to backend for processing
+✅ Triggering OCR verification (simulated 1.7s)
+
+Display:
+✅ OCR status card shown during processing
+✅ Success message after verification
+
+
+FLOW SUMMARY
+───────────────────────────────────────────────────────────────────────────
+
+Email Registration:
+1. Remplir infos perso + profession + services
+2. Upload documents (diplôme, CIN)
+3. Prendre selfie avec caméra
+4. Soumettre candidature
+5. En attente de vérification admin
+6. Une fois approuvé → accès complet
+
+Google Auth (Professional):
+1. Connecter avec Google
+2. App vérifie si compte pro existe et est approuvé
+3. Si non → redirection vers registration
+4. Si oui → accès direct aux fonctionnalités
+
+═══════════════════════════════════════════════════════════════════════════
