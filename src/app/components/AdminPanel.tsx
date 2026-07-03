@@ -263,17 +263,37 @@ export function AdminPanel() {
         .select("id,booking_id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,price,alert_level,created_at")
         .order("created_at", { ascending: false })
         .limit(100);
-      
-      // Fetch patient names
-      const patientIds = [...new Set((bookingsAll ?? []).map((b: any) => b.patient_id))];
+
+      // Also fetch recent yoga bookings directly from bookings (fallback if admin logs missing)
+      const sinceBookings = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      const { data: bookingsYoga } = await supabase
+        .from("bookings")
+        .select("id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,final_price_mad,budget_max_mad,created_at")
+        .eq("specialty", "yoga_instructor")
+        .gte("created_at", sinceBookings)
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      // Merge admin logs + bookingsYoga, preferring admin log when present
+      const mergedByBookingId = new Map();
+      (bookingsAll ?? []).forEach((r: any) => mergedByBookingId.set(r.booking_id, { ...r, source: "admin" }));
+      (bookingsYoga ?? []).forEach((r: any) => {
+        if (!mergedByBookingId.has(r.id)) {
+          mergedByBookingId.set(r.id, { ...r, booking_id: r.id, price: r.final_price_mad ?? r.budget_max_mad, alert_level: "normal", source: "bookings" });
+        }
+      });
+      const merged = Array.from(mergedByBookingId.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      // Fetch patient names (for merged set)
+      const patientIds = [...new Set(merged.map((b: any) => b.patient_id))];
       const { data: patientProfiles } = patientIds.length > 0 ? await supabase
         .from("profiles")
         .select("id,full_name")
         .in("id", patientIds) : { data: [] };
       const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
       
-      // Fetch professional names
-      const proIds = [...new Set((bookingsAll ?? []).map((b: any) => b.professional_id).filter(Boolean))];
+      // Fetch professional names (for merged set)
+      const proIds = [...new Set(merged.map((b: any) => b.professional_id).filter(Boolean))];
       const { data: proProfiles } = proIds.length > 0 ? await supabase
         .from("profiles")
         .select("id,full_name")
@@ -284,8 +304,9 @@ export function AdminPanel() {
         open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
         completed: "Terminé", cancelled: "Annulé",
       };
-      setLiveAllBookings((bookingsAll ?? []).map((b: any) => ({
-        id: "#" + b.booking_id.slice(0, 6).toUpperCase(),
+
+      setLiveAllBookings(merged.map((b: any) => ({
+        id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
         patient: patientMap[b.patient_id] ?? "—",
         pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
         service: labelMap[b.specialty] ?? b.specialty,
@@ -293,7 +314,7 @@ export function AdminPanel() {
         date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
         price: (b.price ?? 0) + " MAD",
         status: statusFr[b.status] ?? b.status,
-        alertLevel: b.alert_level,
+        alertLevel: b.alert_level ?? "normal",
         urgency: b.urgency,
       })));
 
