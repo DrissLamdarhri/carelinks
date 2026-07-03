@@ -127,6 +127,7 @@ export function AdminPanel() {
   const [liveUsers, setLiveUsers] = useState<any[]>([]);
   const [liveAllPros, setLiveAllPros] = useState<any[]>([]);
   const [liveAllBookings, setLiveAllBookings] = useState<any[]>([]);
+  const [bookingFilter, setBookingFilter] = useState<string | null>(null);
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
 
   // Live KPIs straight from Supabase (replaces hardcoded numbers)
@@ -288,6 +289,7 @@ export function AdminPanel() {
         patient: patientMap[b.patient_id] ?? "—",
         pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
         service: labelMap[b.specialty] ?? b.specialty,
+        specialtyKey: b.specialty,
         date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
         price: (b.price ?? 0) + " MAD",
         status: statusFr[b.status] ?? b.status,
@@ -1373,7 +1375,23 @@ export function AdminPanel() {
             <div>
               <div className="flex items-center justify-between mb-5">
                 <p className="text-sm text-[#888780]">{(liveAllBookings).length} réservations</p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  <div className="inline-flex rounded-xl overflow-hidden" style={{ background: "#F3F3F5" }}>
+                    <button
+                      onClick={() => setBookingFilter(null)}
+                      className="px-3 py-2 text-sm"
+                      style={{ fontWeight: bookingFilter === null ? 700 : 500, color: bookingFilter === null ? "#0D0870" : "#888780", background: bookingFilter === null ? "white" : "transparent" }}
+                    >
+                      Tous
+                    </button>
+                    <button
+                      onClick={() => setBookingFilter("yoga_instructor")}
+                      className="px-3 py-2 text-sm"
+                      style={{ fontWeight: bookingFilter === "yoga_instructor" ? 700 : 500, color: bookingFilter === "yoga_instructor" ? "#0D0870" : "#888780", background: bookingFilter === "yoga_instructor" ? "white" : "transparent" }}
+                    >
+                      Yoga
+                    </button>
+                  </div>
                   <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Filter size={14} /> Filtrer
                   </button>
@@ -1398,7 +1416,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveAllBookings ?? []).map((b) => {
+                      {(liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => {
                         const alertColors: Record<string, { bg: string; color: string }> = {
                           critical: { bg: "#FCA5A5", color: "#991B1B" },
                           high: { bg: "#FEF08A", color: "#9A3412" },
