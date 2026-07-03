@@ -218,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string }
   ) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
@@ -236,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.from("professionals").upsert({
           id: data.user.id,
           specialty: options?.profession || "nurse",
+          years_experience: options?.experience ? parseInt(options.experience) : 0,
         });
       }
     }

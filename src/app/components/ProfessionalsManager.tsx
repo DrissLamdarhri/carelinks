@@ -3,9 +3,11 @@ import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import {
   Check, X, Eye, Clock, AlertCircle, CheckCircle2, XCircle,
-  Mail, MapPin, Phone, Award, Filter, Download, Search, UserX,
+  Mail, MapPin, Phone, Award, Filter, Download, Search, UserX, ExternalLink, FileText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
+import { approvePro, rejectPro } from "../../lib/api";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
 type Professional = {
@@ -36,10 +38,13 @@ export function ProfessionalsManager() {
   const [rejectReason, setRejectReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [proDocuments, setProDocuments] = useState<any[]>([]);
+  const [specialtyFilter, setSpecialtyFilter] = useState<string>("all");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   useEffect(() => {
     loadProfessionals();
-  }, [filter]);
+  }, [filter, specialtyFilter]);
 
   const loadProfessionals = async () => {
     try {
@@ -53,6 +58,10 @@ export function ProfessionalsManager() {
 
       if (filter !== "all") {
         prosQuery = prosQuery.eq("verification_status", filter);
+      }
+
+      if (specialtyFilter && specialtyFilter !== "all") {
+        prosQuery = prosQuery.eq("specialty", specialtyFilter);
       }
 
       const { data: prosData, error: prosError } = await prosQuery;
@@ -113,6 +122,24 @@ export function ProfessionalsManager() {
     }
   };
 
+  const loadProDocuments = async (proId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("pro_documents")
+        .select("id,doc_type,storage_path,is_verified")
+        .eq("professional_id", proId);
+      if (error) {
+        console.error("Error fetching pro documents:", error);
+        setProDocuments([]);
+        return;
+      }
+      setProDocuments(data ?? []);
+    } catch (e) {
+      console.error("Error loading pro documents:", e);
+      setProDocuments([]);
+    }
+  };
+
   const handleApprovePro = async (pro?: Professional) => {
     const target = pro || selectedPro;
     if (!target) return;
@@ -126,7 +153,18 @@ export function ProfessionalsManager() {
         })
         .eq("id", target.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        // fallback to admin API if direct update blocked by RLS
+        try {
+          await approvePro(target.id);
+        } catch (apiErr) {
+          throw updateError;
+        }
+      }
+
+      // Mark documents verified as well (best-effort)
+      const { error: docsErr } = await supabase.from("pro_documents").update({ is_verified: true }).eq("professional_id", target.id);
+      if (docsErr) console.warn("Failed to mark docs verified:", docsErr);
 
       await sendApprovalNotification(target);
 
@@ -156,7 +194,13 @@ export function ProfessionalsManager() {
         })
         .eq("id", selectedPro.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        try {
+          await rejectPro(selectedPro.id);
+        } catch (apiErr) {
+          throw updateError;
+        }
+      }
 
       await sendRejectionNotification(selectedPro, rejectReason);
 
@@ -395,7 +439,7 @@ export function ProfessionalsManager() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>
-                      {pro.years_experience} ans
+                      {pro.years_experience && pro.years_experience > 0 ? `${pro.years_experience} ans` : "—"}
                     </td>
                     <td className="px-5 py-4">
                       {pro.verification_status === "pending" && (
@@ -443,8 +487,9 @@ export function ProfessionalsManager() {
                           </>
                         )}
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             setSelectedPro(pro);
+                            await loadProDocuments(pro.id);
                             setShowDetailsModal(true);
                           }}
                           className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
@@ -571,7 +616,31 @@ export function ProfessionalsManager() {
                     <p className="text-xs text-[#888780] mb-1" style={{ fontWeight: 600 }}>
                       Expérience
                     </p>
-                    <p className="text-sm text-[#1A1A1A]">{selectedPro.years_experience} ans</p>
+                    <p className="text-sm text-[#1A1A1A]">{selectedPro.years_experience && selectedPro.years_experience > 0 ? `${selectedPro.years_experience} ans` : "—"}</p>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs text-[#888780] mb-2" style={{ fontWeight: 600 }}>Documents</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {proDocuments.length === 0 ? (
+                      <p className="text-sm text-[#888780]">Aucun document</p>
+                    ) : (
+                      proDocuments.map((d: any) => (
+                        <button key={d.id} onClick={async () => {
+                          try {
+                            const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
+                            if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                            else toast.error("Impossible d'ouvrir le document");
+                          } catch (e) {
+                            console.error("Error opening doc:", e);
+                            toast.error("Erreur lors de l'ouverture du document");
+                          }
+                        }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#F3F3F5] rounded-xl text-[12px] hover:bg-[#EDE5CC]">
+                          <FileText size={12} /> {d.doc_type} <ExternalLink size={11} />
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
 

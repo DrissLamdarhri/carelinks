@@ -189,6 +189,7 @@ export default function ProRegistrationScreen() {
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
         services: selectedServices,
+        experience: form.experience.trim(),
       });
       setSubmitted(true);
     } catch (error) {

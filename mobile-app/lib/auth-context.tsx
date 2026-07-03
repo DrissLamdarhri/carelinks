@@ -402,7 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string }
   ) => {
     await AsyncStorage.setItem("carelink_intended_role", role);
     console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
@@ -453,6 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .upsert({
             id: data.user.id,
             specialty: options?.profession || "nurse",
+            years_experience: options?.experience ? parseInt(options.experience) : 0,
           });
         if (professionalError) throw professionalError;
       }
