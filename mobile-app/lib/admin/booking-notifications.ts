@@ -40,25 +40,10 @@ export async function notifyAdminNewBooking(booking: Booking): Promise<void> {
       alertLevel = "high";
     }
 
-    const { error } = await supabase.from("admin_booking_logs").insert({
-      booking_id: booking.id,
-      patient_id: booking.patient_id,
-      professional_id: booking.professional_id,
-      specialty: booking.specialty,
-      status: booking.status,
-      urgency: booking.urgency,
-      scheduled_at: booking.scheduled_at,
-      address: booking.address,
-      price: booking.final_price_mad ?? booking.budget_max_mad,
-      notes: booking.notes,
-      is_psychologist: isPsychologist,
-      alert_level: alertLevel,
-      notification_sent_at: new Date().toISOString(),
-    });
-
-    if (error) {
-      console.error("Erreur lors de l'enregistrement de la réservation admin:", error);
-    }
+    // Skip client-side insert into admin_booking_logs: Row-Level Security prevents non-admin clients from inserting.
+    // The database trigger `booking_created_trigger` will log new bookings server-side.
+    // Keep broadcasting a realtime notification so admins see the new booking immediately.
+    // (Removing the insert avoids the 42501 RLS violation.)
 
     await broadcastAdminNotification({
       type: "new_booking",
@@ -83,17 +68,8 @@ export async function notifyAdminBookingStatusChange(
   try {
     const isPsychologist = booking.specialty === "psychologist";
 
-    const { error } = await supabase
-      .from("admin_booking_logs")
-      .update({
-        status: booking.status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("booking_id", booking.id);
-
-    if (error) {
-      console.error("Erreur lors de la mise à jour du log admin:", error);
-    }
+    // Skip client-side update of admin_booking_logs: the DB trigger `booking_status_change_trigger` updates the log when bookings.status changes.
+    // Just broadcast the status change to admin clients.
 
     await broadcastAdminNotification({
       type: "booking_status_change",
