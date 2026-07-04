@@ -504,6 +504,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Share,
   StyleSheet,
   ScrollView,
   Text,
@@ -511,9 +512,10 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { MessageCircle, Phone, X } from "lucide-react-native";
-import Svg, { Path as SvgPath } from "react-native-svg";
+import { Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
 import { db } from "@/lib/db/dal";
+import { showToast } from "@/lib/toast";
+import { DEFAULT_AVATAR } from "@/lib/colors";
 import type { Booking, Profile } from "@/lib/db/types";
 import {
   buildDemoBooking,
@@ -522,18 +524,16 @@ import {
   normalizeRouteParam,
 } from "@/lib/demo-booking";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
-import { haversineKm } from "@/components/map/engine";
+import { haversineKm, CREAM } from "@/components/map/engine";
+import { CareLinkMapView } from "@/components/map/CareLinkMapView";
+import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
+import { haptics } from "@/lib/haptics";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCREEN_W  = Dimensions.get("window").width;
 const SCREEN_H  = Dimensions.get("window").height;
 const MAP_H     = Math.round(SCREEN_H * 0.72); // ~72% = exactly the screenshot ratio
 const NAVY      = "#0D0870";
-
-// ── Map colors (matching screenshot's soft green) ─────────────────────────────
-const MAP_BG        = "#D4E8C2"; // light green land
-const MAP_ROAD_W    = "rgba(255,255,255,0.75)";
-const MAP_ROAD_GRAY = "rgba(200,200,200,0.5)";
 
 // ── Demo path ─────────────────────────────────────────────────────────────────
 type LatLng = { lat: number; lng: number };
@@ -549,90 +549,26 @@ const DEMO_PATH: LatLng[] = [
   { lat: 34.037, lng: -5.001 },
 ];
 
-// Mercator projection
-function project(coord: LatLng, center: LatLng, zoom: number, vw: number, vh: number) {
-  const latScale = Math.cos((center.lat * Math.PI) / 180);
-  return {
-    x: vw / 2 + (coord.lng - center.lng) * zoom * latScale,
-    y: vh / 2 - (coord.lat - center.lat) * zoom,
-  };
-}
-
-const ZOOM = 7500;
 const DEMO_SPEED_KMH = 28; // Demo vehicle speed used for ETA calculations (km/h)
 
-// ── "Vous" patient pin (dark navy chip + pulsing dot) ─────────────────────────
-function VousPin() {
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  const haloScale   = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.65] });
-  const haloOpacity = pulse.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.3, 0.1, 0] });
-
-  return (
-    <View style={vp.wrap} pointerEvents="none">
-      {/* "Vous" chip */}
-      <View style={vp.chip}>
-        <Text style={vp.chipTxt}>Vous</Text>
-      </View>
-      {/* Connector stem */}
-      <View style={vp.stem} />
-      {/* Pulsing dot */}
-      <View style={vp.dotContainer}>
-        <Animated.View style={[vp.halo, { transform: [{ scale: haloScale }], opacity: haloOpacity }]} />
-        <View style={vp.dot} />
-      </View>
-    </View>
-  );
-}
-
-const vp = StyleSheet.create({
-  wrap:    { alignItems: "center" },
-  chip: {
-    backgroundColor: NAVY,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    shadowColor: NAVY,
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  chipTxt: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
-  stem:    { width: 2, height: 6, backgroundColor: NAVY, opacity: 0.5 },
-  dotContainer: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
-  halo: {
-    position: "absolute",
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: NAVY,
-  },
-  dot: {
-    width: 13, height: 13, borderRadius: 7,
-    backgroundColor: NAVY,
-    borderWidth: 2.5, borderColor: "#FFFFFF",
-    shadowColor: NAVY, shadowOpacity: 0.5,
-    shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 4,
-  },
-});
-
 // ── Pro avatar circle (photo or initials, exact style from screenshot) ─────────
-function ProAvatar({ uri, initials, size = 46 }: { uri?: string | null; initials: string; size?: number }) {
+function ProAvatar({
+  uri,
+  source,
+  initials,
+  size = 46,
+}: {
+  uri?: string | null;
+  source?: import("react-native").ImageSourcePropType;
+  initials: string;
+  size?: number;
+}) {
+  const img = source ?? (uri ? { uri } : DEFAULT_AVATAR);
   return (
     <View style={[pa.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
-      {uri ? (
+      {img ? (
         <Image
-          source={{ uri }}
+          source={img}
           style={{ width: size, height: size, borderRadius: size / 2 }}
           resizeMode="cover"
         />
@@ -651,83 +587,49 @@ const pa = StyleSheet.create({
   initials: { color: "#FFFFFF", fontWeight: "700" },
 });
 
-// ── Pro map pin (circular photo on the map, no card, just the circle) ─────────
-function ProMapPin({ uri, initials, size = 46 }: { uri?: string | null; initials: string; size?: number }) {
-  const float = useRef(new Animated.Value(0)).current;
+type TrackPosition = { lat: number; lng: number; at: string };
 
+// ── Arrival confetti — pure RN primitives, native-driven, no external lib ─────
+function ConfettiBurst() {
+  const pieces = useRef(
+    Array.from({ length: 14 }, (_, i) => ({
+      x: (Math.random() - 0.5) * 280,
+      color: ["#0D0870", "#5BB8D4", "#22C55E", "#F59E0B", "#E24B4A"][i % 5],
+      rot: (Math.random() - 0.5) * 720,
+      v: new Animated.Value(0),
+    })),
+  ).current;
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: -4, duration: 1600, useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0,  duration: 1600, useNativeDriver: true }),
-      ])
+    Animated.stagger(
+      28,
+      pieces.map((p) => Animated.timing(p.v, { toValue: 1, duration: 1700, useNativeDriver: true })),
     ).start();
-  }, [float]);
-
+  }, [pieces]);
   return (
-    <Animated.View style={[pm.wrap, { transform: [{ translateY: float }] }]}>
-      {/* Outer glow ring */}
-      <View style={[pm.glow, { width: size + 14, height: size + 14, borderRadius: (size + 14) / 2 }]} />
-      {/* Circle photo */}
-      <ProAvatar uri={uri} initials={initials} size={size} />
-    </Animated.View>
-  );
-}
-
-const pm = StyleSheet.create({
-  wrap: { alignItems: "center", justifyContent: "center", position: "relative" },
-  glow: {
-    position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.5)",
-    shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 }, elevation: 4,
-  },
-});
-
-// ── Inline SVG map (no external libs — pure View + SVG roads) ─────────────────
-function MapBackground({ vw, vh }: { vw: number; vh: number }) {
-  // Compute road paths centered on MAP_CENTER
-  const proj = (lat: number, lng: number) =>
-    project({ lat, lng }, MAP_CENTER, ZOOM, vw, vh);
-
-  const roads: { pts: [number, number][]; w: number; color: string }[] = [
-    // Horizontal major road
-    { pts: [[-5.08, 34.037], [-4.94, 34.037]], w: 20, color: MAP_ROAD_W },
-    // Horizontal minor
-    { pts: [[-5.08, 34.050], [-4.94, 34.050]], w: 10, color: MAP_ROAD_W },
-    { pts: [[-5.08, 34.022], [-4.94, 34.022]], w: 10, color: MAP_ROAD_GRAY },
-    // Vertical major
-    { pts: [[-4.995, 34.07], [-4.995, 34.00]], w: 20, color: MAP_ROAD_W },
-    // Vertical minor
-    { pts: [[-5.025, 34.07], [-5.025, 34.00]], w: 10, color: MAP_ROAD_GRAY },
-    { pts: [[-4.965, 34.07], [-4.965, 34.00]], w: 10, color: MAP_ROAD_GRAY },
-    // Diagonal
-    { pts: [[-5.05, 34.06], [-4.96, 34.01]], w: 8, color: MAP_ROAD_GRAY },
-  ];
-
-  const makePath = (pts: [number, number][]) =>
-    pts.map(([lng, lat], i) => {
-      const p = proj(lat, lng);
-      return `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-    }).join(" ");
-
-  return (
-    <Svg style={StyleSheet.absoluteFill} width={vw} height={vh}>
-      {roads.map((r, i) => (
-        <SvgPath
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {pieces.map((p, i) => (
+        <Animated.View
           key={i}
-          d={makePath(r.pts)}
-          fill="none"
-          stroke={r.color}
-          strokeWidth={r.w}
-          strokeLinecap="round"
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "52%",
+            width: 9,
+            height: 9,
+            borderRadius: 2,
+            backgroundColor: p.color,
+            opacity: p.v.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+            transform: [
+              { translateX: p.v.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
+              { translateY: p.v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -240, -180] }) },
+              { rotate: p.v.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${p.rot}deg`] }) },
+            ],
+          }}
         />
       ))}
-    </Svg>
+    </View>
   );
 }
-
-type TrackPosition = { lat: number; lng: number; at: string };
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function LiveTrackingScreen() {
@@ -745,36 +647,53 @@ export default function LiveTrackingScreen() {
   const [routeCoords, setRouteCoords] = useState<LatLng[] | null>(null);
   const [routeCenter, setRouteCenter] = useState<LatLng | null>(null);
   const [routeLoaded, setRouteLoaded] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
-  // Spring-animated pro position on screen
-  const initPt    = project(DEMO_PATH[0], routeCenter ?? MAP_CENTER, ZOOM, SCREEN_W, MAP_H);
-  const proAnimX  = useRef(new Animated.Value(initPt.x)).current;
-  const proAnimY  = useRef(new Animated.Value(initPt.y)).current;
-  const [svgPro,  setSvgPro]  = useState({ x: initPt.x, y: initPt.y });
+  // Index of the route point nearest the pro — splits traversed vs remaining
+  const progressIdx = useMemo(() => {
+    if (!routeCoords || routeCoords.length < 2) return 0;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const d = haversineKm(proCoord, routeCoords[i]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  }, [proCoord, routeCoords]);
 
-  // Mirror animated X/Y into state for the SVG dashed line
+  const patientCoord: LatLng =
+    routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER;
+
+  // Distance to patient, refreshed every 5 s. Reads latest coords via refs so the
+  // interval is created ONCE (depending on proCoord would recreate it every tick
+  // → runaway "maximum update depth").
+  const proCoordRef = useRef(proCoord);
+  proCoordRef.current = proCoord;
+  const patientCoordRef = useRef(patientCoord);
+  patientCoordRef.current = patientCoord;
   useEffect(() => {
-    const ix = proAnimX.addListener(({ value }) => setSvgPro((p) => ({ ...p, x: value })));
-    const iy = proAnimY.addListener(({ value }) => setSvgPro((p) => ({ ...p, y: value })));
-    return () => { proAnimX.removeListener(ix); proAnimY.removeListener(iy); };
-  }, [proAnimX, proAnimY]);
+    const update = () => setDistanceKm(haversineKm(proCoordRef.current, patientCoordRef.current));
+    update();
+    const iv = setInterval(update, 5000);
+    return () => clearInterval(iv);
+  }, []);
 
-  // Re-spring when proCoord changes
-  const proScreenPt = useMemo(
-    () => project(proCoord, routeCenter ?? MAP_CENTER, ZOOM, SCREEN_W, MAP_H),
-    [proCoord, routeCenter]
-  );
-
+  // Fire a success haptic + confetti once, when the professional arrives.
+  const arrivedHaptic = useRef(false);
   useEffect(() => {
-    Animated.spring(proAnimX, { toValue: proScreenPt.x, useNativeDriver: false, friction: 7, tension: 55 }).start();
-    Animated.spring(proAnimY, { toValue: proScreenPt.y, useNativeDriver: false, friction: 7, tension: 55 }).start();
-  }, [proScreenPt.x, proScreenPt.y]);
-
-  // Patient fixed point
-  const patientPt = useMemo(
-    () => project(routeCoords ? routeCoords[routeCoords.length - 1] : MAP_CENTER, routeCenter ?? MAP_CENTER, ZOOM, SCREEN_W, MAP_H),
-    [routeCoords, routeCenter]
-  );
+    if (eta === 0 && !arrivedHaptic.current) {
+      arrivedHaptic.current = true;
+      haptics.success();
+      setShowConfetti(true);
+      const t = setTimeout(() => setShowConfetti(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [eta]);
 
   // ── Load booking ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -830,6 +749,7 @@ export default function LiveTrackingScreen() {
   useEffect(() => {
     if (!isDemoBooking) return;
     let cancelled = false;
+    let iv: ReturnType<typeof setInterval> | undefined;
 
     // If route not loaded, fetch route from OSRM between a demo start and the patient center
     (async () => {
@@ -839,7 +759,10 @@ export default function LiveTrackingScreen() {
         const dest = MAP_CENTER;
         const coordsStr = `${demoStart.lng},${demoStart.lat};${dest.lng},${dest.lat}`;
         const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
-        const res = await fetch(url);
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 5000); // don't hang → fall back to straight line
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`Routing error ${res.status}`);
         const body = await res.json();
         const coords: LatLng[] = body.routes && body.routes[0] && body.routes[0].geometry && body.routes[0].geometry.coordinates
@@ -873,13 +796,13 @@ export default function LiveTrackingScreen() {
         setEta(Math.max(0, Math.ceil(initialRem / speedMps / 60)));
         setProCoord({ ...current });
 
-        const tickInterval = 1000;
-        const iv = setInterval(() => {
+        const tickInterval = 120; // small, frequent steps → the marker glides
+        iv = setInterval(() => {
           if (cancelled) return;
           if (targetIdx >= coords.length) {
             setEta(0);
             setProCoord({ ...coords[coords.length - 1] });
-            clearInterval(iv);
+            if (iv) clearInterval(iv);
             return;
           }
 
@@ -908,11 +831,9 @@ export default function LiveTrackingScreen() {
           if (targetIdx === coords.length - 1 && rem < 5) {
             setEta(0);
             setProCoord({ ...coords[coords.length - 1] });
-            clearInterval(iv);
+            if (iv) clearInterval(iv);
           }
         }, tickInterval);
-
-        return () => clearInterval(iv);
       } catch (e) {
         // fallback to older local path if routing fails
         console.warn("Route fetch failed, using demo path", e);
@@ -923,12 +844,13 @@ export default function LiveTrackingScreen() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (iv) clearInterval(iv); };
   }, [isDemoBooking]);
 
   // ── Real booking route fetch: when booking + a pro origin or live origin available
   useEffect(() => {
     let cancelled = false;
+    let iv: ReturnType<typeof setInterval> | undefined;
     if (isDemoBooking) return;
     if (!booking) return;
 
@@ -969,7 +891,10 @@ export default function LiveTrackingScreen() {
       try {
         const coordsStr = `${origin.lng},${origin.lat};${dest.lng},${dest.lat}`;
         const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
-        const res = await fetch(url);
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 5000); // don't hang → fall back to straight line
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`Routing error ${res.status}`);
         const body = await res.json();
         const coords: LatLng[] = body.routes && body.routes[0] && body.routes[0].geometry && body.routes[0].geometry.coordinates
@@ -997,13 +922,13 @@ export default function LiveTrackingScreen() {
         setEta(Math.max(0, Math.ceil(initialRem / speedMps / 60)));
         setProCoord({ ...current });
 
-        const tickInterval = 1000;
-        const iv = setInterval(() => {
+        const tickInterval = 120; // small, frequent steps → the marker glides
+        iv = setInterval(() => {
           if (cancelled) return;
           if (targetIdx >= coords.length) {
             setEta(0);
             setProCoord({ ...coords[coords.length - 1] });
-            clearInterval(iv);
+            if (iv) clearInterval(iv);
             return;
           }
           const target = coords[targetIdx];
@@ -1016,16 +941,14 @@ export default function LiveTrackingScreen() {
           const rem = remainingMeters(current, targetIdx);
           const etaMin = Math.max(0, Math.ceil(rem / speedMps / 60));
           setEta(etaMin);
-          if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); clearInterval(iv); }
+          if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); if (iv) clearInterval(iv); }
         }, tickInterval);
-
-        return () => clearInterval(iv);
       } catch (e) {
         console.warn("Route fetch for booking failed", e);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (iv) clearInterval(iv); };
   }, [booking, isDemoBooking]);
 
   // NOTE: ETA is now computed from demo motion (distance / speed). Remove the blind countdown.
@@ -1043,9 +966,9 @@ export default function LiveTrackingScreen() {
 
   // ── Derived values ────────────────────────────────────────────────────────
   const arrived      = eta === 0;
-  const proName      = proProfile?.full_name ?? "Karim Benali";
+  const proName      = proProfile?.full_name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
   const proPhone     = proProfile?.phone     ?? null;
-  const proAvatar    = proProfile?.avatar_url ?? null;
+  const proAvatar    = proProfile?.avatar_url ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
   const proSpecialty = booking?.specialty?.replaceAll("_", " ") ?? "Infirmier";
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;
@@ -1060,68 +983,40 @@ export default function LiveTrackingScreen() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/*  MAP — 72% of screen height, green background                     */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <View style={[s.map, { height: MAP_H, backgroundColor: MAP_BG }]}>
+      <View style={[s.map, { height: MAP_H, backgroundColor: CREAM }]}>
 
-        {/* Road network SVG */}
-        <MapBackground vw={SCREEN_W} vh={MAP_H} />
+        {/* Real map (MapLibre) — patient + moving pro + road route */}
+        <CareLinkMapView
+          center={proCoord}
+          patient={routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER}
+          pro={{ ...proCoord, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }}
+          route={routeCoords ?? undefined}
+          progressIdx={progressIdx}
+          fitCoords={routeCoords ?? undefined}
+          radiusKm={0}
+          nightAuto
+          recenterKey={recenterKey}
+        />
 
-        {/* Route: full path (if available) + moving dashed line pro → patient */}
-        <Svg
-          style={StyleSheet.absoluteFill}
-          width={SCREEN_W}
-          height={MAP_H}
-          pointerEvents="none"
+        {/* Re-center FAB */}
+        <TouchableOpacity
+          style={s.recenterFab}
+          onPress={() => setRecenterKey((k) => k + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Recentrer la carte"
         >
-          {routeCoords && routeCoords.length > 1 ? (
-            <SvgPath
-              d={routeCoords.map((p, i) => {
-                const pt = project(p, routeCenter ?? MAP_CENTER, ZOOM, SCREEN_W, MAP_H);
-                return `${i === 0 ? "M" : "L"}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
-              }).join(" ")}
-              fill="none"
-              stroke="rgba(13,8,112,0.12)"
-              strokeWidth={6}
-              strokeLinecap="round"
-            />
-          ) : null}
-
-          <SvgPath
-            d={`M${svgPro.x.toFixed(1)},${svgPro.y.toFixed(1)} L${patientPt.x.toFixed(1)},${patientPt.y.toFixed(1)}`}
-            fill="none"
-            stroke={NAVY}
-            strokeWidth={2.5}
-            strokeDasharray="9 7"
-            strokeLinecap="round"
-            opacity={0.9}
-          />
-        </Svg>
-
-        {/* "Vous" patient pin — fixed */}
-        <View
-          pointerEvents="none"
-          style={[s.pinAbs, { left: patientPt.x - 24, top: patientPt.y - 50, zIndex: 20 }]}
-        >
-          <VousPin />
-        </View>
-
-        {/* Pro circular avatar — spring-animated */}
-        <Animated.View
-          style={[
-            s.pinAbs,
-            {
-              left:   Animated.subtract(proAnimX, 30),
-              top:    Animated.subtract(proAnimY, 30),
-              zIndex: 25,
-            },
-          ]}
-        >
-          <ProMapPin uri={proAvatar} initials={proInitials} size={46} />
-        </Animated.View>
+          <Crosshair size={20} color="#0D0870" strokeWidth={2.2} />
+        </TouchableOpacity>
 
         {/* ── Header: X + ETA pill ── */}
         <View style={s.header} pointerEvents="box-none">
           {/* X button — top left */}
-          <TouchableOpacity style={s.closeBtn} onPress={() => router.replace("/patient")}>
+          <TouchableOpacity
+            style={s.closeBtn}
+            onPress={() => router.replace("/patient")}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer le suivi"
+          >
             <X size={20} color="#1F2937" strokeWidth={2.5} />
           </TouchableOpacity>
 
@@ -1129,7 +1024,9 @@ export default function LiveTrackingScreen() {
           <View style={s.etaPill}>
             <View style={[s.etaDot, { backgroundColor: arrived ? "#16A34A" : "#22D3EE" }]} />
             <Text style={s.etaText}>
-              {arrived ? "Arrivé !" : `En route — ${eta} min`}
+              {arrived
+                ? "Arrivé !"
+                : `${distanceKm != null ? `${distanceKm.toFixed(1)} km · ` : ""}${eta} min`}
             </Text>
           </View>
 
@@ -1165,7 +1062,12 @@ export default function LiveTrackingScreen() {
           <View style={s.providerCard}>
             {/* Circular avatar with cyan status dot */}
             <View style={s.avatarWrap}>
-              <ProAvatar uri={proAvatar} initials={proInitials} size={52} />
+              <ProAvatar
+                uri={proAvatar}
+                source={isDemoBooking ? DEMO_DRIVER_AVATAR : undefined}
+                initials={proInitials}
+                size={52}
+              />
               <View style={s.statusDot} />
             </View>
 
@@ -1190,12 +1092,17 @@ export default function LiveTrackingScreen() {
             </View>
           </View>
 
-          {/* ── Action buttons exactly as in screenshot ── */}
+          {/* ── Action buttons ── */}
           <View style={s.actions}>
             <TouchableOpacity
               style={s.actionBtn}
               activeOpacity={0.75}
-              onPress={() => proPhone ? void Linking.openURL(`tel:${proPhone}`) : null}
+              accessibilityRole="button"
+              accessibilityLabel="Appeler le professionnel"
+              onPress={() => {
+                if (proPhone) void Linking.openURL(`tel:${proPhone}`);
+                else showToast("Numéro indisponible — utilisez la messagerie 💬");
+              }}
             >
               <Phone size={18} color="#1F2937" strokeWidth={2} />
               <Text style={s.actionTxt}>Appeler</Text>
@@ -1204,6 +1111,21 @@ export default function LiveTrackingScreen() {
             <TouchableOpacity
               style={s.actionBtn}
               activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Partager le suivi"
+              onPress={() =>
+                void Share.share({ message: `Mon infirmier arrive dans ${eta} min — CareLinks` })
+              }
+            >
+              <Share2 size={18} color="#1F2937" strokeWidth={2} />
+              <Text style={s.actionTxt}>Partager</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.actionBtn}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer un message"
               onPress={() => { if (bookingId) router.push(`/patient/chat/${bookingId}`); }}
             >
               <MessageCircle size={18} color="#1F2937" strokeWidth={2} />
@@ -1232,6 +1154,8 @@ export default function LiveTrackingScreen() {
         </ScrollView>
 
       </View>
+
+      {showConfetti ? <ConfettiBurst /> : null}
     </View>
   );
 }
@@ -1243,6 +1167,23 @@ const s = StyleSheet.create({
   // Map
   map: { position: "relative", overflow: "hidden", width: "100%" },
   pinAbs: { position: "absolute" },
+  recenterFab: {
+    position: "absolute",
+    right: 16,
+    bottom: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 55,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
 
   // Header overlay
   header: {

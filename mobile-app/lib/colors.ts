@@ -45,5 +45,24 @@ export const KineColors = {
   badgeBg: '#D1FAE5',
 };
 
+// ── Layered shadow system (navy-tinted, brand-consistent) ────────────────────
+// Use instead of flat `elevation: 2`. shadow* props are iOS; elevation is Android.
+export const Shadows = {
+  sm: { shadowColor: "#0D0870", shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  md: { shadowColor: "#0D0870", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 5 },
+  lg: { shadowColor: "#0D0870", shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
+  xl: { shadowColor: "#0D0870", shadowOpacity: 0.22, shadowRadius: 40, shadowOffset: { width: 0, height: 18 }, elevation: 18 },
+} as const;
+
+// ── Typography scale (DM Serif Display for display/headings, DM Sans for UI) ──
+export const Typography = {
+  display: { fontFamily: "DMSerifDisplay_400Regular", fontSize: 32, lineHeight: 40 },
+  h1: { fontFamily: "DMSerifDisplay_400Regular", fontSize: 24, lineHeight: 30 },
+  h2: { fontFamily: "DMSans_500Medium", fontSize: 18, lineHeight: 24 },
+  body: { fontFamily: "DMSans_400Regular", fontSize: 14, lineHeight: 20 },
+  label: { fontFamily: "DMSans_500Medium", fontSize: 12, lineHeight: 16 },
+  caption: { fontFamily: "DMSans_400Regular", fontSize: 10, lineHeight: 14 },
+} as const;
+
 // Default avatar for users without profile images
 export const DEFAULT_AVATAR = require("@/assets/DefaultProfile.png");

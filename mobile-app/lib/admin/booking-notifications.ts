@@ -4,7 +4,7 @@
  */
 
 import type { Booking } from "@/lib/db/types";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 
 export interface AdminBookingLog {
   id: string;

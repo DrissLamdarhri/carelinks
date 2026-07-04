@@ -314,11 +314,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular" },
   center: { paddingVertical: 40, alignItems: "center" },
-  avatarSection: {
-    alignItems: "center",
-    marginBottom: 20,
-    paddingVertical: 12,
-  },
   avatarContainer: {
     position: "relative",
     marginBottom: 8,

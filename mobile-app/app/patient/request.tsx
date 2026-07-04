@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Dimensions,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +26,9 @@ import {
   RotateCcw,
   ShieldCheck,
   HandMetal,
+  Users,
 } from "lucide-react-native";
+import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import { Colors, KineColors } from "@/lib/colors";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
@@ -31,7 +36,39 @@ import { db } from "@/lib/db/dal";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
+import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
+import type { ProPinData } from "../../components/map/Pins";
+import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
+
+// Default map center (Fès) used until the patient's GPS resolves.
+const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
+
+// Demo professionals positioned AROUND the map center so the map is never empty
+// during the demo (no real approved pros are seeded yet). Once real pros exist,
+// `mapPros` from findNearbyProsForMap takes over automatically.
+function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
+  const base = [
+    { id: "fz", initials: "FZ", name: "Fatima Zahra", specialty: "Infirmière", rating: 4.9, priceMad: 180, dLat: 0.006, dLng: 0.004, avatar: "https://randomuser.me/api/portraits/women/65.jpg" },
+    { id: "km", initials: "KM", name: "Karim Mansour", specialty: "Kinésithérapeute", rating: 4.8, priceMad: 220, dLat: 0.003, dLng: -0.007, avatar: "https://randomuser.me/api/portraits/men/32.jpg" },
+    { id: "sr", initials: "SR", name: "Samira Rifai", specialty: "Psychologue", rating: 4.7, priceMad: 350, dLat: -0.005, dLng: 0.006, avatar: "https://randomuser.me/api/portraits/women/44.jpg" },
+    { id: "yb", initials: "YB", name: "Youssef Bennani", specialty: "Infirmier", rating: 4.6, priceMad: 160, dLat: -0.007, dLng: -0.004, avatar: "https://randomuser.me/api/portraits/men/52.jpg" },
+  ];
+  return base.map((p) => ({
+    id: p.id,
+    initials: p.initials,
+    name: p.name,
+    shortName: p.name.split(" ")[0],
+    specialty: p.specialty,
+    rating: p.rating,
+    priceMad: p.priceMad,
+    avatarSource: DEMO_PRO_AVATARS[p.id],
+    avatarUrl: p.avatar,
+    lat: c.lat + p.dLat,
+    lng: c.lng + p.dLng,
+    distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
+  }));
+}
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
@@ -103,6 +140,9 @@ export default function PatientRequestScreen() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapPros, setMapPros] = useState<ProPinData[]>([]);
+  const [selectedProId, setSelectedProId] = useState<string | null>(null);
+  const [fitAllKey, setFitAllKey] = useState(0);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -131,19 +171,93 @@ export default function PatientRequestScreen() {
     setShowCareMenu(false);
   }, [serviceKey]);
 
+  // Fetch real nearby professionals for the map once we know the patient's GPS.
+  // Empty result → BookingMap shows its empty state (never fake pros in prod).
+  useEffect(() => {
+    if (!coords) {
+      setMapPros([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await geo.findNearbyProsForMap(coords.lat, coords.lng, {
+          specialty: toDbSpecialty(serviceKey),
+        });
+        if (cancelled) return;
+        setMapPros(
+          rows.map((r) => ({
+            id: r.id,
+            initials:
+              (r.full_name ?? "")
+                .split(" ")
+                .map((w) => w[0])
+                .filter(Boolean)
+                .join("")
+                .slice(0, 2)
+                .toUpperCase() || "Pr",
+            name: r.full_name ?? "Professionnel",
+            shortName: (r.full_name ?? "Pro").split(" ")[0],
+            specialty: r.specialty,
+            distanceKm: r.distanceKm,
+            rating: r.rating_avg ?? 0,
+            priceMad: r.hourly_rate_mad ?? 0,
+            avatarUrl: r.avatar_url,
+            lat: r.lat,
+            lng: r.lng,
+          }))
+        );
+      } catch (err) {
+        if (!cancelled) setMapPros([]);
+        console.warn("findNearbyProsForMap failed", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coords, serviceKey]);
+
+  // Reverse-geocode a coordinate and reflect it in the address field.
+  const syncAddressFromCoords = async (lat: number, lng: number) => {
+    const label = await geo.reverseGeocodeAddress(lat, lng);
+    setAddress(label ?? "Ma position");
+  };
+
   const handleLocate = async () => {
     if (locating) return;
     setErrorMessage(null);
+
+    // Permission gate with rationale + denied CTA (Play Store requirement).
+    const status = await geo.getPermissionStatus();
+    if (status === "undetermined") {
+      const proceed = await new Promise<boolean>((resolve) =>
+        Alert.alert(
+          "Autoriser la localisation",
+          "CareLink utilise votre position pour trouver les professionnels les plus proches et estimer les temps d'arrivée.",
+          [
+            { text: "Pas maintenant", style: "cancel", onPress: () => resolve(false) },
+            { text: "Continuer", onPress: () => resolve(true) },
+          ]
+        )
+      );
+      if (!proceed) return;
+    } else if (status === "denied") {
+      Alert.alert(
+        "Localisation désactivée",
+        "Activez la localisation dans les réglages pour trouver les professionnels près de vous.",
+        [
+          { text: "Annuler", style: "cancel" },
+          { text: "Ouvrir les réglages", onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
     setLocating(true);
     try {
       const current = await geo.getCurrentPosition();
       setCoords(current);
-      const city = await geo.reverseGeocode(current.lat, current.lng);
-      if (city && !address.trim()) {
-        setAddress(city);
-      } else if (!city && !address.trim()) {
-        setAddress("Ma position");
-      }
+      await syncAddressFromCoords(current.lat, current.lng);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Position GPS indisponible.");
     } finally {
@@ -207,19 +321,58 @@ export default function PatientRequestScreen() {
     }
   };
 
+  // In demo mode always show the polished photo-pros; in production use real ones.
+  const effectivePros = demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : mapPros;
+
+  // Price-history sparkline (mock trend ending at the current proposed price).
+  const SPARK_W = Dimensions.get("window").width - 88;
+  const sparkPoints = useMemo(() => {
+    const data = [80, 90, 85, 95, 100, 90, price];
+    const lo = Math.min(...data);
+    const hi = Math.max(...data);
+    return data
+      .map((v, i) => {
+        const x = (i / (data.length - 1)) * SPARK_W;
+        const y = 26 - ((v - lo) / Math.max(1, hi - lo)) * 24;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }, [price, SPARK_W]);
+
   return (
     <View style={styles.root}>
       <View style={styles.mapZone}>
-        <BookingMap
-          radiusKm={5}
-          onChange={(lat, lng) => setCoords({ lat, lng })}
-          onReserve={(proId) => {
-            // Demo reservation flow: create a short demo booking id and navigate to waiting/tracking
-            const mockBookingId = `demo-${serviceKey}-${proId}-${Date.now()}`;
-            // Slight delay for UX smoothness
-            setTimeout(() => router.push(`/patient/waiting/${mockBookingId}`), 250);
-          }}
-        />
+        {HAS_NATIVE_MAPS ? (
+          <CareLinkMapView
+            center={coords ?? DEFAULT_CENTER}
+            patient={coords ?? undefined}
+            pros={effectivePros}
+            radiusKm={5}
+            primaryColor={theme.primary}
+            selectedProId={selectedProId}
+            onSelectPro={(id) => setSelectedProId((prev) => (prev === id ? null : id))}
+            onMapPress={(c) => {
+              setCoords(c);
+              void syncAddressFromCoords(c.lat, c.lng);
+            }}
+            followUser
+            fitAllKey={fitAllKey}
+          />
+        ) : (
+          <BookingMap
+            radiusKm={5}
+            initialLat={coords?.lat ?? DEFAULT_CENTER.lat}
+            initialLng={coords?.lng ?? DEFAULT_CENTER.lng}
+            pros={effectivePros}
+            demo={demoMode}
+            primaryColor={theme.primary}
+            showChrome={false}
+            onChange={(lat, lng) => {
+              setCoords({ lat, lng });
+              void syncAddressFromCoords(lat, lng);
+            }}
+          />
+        )}
 
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -246,6 +399,16 @@ export default function PatientRequestScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Zoom-to-fit-all-pros */}
+        <TouchableOpacity
+          style={styles.fitAllBtn}
+          onPress={() => setFitAllKey((k) => k + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Voir tous les professionnels"
+        >
+          <Users size={18} color={theme.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -466,6 +629,22 @@ export default function PatientRequestScreen() {
             <Plus size={18} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
+
+        {/* Price-history sparkline */}
+        <View style={styles.sparkWrap}>
+          <Svg width={SPARK_W} height={28}>
+            <SvgPolyline
+              points={sparkPoints}
+              fill="none"
+              stroke={Colors.primary}
+              strokeOpacity={0.4}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </Svg>
+        </View>
+
         <Text style={styles.priceHint}>
           {isKine
             ? "Prix moyen dans votre zone : 100–150 MAD"
@@ -527,7 +706,25 @@ export default function PatientRequestScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  mapZone: { height: "35%", paddingTop: 6 },
+  mapZone: { height: "42%", paddingTop: 6 },
+  fitAllBtn: {
+    position: "absolute",
+    right: 14,
+    top: 104,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 40,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
+  sparkWrap: { marginTop: 8, marginBottom: 2, alignItems: "center" },
   topBar: {
     position: "absolute",
     top: 14,
