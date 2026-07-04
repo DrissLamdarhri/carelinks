@@ -55,11 +55,30 @@ export function RadiusSlider({
     }
   };
 
-  // Dynamic load of slider component. Some runtimes (Expo Go) don't include
-  // the native @react-native-community/slider module which would cause a crash.
+  // Dynamic load of slider component only for non-Expo Go environments.
+  // Expo Go does not ship native community modules; attempting to render them
+  // can trigger Invalid Hook Call or missing native module errors. Use a simple
+  // fallback there.
   const [SliderComp, setSliderComp] = useState<any>(null);
   useEffect(() => {
     let mounted = true;
+    // Lazy-detect Expo Go vs standalone/dev-client
+    let isExpoGo = false;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Constants = require("expo-constants");
+      isExpoGo = Constants?.appOwnership === "expo";
+    } catch (e) {
+      isExpoGo = false;
+    }
+
+    if (isExpoGo) {
+      // Do not attempt to require native slider in Expo Go
+      return () => {
+        mounted = false;
+      };
+    }
+
     try {
       // require at runtime to avoid bundler evaluation issues
       // prefer the default export
