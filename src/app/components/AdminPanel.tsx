@@ -141,9 +141,6 @@ export function AdminPanel() {
   const [showYogaModal, setShowYogaModal] = useState(false);
   const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [adminNotifs, setAdminNotifs] = useState<any[]>([]);
-  const [adminNotifUnread, setAdminNotifUnread] = useState(0);
   const [liveKpi, setLiveKpi] = useState<{
     users: number; bookings: number; gmv: number; rating: number;
     activePros: number; pendingKyc: number; openDisputes: number;
@@ -908,59 +905,6 @@ export function AdminPanel() {
 
           {/* Realtime Supabase notifications (DB-driven bell) */}
           {user?.id && <NotificationBell userId={user.id} light={false} />}
-
-          {/* Legacy KYC counter */}
-          <div className="relative">
-            <button
-              onClick={() => setNotifOpen(!notifOpen)}
-              className="w-10 h-10 rounded-xl flex items-center justify-center relative"
-              style={{ background: "#F3F3F5" }}
-            >
-              <Bell size={18} className="text-[#888780]" />
-              {pending.length > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white flex items-center justify-center"
-                  style={{ background: "#E24B4A", fontSize: 9, fontWeight: 700 }}
-                >
-                  {pending.length}
-                </span>
-              )}
-            </button>
-            <AnimatePresence>
-              {notifOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl z-50"
-                  style={{ border: "1px solid #E8EAF0" }}
-                >
-                  <div className="p-4 border-b border-[#F0F0F0]">
-                    <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>
-                      Notifications ({pending.length})
-                    </p>
-                  </div>
-                  <div className="p-2 max-h-64 overflow-y-auto">
-                    {pending.map((n) => (
-                      <div key={n.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F8F8FC] cursor-pointer">
-                        <div className="w-8 h-8 rounded-full bg-[#EDE5CC] flex items-center justify-center text-[#0D0870] text-xs" style={{ fontWeight: 700 }}>
-                          {(n.name || "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#1A1A1A] truncate" style={{ fontWeight: 500 }}>{n.name}</p>
-                          <p className="text-xs text-[#888780]">Nouvelle inscription pro</p>
-                        </div>
-                        <span className="text-xs text-[#B0B0B0]">{n.submittedAt}</span>
-                      </div>
-                    ))}
-                    {pending.length === 0 && (
-                      <p className="text-center text-sm text-[#888780] py-6">Aucune notification</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
           {/* Admin avatar */}
           <div className="flex items-center gap-2">

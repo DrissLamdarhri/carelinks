@@ -96,7 +96,7 @@ export function ProfessionalsManager() {
       subscription.unsubscribe();
       window.removeEventListener('pro-status-changed', handleProStatusChanged);
     };
-  }, [filter, specialtyFilter, selectedPro?.id]);
+  }, [filter, specialtyFilter]);
 
   const loadProfessionals = async () => {
     try {
@@ -287,8 +287,9 @@ export function ProfessionalsManager() {
         console.warn('Failed to send approval notification', e);
       }
 
-      // Refresh in background to ensure consistency
-      setTimeout(() => loadProfessionals(), 100);
+      // Refresh in background after a longer delay to allow DB replication
+      // 500ms minimum to ensure all replicas are updated before refetch
+      setTimeout(() => loadProfessionals(), 500);
       
       // Clear modals
       setShowDetailsModal(false);
@@ -361,8 +362,9 @@ export function ProfessionalsManager() {
         console.warn('Failed to send rejection notification', e);
       }
 
-      // Refresh in background to ensure consistency
-      setTimeout(() => loadProfessionals(), 100);
+      // Refresh in background after a longer delay to allow DB replication
+      // 500ms minimum to ensure all replicas are updated before refetch
+      setTimeout(() => loadProfessionals(), 500);
 
       // Clear modals
       setShowRejectModal(false);

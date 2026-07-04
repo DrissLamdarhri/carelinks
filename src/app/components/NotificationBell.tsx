@@ -144,7 +144,7 @@ export function NotificationBell({ userId, light = true }: NotificationBellProps
   // ── Render ──
 
   return (
-    <>
+    <div className="relative">
       {/* ── Bell button ── */}
       <button
         onClick={handleOpen}
@@ -179,47 +179,43 @@ export function NotificationBell({ userId, light = true }: NotificationBellProps
         </AnimatePresence>
       </button>
 
-      {/* ── Overlay + bottom sheet ── */}
+      {/* ── Dropdown panel (positioned relative to bell) ── */}
       <AnimatePresence>
         {open && (
           <>
-            {/* Backdrop */}
+            {/* Backdrop - only show on mobile, not on desktop */}
             <motion.div
               key="backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
-              className="fixed inset-0 z-40"
-              style={{ background: "rgba(0,0,0,0.45)" }}
+              className="fixed inset-0 z-40 hidden xl:block"
+              style={{ background: "rgba(0,0,0,0.2)" }}
               onClick={handleClose}
             />
 
-            {/* Panel */}
+            {/* Panel - Dropdown à côté de l'icône */}
             <motion.div
               key="panel"
               ref={panelRef}
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 340, damping: 32 }}
-              className="fixed bottom-0 left-1/2 z-50 flex flex-col"
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute right-0 top-12 z-50 flex flex-col"
               style={{
-                width: "min(375px, 100vw)",
+                width: "380px",
                 maxHeight: "70vh",
-                transform: "translateX(-50%)",
-                borderRadius: "20px 20px 0 0",
+                borderRadius: "16px",
                 background: "#FFFFFF",
-                boxShadow: "0 -8px 40px rgba(0,0,0,0.18)",
+                boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
               }}
             >
-              {/* Handle */}
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 rounded-full bg-[#E0E0E0]" />
-              </div>
+              {/* Handle removed - not needed for dropdown */}
 
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#F0F0F0]">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0F0F0] rounded-t-2xl">
                 <span className="text-[16px] text-[#1A1A1A]" style={{ fontWeight: 700, fontFamily: "'DM Serif Display', serif" }}>
                   Notifications
                 </span>
@@ -236,7 +232,7 @@ export function NotificationBell({ userId, light = true }: NotificationBellProps
                   )}
                   <button
                     onClick={handleClose}
-                    className="w-8 h-8 rounded-full bg-[#F3F3F5] flex items-center justify-center"
+                    className="w-8 h-8 rounded-full bg-[#F3F3F5] flex items-center justify-center hover:bg-[#E8E8E8] transition-colors"
                   >
                     <X size={16} className="text-[#888780]" />
                   </button>
@@ -311,12 +307,11 @@ export function NotificationBell({ userId, light = true }: NotificationBellProps
                 )}
               </div>
 
-              {/* Footer safe-area spacer */}
-              <div style={{ height: "env(safe-area-inset-bottom, 8px)" }} />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
-  );
+              {/* Footer safe-area spacer - removed for dropdown */}
+           </motion.div>
+         </>
+       )}
+     </AnimatePresence>
+   </div>
+ );
 }
