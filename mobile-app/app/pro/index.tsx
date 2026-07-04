@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  TextInput,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,43 +15,88 @@ import {
   TrendingUp,
   Star,
   Activity,
-  Calendar,
-  Check,
-  X,
   Banknote,
-  MapPin,
   FileText,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
-import {
-  mockProProfile,
-  mockPendingRequests,
-  mockProAppointments,
-  mockCompletedStats,
-} from "@/lib/mock-data";
+import { mockProProfile, mockCompletedStats } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
+import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
 import { useAuth } from "@/lib/auth-context";
+import { db } from "@/lib/db/dal";
+import { geo } from "@/lib/db/geo";
+import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
+import type { Booking, ProSpecialty } from "@/lib/db/types";
 
 export default function ProHomeScreen() {
   const router = useRouter();
+  const { user, profile, refreshProfile } = useAuth();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
-  const [counterFor, setCounterFor] = useState<string | null>(null);
-  const [counterPrice, setCounterPrice] = useState(0);
-  const { profile, refreshProfile } = useAuth();
-  
-  // Refresh profile when screen comes into focus
+  const [specialty, setSpecialty] = useState<ProSpecialty | null>(null);
+  const [appointments, setAppointments] = useState<Booking[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  // On focus: refresh profile + load the pro's specialty, availability, and
+  // matched appointments (everything that isn't an open request).
   useFocusEffect(
     useCallback(() => {
       void refreshProfile();
-    }, [refreshProfile])
+      let cancelled = false;
+      void (async () => {
+        if (!user?.id) return;
+        try {
+          const pro = await db.pros.get(user.id);
+          if (!cancelled) {
+            setSpecialty(pro?.specialty ?? null);
+            setIsOnline(!!pro?.is_available);
+          }
+          const list = await db.bookings.listForPro(user.id);
+          if (!cancelled) setAppointments(list.filter((b) => b.status !== "open"));
+        } catch {
+          /* ignore — pro may not be set up yet */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id, refreshProfile])
   );
-  
+
+  // Live open requests for the pro's specialty (realtime → bid from the card).
+  const { bookings: openReqs } = useOpenBookingsBySpecialty(specialty);
+
   const displayName =
     profile?.firstName || profile?.lastName
       ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
       : mockProProfile.name;
   const avatar = profile?.avatar || DEFAULT_AVATAR;
+
+  // Go online = become available + publish current GPS so patients see you on
+  // their map. Needs a specialty first (set it in "Demandes proches").
+  const toggleOnline = async () => {
+    if (!user?.id || busy) return;
+    if (!specialty) {
+      router.push("/pro/bids");
+      return;
+    }
+    const next = !isOnline;
+    setBusy(true);
+    try {
+      if (next) {
+        const coords = await geo.getCurrentPosition();
+        await db.pros.upsert({ id: user.id, specialty, is_available: true });
+        await geo.setProLocation(user.id, coords.lat, coords.lng);
+      } else {
+        await db.pros.upsert({ id: user.id, specialty, is_available: false });
+      }
+      setIsOnline(next);
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -71,7 +115,8 @@ export default function ProHomeScreen() {
           </View>
           <View style={styles.rightTop}>
             <TouchableOpacity
-              onPress={() => setIsOnline((v) => !v)}
+              onPress={toggleOnline}
+              disabled={busy}
               style={[
                 styles.onlineToggle,
                 isOnline ? styles.onlineToggleOn : undefined,
@@ -110,7 +155,7 @@ export default function ProHomeScreen() {
           onPress={() => setTab("requests")}
         >
           <Text style={[styles.tabText, tab === "requests" && styles.tabTextActive]}>
-            Demandes ({mockPendingRequests.length})
+            Demandes ({openReqs.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -136,113 +181,64 @@ export default function ProHomeScreen() {
 
       <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 26 }}>
         {tab === "requests" ? (
-          <View style={{ gap: 10 }}>
-            {mockPendingRequests.map((r) => (
-              <View key={r.id} style={styles.requestCard}>
-                <View style={styles.newBar}>
-                  <Text style={styles.newBarText}>Nouvelle demande</Text>
-                  <Text style={styles.newBarSub}>à l’instant</Text>
-                </View>
-
-                <View style={styles.requestBody}>
-                  <View style={styles.reqHeader}>
-                    <View style={styles.reqPatientBadge}>
-                      <Text style={styles.reqPatientInitials}>
-                        {r.patientName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.reqPatient}>{r.patientName}</Text>
-                      <Text style={styles.reqCare}>{r.careType}</Text>
-                    </View>
-                    <Text style={styles.reqPrice}>{r.proposedPrice} MAD</Text>
-                  </View>
-
-                  <View style={styles.reqInfoRow}>
-                    <Calendar size={12} color={Colors.textMuted} />
-                    <Text style={styles.reqInfoText}>
-                      {r.dateStr} · {r.timeStr}
-                    </Text>
-                  </View>
-                  <View style={styles.reqInfoRow}>
-                    <MapPin size={12} color={Colors.textMuted} />
-                    <Text style={styles.reqInfoText}>{r.address}</Text>
-                  </View>
-
-                  {counterFor === r.id ? (
-                    <View style={styles.counterRow}>
-                      <TextInput
-                        style={styles.counterInput}
-                        keyboardType="numeric"
-                        value={String(counterPrice)}
-                        onChangeText={(v) => setCounterPrice(Number(v || 0))}
-                      />
-                      <Text style={{ color: Colors.textMuted, fontSize: 13 }}>MAD</Text>
-                      <TouchableOpacity
-                        style={styles.sendCounter}
-                        onPress={() => setCounterFor(null)}
-                      >
-                        <Text style={styles.sendCounterText}>Envoyer</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.reqActions}>
-                    <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]}>
-                      <Check size={16} color="white" />
-                      <Text style={styles.acceptText}>Accepter</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.counterBtn]}
-                      onPress={() => {
-                        setCounterFor(r.id);
-                        setCounterPrice(r.proposedPrice + 20);
-                      }}
-                    >
-                      <Banknote size={16} color={Colors.primary} />
-                      <Text style={styles.counterText}>Contre-offre</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.rejectBtn}>
-                      <X size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
+          specialty ? (
+            <LiveBookingsFeed specialty={specialty} />
+          ) : (
+            <View style={styles.setupCard}>
+              <Text style={styles.setupText}>
+                Choisissez votre spécialité et votre position pour recevoir les demandes.
+              </Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
+                <Text style={styles.setupBtnText}>Configurer</Text>
+              </TouchableOpacity>
+            </View>
+          )
         ) : (
           <View style={{ gap: 10 }}>
-            {mockProAppointments.map((b) => (
-              <View key={b.id} style={styles.bookingCard}>
-                <View style={styles.bookingTimeCol}>
-                  <Text style={styles.bookingTime}>{b.timeStr}</Text>
-                  <Text style={styles.bookingDate}>{b.dateStr}</Text>
-                </View>
-                <View style={styles.sep} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bookingPatient}>{b.patientName}</Text>
-                  <Text style={styles.bookingCare}>{b.careType}</Text>
-                  <Text style={styles.bookingAddr}>{b.address}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text
-                    style={[
-                      styles.statusPill,
-                      b.status === "completed"
-                        ? styles.statusCompleted
-                        : styles.statusComing,
-                    ]}
-                  >
-                    {b.status === "completed" ? "Terminé" : "À venir"}
-                  </Text>
-                  <Text style={styles.bookingPrice}>{b.price} MAD</Text>
-                </View>
+            {appointments.length === 0 ? (
+              <View style={styles.setupCard}>
+                <Text style={styles.setupText}>Aucun rendez-vous pour le moment.</Text>
               </View>
-            ))}
+            ) : (
+              appointments.map((b) => {
+                const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
+                return (
+                  <View key={b.id} style={styles.bookingCard}>
+                    <View style={styles.bookingTimeCol}>
+                      <Text style={styles.bookingTime}>
+                        {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                      </Text>
+                      <Text style={styles.bookingDate}>
+                        {d ? d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" }) : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.sep} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.bookingPatient}>Patient</Text>
+                      <Text style={styles.bookingCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
+                      {b.address ? <Text style={styles.bookingAddr}>{b.address}</Text> : null}
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text
+                        style={[
+                          styles.statusPill,
+                          b.status === "completed" ? styles.statusCompleted : styles.statusComing,
+                        ]}
+                      >
+                        {b.status === "completed"
+                          ? "Terminé"
+                          : b.status === "in_progress"
+                            ? "En cours"
+                            : "À venir"}
+                      </Text>
+                      <Text style={styles.bookingPrice}>
+                        {b.final_price_mad ?? b.budget_max_mad ?? 0} MAD
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         )}
       </ScrollView>
@@ -403,6 +399,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  setupCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 18,
+    alignItems: "center",
+    gap: 12,
+  },
+  setupText: { color: Colors.textMuted, fontSize: 13, textAlign: "center", lineHeight: 19 },
+  setupBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  setupBtnText: { color: "white", fontSize: 13, fontWeight: "700" },
   bookingCard: {
     borderRadius: 16,
     backgroundColor: "white",

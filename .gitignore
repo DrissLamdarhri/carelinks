@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
-pnpm-lock.yaml
 package-lock.json
 yarn.lock
+# NOTE: pnpm-lock.yaml must be tracked so EAS/CI can install reproducibly.
 
 # Environment variables
 .env
@@ -35,6 +35,13 @@ dist/
 build/
 .next/
 out/
+
+# Large archives (do not commit)
+*.zip
+
+# Native projects (managed/CNG workflow — EAS regenerates these via prebuild)
+mobile-app/android/
+mobile-app/ios/
 
 # Expo
 .expo/

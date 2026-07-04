@@ -24,6 +24,23 @@ const defaultResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (!moduleName) return defaultResolveRequest ? defaultResolveRequest(context, moduleName, platform) : context.resolveRequest(context, moduleName, platform);
 
+  // ── Force a SINGLE copy of React / React Native across the pnpm monorepo ──
+  // Multiple react copies (root web app 18.x + a transitive 19.2.x alongside the
+  // app's 19.1.0) cause "Invalid hook call" / "useState of null". Resolve every
+  // react / react-native import from the project root so there's exactly one.
+  if (
+    moduleName === "react" ||
+    moduleName === "react-native" ||
+    moduleName.startsWith("react/") ||
+    moduleName.startsWith("react-native/")
+  ) {
+    return context.resolveRequest(
+      { ...context, originModulePath: path.join(__dirname, "index.js") },
+      moduleName,
+      platform
+    );
+  }
+
   if (moduleName === "expo-keep-awake") {
     return {
       type: "sourceFile",

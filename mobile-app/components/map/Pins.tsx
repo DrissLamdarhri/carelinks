@@ -105,6 +105,7 @@ export type ProPinData = {
   rating: number;
   priceMad?: number;
   avatarUrl?: string | null;
+  avatarSource?: import("react-native").ImageSourcePropType;
   isEnRoute?: boolean;
   lat: number;
   lng: number;
@@ -186,7 +187,14 @@ export const ProPin = React.memo(function ProPin({ pro, isSelected, onSelect }: 
   const handlePress = useCallback(() => onSelect(pro.id), [onSelect, pro.id]);
 
   return (
-    <TouchableOpacity activeOpacity={0.88} onPress={handlePress} style={pin.wrap}>
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={handlePress}
+      style={pin.wrap}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityLabel={`${pro.name}, ${pro.specialty}, ${pro.distanceKm.toFixed(1)} kilomètres${pro.priceMad ? `, ${pro.priceMad} dirhams` : ""}`}
+    >
       <Animated.View style={{ transform: [{ translateY: floatV }] }}>
         {/* ── Popup card ── */}
         {isSelected && (
