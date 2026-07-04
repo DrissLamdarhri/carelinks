@@ -24,6 +24,7 @@ import {
 import { ProAvatarMarker, MeMarker } from "./MapMarkers";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
+import type { ProPinData } from "./Pins";
 
 const NAVY = "#0D0870";
 
@@ -177,7 +178,30 @@ export default function CareLinkMapNative({
       onPress={(e: NativeSyntheticEvent<PressEvent | PressEventWithFeatures>) => {
         const coords = (e.nativeEvent as unknown as { geometry?: { coordinates?: number[] } })?.geometry
           ?.coordinates;
-        if (coords && coords.length >= 2) onMapPress?.({ lng: coords[0], lat: coords[1] });
+        if (!coords || coords.length < 2) return;
+        const lng = coords[0];
+        const lat = coords[1];
+        // MapLibre ViewAnnotation children don't reliably receive taps, so we
+        // resolve the tap here: if it lands near a pro pin, select that pro;
+        // otherwise treat it as a location pick. (equirectangular ≈ fine at city scale)
+        if (onSelectPro && pros.length) {
+          let best: ProPinData | null = null;
+          let bestKm = Infinity;
+          for (const p of pros) {
+            const dLat = (p.lat - lat) * 111;
+            const dLng = (p.lng - lng) * 111 * Math.cos((lat * Math.PI) / 180);
+            const km = Math.sqrt(dLat * dLat + dLng * dLng);
+            if (km < bestKm) {
+              bestKm = km;
+              best = p;
+            }
+          }
+          if (best && bestKm <= 0.6) {
+            onSelectPro(best.id);
+            return;
+          }
+        }
+        onMapPress?.({ lng, lat });
       }}
     >
       {/* Uncontrolled camera — positioned imperatively so the user stays in control */}

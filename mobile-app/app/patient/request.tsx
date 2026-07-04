@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Image,
   Linking,
   ScrollView,
   StyleSheet,
@@ -27,9 +28,10 @@ import {
   ShieldCheck,
   HandMetal,
   Users,
+  X,
 } from "lucide-react-native";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
-import { Colors, KineColors } from "@/lib/colors";
+import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
@@ -174,15 +176,15 @@ export default function PatientRequestScreen() {
   // Fetch real nearby professionals for the map once we know the patient's GPS.
   // Empty result → BookingMap shows its empty state (never fake pros in prod).
   useEffect(() => {
-    if (!coords) {
-      setMapPros([]);
-      return;
-    }
+    // Query around the patient's GPS, or the default center before GPS is granted,
+    // so real pros show immediately (not only after tapping GPS).
+    const c = coords ?? DEFAULT_CENTER;
     let cancelled = false;
     (async () => {
       try {
-        const rows = await geo.findNearbyProsForMap(coords.lat, coords.lng, {
+        const rows = await geo.findNearbyProsForMap(c.lat, c.lng, {
           specialty: toDbSpecialty(serviceKey),
+          radiusKm: 80, // generous demo radius (covers Fès↔Meknès); tighten to 15 for prod
         });
         if (cancelled) return;
         setMapPros(
@@ -270,14 +272,7 @@ export default function PatientRequestScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      if (demoMode) {
-        const mockBookingId = `demo-${serviceKey}-${Date.now()}`;
-        await new Promise(resolve => setTimeout(resolve, 800));
-        router.push(`/patient/waiting/${mockBookingId}`);
-        setSubmitting(false);
-        return;
-      }
-
+      // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
       await db.patients.upsert({ id: user.id });
 
       const [hour, minute] = times[selectedTime].split(":");
@@ -321,8 +316,14 @@ export default function PatientRequestScreen() {
     }
   };
 
-  // In demo mode always show the polished photo-pros; in production use real ones.
-  const effectivePros = demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : mapPros;
+  // Prefer REAL nearby pros from the DB; fall back to demo photo-pros only when
+  // none are found (so seeding real pros makes them appear automatically).
+  const effectivePros =
+    mapPros.length > 0 ? mapPros : demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : [];
+
+  const usingRealPros = mapPros.length > 0;
+  // Tapped pro → small detail card (clean, doesn't cover the map).
+  const selectedPro = effectivePros.find((p) => p.id === selectedProId) ?? null;
 
   // Price-history sparkline (mock trend ending at the current proposed price).
   const SPARK_W = Dimensions.get("window").width - 88;
@@ -409,6 +410,51 @@ export default function PatientRequestScreen() {
         >
           <Users size={18} color={theme.primary} />
         </TouchableOpacity>
+
+        {/* Debug/confidence chip: how many pros loaded + real vs demo */}
+        {effectivePros.length > 0 ? (
+          <View style={styles.countChip}>
+            <View style={[styles.countDot, { backgroundColor: usingRealPros ? "#22C55E" : "#F59E0B" }]} />
+            <Text style={styles.countChipText}>
+              {effectivePros.length} {usingRealPros ? "pros (réel)" : "démo"}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Tapped pro → compact detail card at the bottom of the map (never clipped,
+            real photo). Small and dismissable — does not cover the map. */}
+        {selectedPro ? (
+          <View style={styles.proCard}>
+            <Image
+              source={
+                selectedPro.avatarUrl
+                  ? { uri: selectedPro.avatarUrl }
+                  : selectedPro.avatarSource ?? DEFAULT_AVATAR
+              }
+              style={styles.proCardAvatar}
+            />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.proCardName} numberOfLines={1}>{selectedPro.name}</Text>
+              <Text style={styles.proCardMeta} numberOfLines={1}>
+                {(selectedPro.specialty ?? "").replaceAll("_", " ")}
+                {selectedPro.rating ? `  ·  ★ ${selectedPro.rating.toFixed(1)}` : ""}
+                {selectedPro.distanceKm != null ? `  ·  ${selectedPro.distanceKm.toFixed(1)} km` : ""}
+              </Text>
+            </View>
+            <View style={styles.proCardPrice}>
+              <Text style={[styles.proCardPriceVal, { color: theme.primary }]}>{selectedPro.priceMad}</Text>
+              <Text style={styles.proCardPriceUnit}>MAD</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setSelectedProId(null)}
+              style={styles.proCardClose}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+            >
+              <X size={16} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView
@@ -725,6 +771,88 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   sparkWrap: { marginTop: 8, marginBottom: 2, alignItems: "center" },
+  countChip: {
+    position: "absolute",
+    top: 104,
+    left: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    zIndex: 40,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  countDot: { width: 8, height: 8, borderRadius: 4 },
+  countChipText: { fontSize: 12, fontWeight: "700", color: "#0D0870" },
+  proCard: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    zIndex: 45,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  proCardAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: "#E9E7F2" },
+  proCardName: { fontSize: 15, fontWeight: "800", color: "#111827" },
+  proCardMeta: { fontSize: 12, fontWeight: "600", color: "#6B7280", marginTop: 2 },
+  proCardPrice: { alignItems: "flex-end", marginRight: 4 },
+  proCardPriceVal: { fontSize: 20, fontWeight: "800", lineHeight: 22 },
+  proCardPriceUnit: { fontSize: 10, fontWeight: "600", color: "#9CA3AF" },
+  proCardClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  carousel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 10,
+    maxHeight: 82,
+  },
+  carouselContent: { paddingHorizontal: 12, gap: 10, alignItems: "center" },
+  pcard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    width: 208,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "transparent",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 7,
+  },
+  pcardAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#E9E7F2" },
+  pcardName: { fontSize: 14, fontWeight: "800", color: "#111827" },
+  pcardMeta: { fontSize: 11, fontWeight: "600", color: "#6B7280", marginTop: 1 },
+  pcardPrice: { fontSize: 13, fontWeight: "800", marginTop: 2 },
   topBar: {
     position: "absolute",
     top: 14,
