@@ -5,8 +5,11 @@ import {
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
 } from "react-native";
-import Slider from "@react-native-community/slider";
+// Use dynamic require for Slider to avoid crashes in environments where
+// the native @react-native-community/slider module isn't linked (Expo Go).
+// If unavailable, render a simple fallback with +/- buttons.
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 
@@ -52,23 +55,70 @@ export function RadiusSlider({
     }
   };
 
+  // Dynamic load of slider component. Some runtimes (Expo Go) don't include
+  // the native @react-native-community/slider module which would cause a crash.
+  const [SliderComp, setSliderComp] = useState<any>(null);
+  useEffect(() => {
+    let mounted = true;
+    try {
+      // require at runtime to avoid bundler evaluation issues
+      // prefer the default export
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require("@react-native-community/slider");
+      const comp = mod && (mod.default || mod);
+      if (mounted) setSliderComp(comp);
+    } catch (e) {
+      // module not available; keep SliderComp null to use fallback
+      if (mounted) setSliderComp(null);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const increment = () => {
+    const next = Math.min(50, Math.round(radius + 1));
+    setRadius(next);
+    handleRelease(next);
+  };
+  const decrement = () => {
+    const next = Math.max(1, Math.round(radius - 1));
+    setRadius(next);
+    handleRelease(next);
+  };
+
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text style={styles.label}>Rayon de service</Text>
         <Text style={styles.value}>{radius} km</Text>
       </View>
-      <Slider
-        minimumValue={1}
-        maximumValue={50}
-        step={1}
-        minimumTrackTintColor={Colors.primary}
-        maximumTrackTintColor="#D7D7D7"
-        thumbTintColor={Colors.primary}
-        value={radius}
-        onValueChange={setRadius}
-        onSlidingComplete={handleRelease}
-      />
+
+      {SliderComp ? (
+        <SliderComp
+          minimumValue={1}
+          maximumValue={50}
+          step={1}
+          minimumTrackTintColor={Colors.primary}
+          maximumTrackTintColor="#D7D7D7"
+          thumbTintColor={Colors.primary}
+          value={radius}
+          onValueChange={(v: number) => setRadius(Math.round(v))}
+          onSlidingComplete={handleRelease}
+        />
+      ) : (
+        // Fallback UI: simple decrement/increment buttons when native slider unavailable
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+          <TouchableOpacity onPress={decrement} style={{ padding: 8 }}>
+            <Text style={{ fontSize: 18, color: Colors.primary }}>−</Text>
+          </TouchableOpacity>
+          <Text style={{ fontSize: 16, color: Colors.textPrimary }}>{radius} km</Text>
+          <TouchableOpacity onPress={increment} style={{ padding: 8 }}>
+            <Text style={{ fontSize: 18, color: Colors.primary }}>+</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {saving ? (
         <View style={styles.savingRow}>
           <ActivityIndicator size="small" color={Colors.primary} />
