@@ -110,19 +110,26 @@ export default function KycModerationQueueScreen() {
   ) => {
     if (actingOn) return;
     setActingOn(documentId);
+    
+    // Save previous state for rollback
+    const previousItems = items;
+    
     try {
+      // Update document verification
       const { error: docError } = await supabase
         .from("pro_documents")
         .update({ is_verified: decision === "approved" })
         .eq("id", documentId);
       if (docError) throw docError;
 
+      // Update professional status
       const { error: proError } = await supabase
         .from("professionals")
         .update({ verification_status: decision })
         .eq("id", professionalId);
       if (proError) throw proError;
 
+      // Log audit (non-critical)
       try {
         const { error: auditError } = await supabase.rpc("log_audit", {
           p_action: decision === "approved" ? "kyc_approve" : "kyc_reject",
@@ -135,14 +142,21 @@ export default function KycModerationQueueScreen() {
         console.error("log_audit RPC error:", e);
       }
 
+      // Update local state immediately: remove the item from queue
+      // since it's no longer "pending"
+      setItems(prev => 
+        prev.filter(item => item.professional.id !== professionalId)
+      );
+
       Alert.alert(
         "Mise à jour",
         decision === "approved"
           ? "Document approuvé et professionnel validé."
           : "Document rejeté et professionnel refusé."
       );
-      await loadQueue();
     } catch (error) {
+      // Rollback to previous state on error
+      setItems(previousItems);
       const message = error instanceof Error ? error.message : "Action impossible.";
       Alert.alert("Erreur", message);
     } finally {

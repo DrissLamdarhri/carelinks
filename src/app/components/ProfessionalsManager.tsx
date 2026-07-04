@@ -235,56 +235,71 @@ export function ProfessionalsManager() {
     const target = pro || selectedPro;
     if (!target) return;
     setActionLoading(true);
+    
+    // Save previous state for rollback if needed
+    const previousProfessionals = professionals;
+    
     try {
-      const nowIso = new Date().toISOString();
-      let updateError: any = null;
-      try {
-        const { error } = await supabase
-          .from("professionals")
-          .update({
-            verification_status: "approved",
-            verified_at: nowIso,
-          })
-          .eq("id", target.id);
-        updateError = error;
-      } catch (e) {
-        updateError = e;
-      }
-
-      if (updateError) {
-        // fallback to admin API if direct update blocked by RLS
-        try {
-          await approvePro(target.id);
-        } catch (apiErr) {
-          throw updateError;
-        }
-      }
-
-      // Optimistic UI update
-      setProfessionals((prev) =>
-        prev.map((p) =>
-          p.id === target.id ? { ...p, verification_status: "approved", verified_at: nowIso } : p
+      // OPTIMISTIC UPDATE: Immediately update local state
+      setProfessionals((prevPros) =>
+        prevPros.map((p) =>
+          p.id === target.id
+            ? { ...p, verification_status: "approved" as ProfessionalStatus, verified_at: new Date().toISOString() }
+            : p
         )
       );
+
+      // Update the selected pro in the modal too
       if (selectedPro?.id === target.id) {
-        setSelectedPro((s) => (s ? { ...s, verification_status: "approved", verified_at: nowIso } : s));
+        setSelectedPro((s) =>
+          s ? { ...s, verification_status: "approved", verified_at: new Date().toISOString() } : s
+        );
       }
 
-      // Mark documents verified as well (best-effort)
-      try {
-        const { error: docsErr } = await supabase.from("pro_documents").update({ is_verified: true }).eq("professional_id", target.id);
-        if (docsErr) console.warn("Failed to mark docs verified:", docsErr);
-      } catch (e) {
-        console.warn("Failed to mark docs verified:", e);
+      const nowIso = new Date().toISOString();
+      
+      // Update database with proper error handling
+      const { error } = await supabase
+        .from("professionals")
+        .update({
+          verification_status: "approved",
+          verified_at: nowIso,
+        })
+        .eq("id", target.id);
+
+      if (error) {
+        throw error; // Fail fast - don't use fallback silently
       }
 
-      await sendApprovalNotification(target);
-
+      // Show success immediately (optimistic update succeeded and DB update confirmed)
       toast.success(`${target.full_name} a été approuvé(e)`);
+
+      // Send notification (non-blocking)
+      try {
+        await supabase.from('notifications').insert({
+          user_id: target.id,
+          kind: 'approval',
+          title: 'Compte approuvé',
+          body: 'Votre compte professionnel a été approuvé! Vous pouvez maintenant recevoir des demandes.',
+        });
+        try { await sendApprovalNotification(target); } catch (e) { console.warn('Notification failed', e); }
+      } catch (e) {
+        console.warn('Failed to send approval notification', e);
+      }
+
+      // Refresh in background to ensure consistency
+      setTimeout(() => loadProfessionals(), 100);
+      
+      // Clear modals
       setShowDetailsModal(false);
-      // refresh list in background
-      loadProfessionals();
+      setSelectedPro(null);
     } catch (error) {
+      // ROLLBACK: Revert to previous state if update fails
+      setProfessionals(previousProfessionals);
+      if (selectedPro?.id === target.id) {
+        setSelectedPro((s) => s ? { ...s, verification_status: "pending" } : s);
+      }
+      
       console.error("Error approving professional:", error);
       toast.error("Erreur lors de l'approbation");
     } finally {
@@ -298,45 +313,67 @@ export function ProfessionalsManager() {
       return;
     }
     setActionLoading(true);
+    
+    // Save previous state for rollback if needed
+    const previousProfessionals = professionals;
+    
     try {
-      let updateError: any = null;
-      try {
-        const { error } = await supabase
-          .from("professionals")
-          .update({
-            verification_status: "rejected",
-            rejection_reason: rejectReason,
-          })
-          .eq("id", selectedPro.id);
-        updateError = error;
-      } catch (e) {
-        updateError = e;
-      }
-
-      if (updateError) {
-        try {
-          await rejectPro(selectedPro.id);
-        } catch (apiErr) {
-          throw updateError;
-        }
-      }
-
-      // Optimistic UI update
-      setProfessionals((prev) =>
-        prev.map((p) =>
-          p.id === selectedPro.id ? { ...p, verification_status: "rejected", rejection_reason: rejectReason } : p
+      // OPTIMISTIC UPDATE: Immediately update local state
+      setProfessionals((prevPros) =>
+        prevPros.map((p) =>
+          p.id === selectedPro.id
+            ? { ...p, verification_status: "rejected" as ProfessionalStatus, rejection_reason: rejectReason }
+            : p
         )
       );
-      setSelectedPro((s) => (s ? { ...s, verification_status: "rejected", rejection_reason: rejectReason } : s));
 
-      await sendRejectionNotification(selectedPro, rejectReason);
+      // Update the selected pro in the modal too
+      setSelectedPro((s) =>
+        s ? { ...s, verification_status: "rejected", rejection_reason: rejectReason } : s
+      );
 
+      // Update database with proper error handling
+      const { error } = await supabase
+        .from("professionals")
+        .update({
+          verification_status: "rejected",
+          rejection_reason: rejectReason,
+        })
+        .eq("id", selectedPro.id);
+
+      if (error) {
+        throw error; // Fail fast - don't use fallback silently
+      }
+
+      // Show success immediately (optimistic update succeeded and DB update confirmed)
       toast.success(`${selectedPro.full_name} a été rejeté(e)`);
+
+      // Send notification (non-blocking)
+      try {
+        await supabase.from('notifications').insert({
+          user_id: selectedPro.id,
+          kind: 'rejection',
+          title: 'Compte rejeté',
+          body: "Votre dossier a été rejeté. Veuillez consulter l'application pour plus d'informations.",
+        });
+        try { await sendRejectionNotification(selectedPro, rejectReason); } catch (e) { console.warn('Notification failed', e); }
+      } catch (e) {
+        console.warn('Failed to send rejection notification', e);
+      }
+
+      // Refresh in background to ensure consistency
+      setTimeout(() => loadProfessionals(), 100);
+
+      // Clear modals
       setShowRejectModal(false);
       setShowDetailsModal(false);
       setRejectReason("");
-      loadProfessionals();
+      setSelectedPro(null);
     } catch (error) {
+      // ROLLBACK: Revert to previous state if update fails
+      setProfessionals(previousProfessionals);
+      setSelectedPro((s) => s ? { ...s, verification_status: "pending" } : s);
+      
       console.error("Error rejecting professional:", error);
       toast.error("Erreur lors du rejet");
     } finally {
@@ -454,11 +491,21 @@ export function ProfessionalsManager() {
     );
   };
 
-  const filtered = professionals.filter(
-    (p) =>
+  const filtered = professionals.filter((p) => {
+    // Apply search filter
+    const matchesSearch =
       p.full_name.toLowerCase().includes(searchQ.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQ.toLowerCase())
-  );
+      p.email.toLowerCase().includes(searchQ.toLowerCase());
+    
+    // Apply status filter
+    const matchesStatus = filter === "all" || p.verification_status === filter;
+    
+    // Apply specialty filter
+    const matchesSpecialty =
+      specialtyFilter === "all" || !specialtyFilter || p.specialty === specialtyFilter;
+    
+    return matchesSearch && matchesStatus && matchesSpecialty;
+  });
 
   return (
     <div>

@@ -1,11 +1,13 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -29,19 +31,35 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const lastStep = onboardingSlides.length - 1;
-  const slide = onboardingSlides[step];
-  const Icon = iconMap[slide.icon];
-
-  const scrollRef = useRef<ScrollView | null>(null);
-  const width = Dimensions.get("window").width;
+  const scrollRef = useRef<FlatList<(typeof onboardingSlides)[0]> | null>(null);
+  const screenWidth = Dimensions.get("window").width;
 
   const next = () => {
     if (step < lastStep) {
       const nextIndex = step + 1;
-      scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      scrollRef.current?.scrollToIndex({ index: nextIndex, animated: true });
       setStep(nextIndex);
     }
   };
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offset / screenWidth);
+    setStep(Math.min(index, lastStep));
+  }, [screenWidth, lastStep]);
+
+  const renderSlide = useCallback(({ item }: { item: typeof onboardingSlides[number] }) => {
+    const SlideIcon = iconMap[item.icon];
+    return (
+      <View style={[styles.slideContainer, { width: screenWidth }]}>
+        <View style={styles.iconCard}>
+          <SlideIcon size={36} color="white" />
+        </View>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.subtitle}>{item.subtitle}</Text>
+      </View>
+    );
+  }, [screenWidth]);
 
   return (
     <LinearGradient colors={Gradients.onboarding} style={styles.root}>
@@ -62,36 +80,18 @@ export default function OnboardingScreen() {
             <View style={styles.logoLine} />
           </View>
 
-          {/* Swipeable slides with improved finger scrolling */}
-          <ScrollView
+          <FlatList
+            ref={scrollRef as any}
+            data={onboardingSlides as any}
+            renderItem={renderSlide}
+            keyExtractor={(item) => item.id}
             horizontal
             pagingEnabled
             scrollEventThrottle={16}
-            decelerationRate="fast"
-            snapToInterval={Dimensions.get("window").width - 48}
-            snapToAlignment="center"
+            onScroll={handleScroll}
             showsHorizontalScrollIndicator={false}
-            ref={scrollRef}
-            onMomentumScrollEnd={(e) => {
-              const w = Dimensions.get("window").width - 48;
-              const page = Math.round(e.nativeEvent.contentOffset.x / w);
-              setStep(Math.min(page, onboardingSlides.length - 1));
-            }}
-            contentContainerStyle={{ alignItems: "center", paddingHorizontal: 24 }}
-          >
-            {onboardingSlides.map((s) => {
-              const SlideIcon = iconMap[s.icon];
-              return (
-                <View key={s.id} style={{ width: Dimensions.get("window").width - 48, alignItems: "center" }}>
-                  <View style={styles.iconCard}>
-                    <SlideIcon size={36} color="white" />
-                  </View>
-                  <Text style={styles.title}>{s.title}</Text>
-                  <Text style={styles.subtitle}>{s.subtitle}</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
+            bounces={false}
+          />
         </View>
 
         <View style={styles.bottom}>
@@ -139,23 +139,24 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  safe: { flex: 1, paddingHorizontal: 24, paddingBottom: 32 },
+  safe: { flex: 1, paddingHorizontal: 0, paddingBottom: 32 },
   topRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
     marginTop: 8,
+    paddingHorizontal: 24,
     zIndex: 4,
   },
   skip: { color: "rgba(255,255,255,0.65)", fontSize: 13 },
   center: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
+    justifyContent: "flex-start",
+    paddingHorizontal: 0,
     zIndex: 3,
   },
-  logoWrap: { alignItems: "center", marginBottom: 44 },
+  logoWrap: { alignItems: "center", marginBottom: 44, marginTop: 20 },
   logo: {
     fontSize: 38,
     color: "white",
@@ -168,6 +169,12 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  slideContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   iconCard: {
     width: 80,
@@ -191,7 +198,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: "center",
   },
-  bottom: { zIndex: 3 },
+  bottom: { zIndex: 3, paddingHorizontal: 24 },
   dots: {
     flexDirection: "row",
     justifyContent: "center",

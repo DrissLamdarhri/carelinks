@@ -578,6 +578,41 @@ export function AdminPanel() {
   };
   const filteredServices = services.filter((s) => serviceCatFilter === "Tous" || s.category === serviceCatFilter);
 
+  // Refresh professionals list
+  const refreshProfessionalsList = async () => {
+    try {
+      const { data: prosData } = await supabase
+        .from("professionals")
+        .select("id,specialty,verification_status,rating_avg,total_bookings,created_at,profiles!professionals_id_fkey(full_name,city)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      const labelMap: Record<string, string> = {
+        nurse: "Infirmier", psychologist: "Psychologue",
+        yoga_instructor: "Yoga", physiotherapist: "Kiné", autre: "Autre",
+      };
+      setLiveAllPros((prosData ?? []).map((p: any) => {
+        const fullName = p.profiles?.full_name || p.id?.slice(0, 8) || "Pro";
+        return {
+          id: p.id || "",
+          name: fullName,
+          email: "",
+          type: labelMap[p.specialty] ?? p.specialty ?? "Autre",
+          status: p.verification_status === "approved" ? "Vérifié"
+                : p.verification_status === "pending"  ? "En attente"
+                : "Suspendu",
+          bookings: p.total_bookings ?? 0,
+          joined: p.created_at ? new Date(p.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }) : "—",
+          city: p.profiles?.city ?? "—",
+          rating: p.rating_avg ?? 0,
+          revenue: "—",
+          img: "",
+        };
+      }));
+    } catch (err) {
+      console.error("Failed to refresh professionals list:", err);
+    }
+  };
+
   // Pending pros — REAL API
   const approveNurse = async (proId: string) => {
     try {
@@ -588,6 +623,8 @@ export function AdminPanel() {
       setLiveKpi((k) => k ? { ...k, activePros: (k.activePros ?? 0) + 1, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
       // notify other components (ProfessionalsManager) to update UI immediately
       try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'approved' } })); } catch {}
+      // Immediately refresh the professionals list
+      await refreshProfessionalsList();
 
       // Create in-app notification + send email (best-effort)
       try {
@@ -620,6 +657,8 @@ export function AdminPanel() {
       setLiveKpi((k) => k ? { ...k, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
       // notify other components (ProfessionalsManager) to update UI immediately
       try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'rejected' } })); } catch {}
+      // Immediately refresh the professionals list
+      await refreshProfessionalsList();
 
       // Create in-app notification + send email (best-effort)
       try {
