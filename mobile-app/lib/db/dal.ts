@@ -128,7 +128,7 @@ export const bookings = {
     );
   },
 
-  async listOpenForSpecialty(specialty: ProSpecialty): Promise<Booking[]> {
+  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50): Promise<Booking[]> {
     return unwrap(
       await supabase
         .from("bookings")
@@ -136,6 +136,7 @@ export const bookings = {
         .eq("specialty", specialty)
         .eq("status", "open")
         .order("created_at", { ascending: false })
+        .limit(limit)
     );
   },
 
