@@ -514,6 +514,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
 import { db } from "@/lib/db/dal";
+import { geo } from "@/lib/db/geo";
 import { showToast } from "@/lib/toast";
 import { DEFAULT_AVATAR } from "@/lib/colors";
 import type { Booking, Profile } from "@/lib/db/types";
@@ -854,98 +855,82 @@ export default function LiveTrackingScreen() {
     if (isDemoBooking) return;
     if (!booking) return;
 
-    // find booking destination coords from booking row
-    const tryExtractCoords = (obj: any): LatLng | null => {
-      if (!obj) return null;
-      const lat = obj.booking_lat ?? obj.lat ?? obj.latitude ?? obj.p_lat ?? obj.b_lat ?? obj.location_lat;
-      const lng = obj.booking_lng ?? obj.lng ?? obj.longitude ?? obj.p_lng ?? obj.b_lng ?? obj.location_lng;
-      if (typeof lat === "number" && typeof lng === "number") return { lat, lng };
-      return null;
-    };
-
-    const dest = tryExtractCoords(booking);
-    if (!dest) {
-      // no destination coords — cannot fetch route
-      return;
-    }
-
-    const originCandidates: (LatLng | null)[] = [];
-    // 1) liveProOrigin (first seen live position)
-    if (liveProOrigin) originCandidates.push(liveProOrigin);
-    // 2) professional last-known coords from pros table (via RPC stored fields) — attempt to fetch
+    // Destination (patient) + pro origin come from PostGIS via get_track_coords.
+    // Fall back to a synthetic origin ~2.5 km away so the nurse always "comes to
+    // you" exactly like the demo — even before the pro publishes a live GPS.
     (async () => {
+      let destC: LatLng | null = null;
+      let proOrigin: LatLng | null = null;
       try {
-        if (booking.professional_id) {
-          const fullPro = await db.pros.get(booking.professional_id);
-          const pcoords = tryExtractCoords(fullPro);
-          if (pcoords) originCandidates.push(pcoords);
-        }
-      } catch (e) {
-        // ignore
+        const tc = await geo.getTrackCoords(booking.id);
+        destC = tc.dest;
+        proOrigin = tc.pro;
+      } catch {
+        // ignore — handled by fallbacks below
       }
+      if (cancelled) return;
+      const dest: LatLng = destC ?? MAP_CENTER; // demo center fallback → tracking still runs
+      const synthetic: LatLng = { lat: dest.lat + 0.02, lng: dest.lng + 0.015 }; // ~2.5 km away
+      const origin: LatLng = liveProOrigin ?? proOrigin ?? synthetic;
 
-      // pick the first available origin
-      const origin = originCandidates.find(Boolean) as LatLng | undefined;
-      if (!origin) return;
-
+      // Road-following route (OSRM); straight line as a fallback so motion never stalls.
+      let coords: LatLng[];
       try {
         const coordsStr = `${origin.lng},${origin.lat};${dest.lng},${dest.lat}`;
         const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
         const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 5000); // don't hang → fall back to straight line
+        const timeoutId = setTimeout(() => ctrl.abort(), 5000);
         const res = await fetch(url, { signal: ctrl.signal });
         clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`Routing error ${res.status}`);
         const body = await res.json();
-        const coords: LatLng[] = body.routes && body.routes[0] && body.routes[0].geometry && body.routes[0].geometry.coordinates
-          ? body.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }))
-          : null;
-        if (cancelled) return;
-        if (!coords || coords.length === 0) return;
-        setRouteCoords(coords);
-        const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
-        const center = { lat: avg.lat / coords.length, lng: avg.lng / coords.length };
-        setRouteCenter(center);
-        setRouteLoaded(true);
-
-        // start movement along route (same logic as demo)
-        const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
-        const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
-        let current: LatLng = { ...coords[0] };
-        let targetIdx = 1;
-        const remainingMeters = (pos: LatLng, idx: number) => {
-          let rem = distMeters(pos, coords[idx]);
-          for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
-          return rem;
-        };
-        const initialRem = remainingMeters(current, 1);
-        setEta(Math.max(0, Math.ceil(initialRem / speedMps / 60)));
-        setProCoord({ ...current });
-
-        const tickInterval = 120; // small, frequent steps → the marker glides
-        iv = setInterval(() => {
-          if (cancelled) return;
-          if (targetIdx >= coords.length) {
-            setEta(0);
-            setProCoord({ ...coords[coords.length - 1] });
-            if (iv) clearInterval(iv);
-            return;
-          }
-          const target = coords[targetIdx];
-          const segDist = distMeters(current, target);
-          if (segDist < 1) { current = { ...target }; targetIdx += 1; setProCoord({ ...current }); return; }
-          const dt = tickInterval / 1000;
-          const move = Math.min(1, (speedMps * dt) / segDist);
-          current = { lat: current.lat + (target.lat - current.lat) * move, lng: current.lng + (target.lng - current.lng) * move };
-          setProCoord({ ...current });
-          const rem = remainingMeters(current, targetIdx);
-          const etaMin = Math.max(0, Math.ceil(rem / speedMps / 60));
-          setEta(etaMin);
-          if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); if (iv) clearInterval(iv); }
-        }, tickInterval);
-      } catch (e) {
-        console.warn("Route fetch for booking failed", e);
+        coords =
+          body.routes && body.routes[0]?.geometry?.coordinates
+            ? body.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }))
+            : [origin, dest];
+      } catch {
+        coords = [origin, dest];
       }
+      if (cancelled || coords.length < 2) return;
+
+      setRouteCoords(coords);
+      const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
+      setRouteCenter({ lat: avg.lat / coords.length, lng: avg.lng / coords.length });
+      setRouteLoaded(true);
+
+      // Movement along the route — identical glide to the demo.
+      const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
+      const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
+      let current: LatLng = { ...coords[0] };
+      let targetIdx = 1;
+      const remainingMeters = (pos: LatLng, idx: number) => {
+        let rem = distMeters(pos, coords[idx]);
+        for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
+        return rem;
+      };
+      setEta(Math.max(0, Math.ceil(remainingMeters(current, 1) / speedMps / 60)));
+      setProCoord({ ...current });
+
+      const tickInterval = 120; // small, frequent steps → the marker glides
+      iv = setInterval(() => {
+        if (cancelled) return;
+        if (targetIdx >= coords.length) {
+          setEta(0);
+          setProCoord({ ...coords[coords.length - 1] });
+          if (iv) clearInterval(iv);
+          return;
+        }
+        const target = coords[targetIdx];
+        const segDist = distMeters(current, target);
+        if (segDist < 1) { current = { ...target }; targetIdx += 1; setProCoord({ ...current }); return; }
+        const dt = tickInterval / 1000;
+        const move = Math.min(1, (speedMps * dt) / segDist);
+        current = { lat: current.lat + (target.lat - current.lat) * move, lng: current.lng + (target.lng - current.lng) * move };
+        setProCoord({ ...current });
+        const rem = remainingMeters(current, targetIdx);
+        setEta(Math.max(0, Math.ceil(rem / speedMps / 60)));
+        if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); if (iv) clearInterval(iv); }
+      }, tickInterval);
     })();
 
     return () => { cancelled = true; if (iv) clearInterval(iv); };

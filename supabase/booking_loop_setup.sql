@@ -80,8 +80,29 @@ $$;
 
 grant execute on function public.accept_bid(uuid) to authenticated;
 
--- ── 4. Sanity check — confirm the pieces exist ─────────────────────────────
+-- ── 4. Tracking coords — booking destination + matched pro origin as lat/lng ─
+-- The live-tracking screen needs plain lat/lng to draw the route + move the pro,
+-- but both are stored as PostGIS geography. Expose them (participants only).
+create or replace function public.get_track_coords(b_id uuid)
+returns table(
+  dest_lat double precision, dest_lng double precision,
+  pro_lat  double precision, pro_lng  double precision
+)
+language sql stable security definer set search_path = public as $$
+  select
+    st_y(b.location::geometry),  st_x(b.location::geometry),
+    st_y(pr.location::geometry), st_x(pr.location::geometry)
+  from public.bookings b
+  left join public.professionals pr on pr.id = b.professional_id
+  where b.id = b_id
+    and (b.patient_id = auth.uid() or b.professional_id = auth.uid());
+$$;
+
+grant execute on function public.get_track_coords(uuid) to authenticated;
+
+-- ── 5. Sanity check — confirm the pieces exist ─────────────────────────────
 select
   (select count(*) from pg_publication_tables
      where pubname = 'supabase_realtime' and tablename in ('bids','bookings')) as realtime_tables,
-  (select 1 from pg_proc where proname = 'accept_bid')                         as accept_bid_fn;
+  (select 1 from pg_proc where proname = 'accept_bid')                         as accept_bid_fn,
+  (select 1 from pg_proc where proname = 'get_track_coords')                   as track_coords_fn;
