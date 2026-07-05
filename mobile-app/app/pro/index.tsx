@@ -207,7 +207,12 @@ export default function ProHomeScreen() {
               appointments.map((b) => {
                 const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
                 return (
-                  <View key={b.id} style={styles.bookingCard}>
+                  <TouchableOpacity
+                    key={b.id}
+                    style={styles.bookingCard}
+                    activeOpacity={0.9}
+                    onPress={() => router.push(`/pro/tracking/${b.id}`)}
+                  >
                     <View style={styles.bookingRow}>
                       <View style={styles.bookingTimeCol}>
                         <Text style={styles.bookingTime}>
@@ -259,7 +264,7 @@ export default function ProHomeScreen() {
                         <Text style={styles.navBtnText}>Naviguer vers le patient</Text>
                       </TouchableOpacity>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}

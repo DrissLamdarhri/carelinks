@@ -4,7 +4,7 @@
  */
 
 import { Tabs } from "expo-router";
-import { Layers, FileText, TrendingUp, User } from "lucide-react-native";
+import { Home, CalendarDays, Wallet, User } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -59,10 +59,10 @@ export default function ProLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Tableau de bord",
+          title: "Accueil",
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
-              <Layers color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+              <Home color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
             </View>
           ),
         }}
@@ -70,10 +70,10 @@ export default function ProLayout() {
       <Tabs.Screen
         name="schedule"
         options={{
-          title: "Calendrier",
+          title: "Missions",
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
-              <FileText color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+              <CalendarDays color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
             </View>
           ),
         }}
@@ -84,7 +84,7 @@ export default function ProLayout() {
           title: "Revenus",
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
-              <TrendingUp color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
+              <Wallet color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
             </View>
           ),
         }}
@@ -120,6 +120,7 @@ export default function ProLayout() {
       />
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
     </Tabs>
   );
 }

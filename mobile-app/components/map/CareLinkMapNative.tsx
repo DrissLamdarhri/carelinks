@@ -21,7 +21,7 @@ import {
   type PressEventWithFeatures,
   ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
-import { ProAvatarMarker, MeMarker } from "./MapMarkers";
+import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
 import type { ProPinData } from "./Pins";
@@ -59,6 +59,7 @@ function circleFeature(center: LatLng, radiusKm: number, steps = 64): GeoJSON.Fe
 export default function CareLinkMapNative({
   center,
   patient,
+  destination,
   pros = [],
   pro,
   route,
@@ -254,6 +255,12 @@ export default function CareLinkMapNative({
       {patient ? (
         <ViewAnnotation lngLat={[patient.lng, patient.lat]} anchor="center">
           <MeMarker />
+        </ViewAnnotation>
+      ) : null}
+
+      {destination ? (
+        <ViewAnnotation lngLat={[destination.lng, destination.lat]} anchor="bottom">
+          <DestinationPin />
         </ViewAnnotation>
       ) : null}
 
