@@ -866,15 +866,32 @@ export default function LiveTrackingScreen() {
     (async () => {
       let destC: LatLng | null = null;
       let proOrigin: LatLng | null = null;
+      // Destination = the patient's own live GPS (they're at the care location) —
+      // real coords using only deployed infra, no RPC needed.
+      try {
+        destC = await geo.getCurrentPosition();
+      } catch {
+        // location denied/unavailable — fall through to other sources
+      }
+      // Pro origin = matched pro's coords from the public view (deployed).
+      if (booking.professional_id) {
+        try {
+          proOrigin = await geo.getProCoords(booking.professional_id);
+        } catch {
+          // ignore
+        }
+      }
+      // get_track_coords() is a supplementary source (street-address dest + pro
+      // identity) used only when deployed; never required for real coords.
       try {
         const tc = await geo.getTrackCoords(booking.id);
-        destC = tc.dest;
-        proOrigin = tc.pro;
+        if (!destC) destC = tc.dest;
+        if (!proOrigin) proOrigin = tc.pro;
         if (!cancelled && (tc.proName || tc.proAvatar)) {
           setTrackProMeta({ name: tc.proName, avatar: tc.proAvatar });
         }
       } catch {
-        // ignore — handled by fallbacks below
+        // RPC not deployed — fine, we already have real coords above
       }
       if (cancelled) return;
       const dest: LatLng = destC ?? MAP_CENTER; // demo center fallback → tracking still runs
