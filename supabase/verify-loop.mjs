@@ -95,9 +95,19 @@ async function main() {
   const finalBid = await patient.from("bids").select("status").eq("id", bidId).maybeSingle();
   step("bid marked ACCEPTED", finalBid.data?.status === "accepted", `status=${finalBid.data?.status}`);
 
-  // get_track_coords should return (dest may be null since this test booking has no GPS)
+  // Tracking parity: can the PATIENT read the matched pro's name/avatar?
+  const proProf = await patient.from("profiles").select("full_name,avatar_url").eq("id", proId).maybeSingle();
+  step("patient can read matched pro name/avatar (tracking header)", !!proProf.data?.full_name,
+    proProf.data?.full_name ? "" : "RLS blocks profiles.get → tracking shows generic 'Professionnel'");
+
+  // get_track_coords should return dest + pro coords (+ pro identity once extended)
   const tc = await patient.rpc("get_track_coords", { b_id: bookingId });
   step("get_track_coords() RPC exists", !tc.error, tc.error?.message);
+  if (!tc.error) {
+    const row = Array.isArray(tc.data) ? tc.data[0] : tc.data;
+    step("get_track_coords returns pro name (tracking header)", !!row?.pro_name,
+      row?.pro_name ? "" : "RPC not extended with pro_name yet");
+  }
 
   await cleanup(bookingId);
   finish();

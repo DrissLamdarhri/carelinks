@@ -651,6 +651,11 @@ export default function LiveTrackingScreen() {
   const [recenterKey, setRecenterKey] = useState(0);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  // Pro identity from get_track_coords (authoritative even under hardened RLS).
+  const [trackProMeta, setTrackProMeta] = useState<{ name: string | null; avatar: string | null }>({
+    name: null,
+    avatar: null,
+  });
 
   // Index of the route point nearest the pro — splits traversed vs remaining
   const progressIdx = useMemo(() => {
@@ -865,6 +870,9 @@ export default function LiveTrackingScreen() {
         const tc = await geo.getTrackCoords(booking.id);
         destC = tc.dest;
         proOrigin = tc.pro;
+        if (!cancelled && (tc.proName || tc.proAvatar)) {
+          setTrackProMeta({ name: tc.proName, avatar: tc.proAvatar });
+        }
       } catch {
         // ignore — handled by fallbacks below
       }
@@ -951,9 +959,9 @@ export default function LiveTrackingScreen() {
 
   // ── Derived values ────────────────────────────────────────────────────────
   const arrived      = eta === 0;
-  const proName      = proProfile?.full_name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
+  const proName      = proProfile?.full_name ?? trackProMeta.name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
   const proPhone     = proProfile?.phone     ?? null;
-  const proAvatar    = proProfile?.avatar_url ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
+  const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
   const proSpecialty = booking?.specialty?.replaceAll("_", " ") ?? "Infirmier";
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;

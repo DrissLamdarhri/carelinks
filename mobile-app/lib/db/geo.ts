@@ -49,15 +49,20 @@ export const geo = {
    * matched pro's current origin, both as plain lat/lng (from PostGIS). Either
    * may be null (pro hasn't published a location, or destination not set).
    */
-  async getTrackCoords(
-    bookingId: string
-  ): Promise<{ dest: { lat: number; lng: number } | null; pro: { lat: number; lng: number } | null }> {
+  async getTrackCoords(bookingId: string): Promise<{
+    dest: { lat: number; lng: number } | null;
+    pro: { lat: number; lng: number } | null;
+    proName: string | null;
+    proAvatar: string | null;
+  }> {
     const { data, error } = await supabase.rpc("get_track_coords", { b_id: bookingId });
     if (error) throw error;
     const row: any = Array.isArray(data) ? data[0] : data;
     return {
       dest: row?.dest_lat != null && row?.dest_lng != null ? { lat: row.dest_lat, lng: row.dest_lng } : null,
       pro: row?.pro_lat != null && row?.pro_lng != null ? { lat: row.pro_lat, lng: row.pro_lng } : null,
+      proName: row?.pro_name ?? null,
+      proAvatar: row?.pro_avatar ?? null,
     };
   },
 
