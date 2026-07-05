@@ -44,7 +44,6 @@ const startTimes = ["06:00", "07:00", "08:00", "09:00", "10:00"];
 const endTimes = ["16:00", "17:00", "18:00", "19:00", "20:00", "22:00"];
 
 // Dynamic services loaded from public.services (fallback to inline lists when missing)
-const [servicesMap, setServicesMap] = useState<Record<string, string[]>>({});
 
 // Map French category to internal specialty key (keeps compatibility with different schemas)
 const frenchToKey: Record<string, string> = {
@@ -52,37 +51,6 @@ const frenchToKey: Record<string, string> = {
   "Kinésithérapeute": "physiotherapist",
   "Psychologue": "psychologist",
 };
-
-useEffect(() => {
-  let mounted = true;
-  (async () => {
-    try {
-      const { data, error } = await supabase.from("services").select("name,category,is_active");
-      if (error) {
-        console.warn("Failed to load services:", error);
-        return;
-      }
-      const map: Record<string, string[]> = {};
-      (data ?? []).forEach((s: any) => {
-        if (s.is_active === false) return;
-        const cat = s.category ?? "Autre";
-        map[cat] = map[cat] || [];
-        map[cat].push(s.name);
-        const eng = frenchToKey[cat];
-        if (eng) {
-          map[eng] = map[eng] || [];
-          map[eng].push(s.name);
-        }
-      });
-      if (mounted) setServicesMap(map);
-    } catch (e) {
-      console.warn("Failed to load services:", e);
-    }
-  })();
-  return () => {
-    mounted = false;
-  };
-}, []);
 
 // Hardcoded fallbacks used only when the services table is unavailable
 const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
@@ -92,6 +60,41 @@ export default function ProRegistrationScreen() {
   const router = useRouter();
   const { signUpWithEmail } = useAuth();
   const [step, setStep] = useState(0);
+
+  // servicesMap state moved inside component so hooks are valid in component body
+  const [servicesMap, setServicesMap] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("services").select("name,category,is_active");
+        if (error) {
+          console.warn("Failed to load services:", error);
+          return;
+        }
+        const map: Record<string, string[]> = {};
+        (data ?? []).forEach((s: any) => {
+          if (s.is_active === false) return;
+          const cat = s.category ?? "Autre";
+          map[cat] = map[cat] || [];
+          map[cat].push(s.name);
+          const eng = frenchToKey[cat];
+          if (eng) {
+            map[eng] = map[eng] || [];
+            map[eng].push(s.name);
+          }
+        });
+        if (mounted) setServicesMap(map);
+      } catch (e) {
+        console.warn("Failed to load services:", e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

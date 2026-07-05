@@ -1079,6 +1079,7 @@ app.put("/make-server-aa5d1aa6/admin/professionals/:id/reject", async (c) => {
 app.post("/make-server-aa5d1aa6/professionals/documents", async (c) => {
   try {
     const body = await c.req.json();
+    console.log('POST /professionals/documents body:', body);
     const { professional_id, documents, auth_token } = body;
     
     if (!professional_id || !Array.isArray(documents)) {
