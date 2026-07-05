@@ -17,8 +17,12 @@ import {
   Activity,
   Banknote,
   FileText,
+  Navigation,
+  MapPin,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
+import { openNavigation } from "@/lib/nav";
+import { showToast } from "@/lib/toast";
 import { mockProProfile, mockCompletedStats } from "@/lib/mock-data";
 import { NotificationBell } from "@/components/NotificationBell";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
@@ -204,37 +208,57 @@ export default function ProHomeScreen() {
                 const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
                 return (
                   <View key={b.id} style={styles.bookingCard}>
-                    <View style={styles.bookingTimeCol}>
-                      <Text style={styles.bookingTime}>
-                        {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
-                      </Text>
-                      <Text style={styles.bookingDate}>
-                        {d ? d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" }) : ""}
-                      </Text>
+                    <View style={styles.bookingRow}>
+                      <View style={styles.bookingTimeCol}>
+                        <Text style={styles.bookingTime}>
+                          {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                        </Text>
+                        <Text style={styles.bookingDate}>
+                          {d ? d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" }) : ""}
+                        </Text>
+                      </View>
+                      <View style={styles.sep} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bookingPatient}>Patient</Text>
+                        <Text style={styles.bookingCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
+                        {b.address ? (
+                          <View style={styles.addrRow}>
+                            <MapPin size={12} color={Colors.textMuted} />
+                            <Text style={styles.bookingAddr} numberOfLines={2}>{b.address}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text
+                          style={[
+                            styles.statusPill,
+                            b.status === "completed" ? styles.statusCompleted : styles.statusComing,
+                          ]}
+                        >
+                          {b.status === "completed"
+                            ? "Terminé"
+                            : b.status === "in_progress"
+                              ? "En cours"
+                              : "À venir"}
+                        </Text>
+                        <Text style={styles.bookingPrice}>
+                          {b.final_price_mad ?? b.budget_max_mad ?? 0} MAD
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.sep} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.bookingPatient}>Patient</Text>
-                      <Text style={styles.bookingCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
-                      {b.address ? <Text style={styles.bookingAddr}>{b.address}</Text> : null}
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text
-                        style={[
-                          styles.statusPill,
-                          b.status === "completed" ? styles.statusCompleted : styles.statusComing,
-                        ]}
+                    {b.status !== "completed" ? (
+                      <TouchableOpacity
+                        style={styles.navBtn}
+                        onPress={() => {
+                          if (!openNavigation({ address: b.address })) showToast("Adresse du patient indisponible");
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Naviguer vers le patient"
                       >
-                        {b.status === "completed"
-                          ? "Terminé"
-                          : b.status === "in_progress"
-                            ? "En cours"
-                            : "À venir"}
-                      </Text>
-                      <Text style={styles.bookingPrice}>
-                        {b.final_price_mad ?? b.budget_max_mad ?? 0} MAD
-                      </Text>
-                    </View>
+                        <Navigation size={15} color="#FFFFFF" strokeWidth={2.2} />
+                        <Text style={styles.navBtnText}>Naviguer vers le patient</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 );
               })
@@ -420,17 +444,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "white",
     padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
     gap: 10,
   },
+  bookingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  addrRow: { flexDirection: "row", alignItems: "flex-start", gap: 4, marginTop: 3 },
+  navBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  navBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   bookingTimeCol: { minWidth: 58, alignItems: "center" },
   bookingTime: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
   bookingDate: { color: Colors.textMuted, fontSize: 10 },
   sep: { width: 1, height: 40, backgroundColor: Colors.border },
   bookingPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
   bookingCare: { color: Colors.textMuted, fontSize: 12 },
-  bookingAddr: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
+  bookingAddr: { flex: 1, color: Colors.textMuted, fontSize: 11, lineHeight: 15 },
   statusPill: {
     fontSize: 11,
     paddingHorizontal: 8,
