@@ -939,6 +939,7 @@ export default function LiveTrackingScreen() {
       const tickInterval = 120; // small, frequent steps → the marker glides
       iv = setInterval(() => {
         if (cancelled) return;
+        if (liveActiveRef.current) return; // real GPS is streaming → don't script
         if (targetIdx >= coords.length) {
           setEta(0);
           setProCoord({ ...coords[coords.length - 1] });
@@ -964,9 +965,11 @@ export default function LiveTrackingScreen() {
   // NOTE: ETA is now computed from demo motion (distance / speed). Remove the blind countdown.
 
   const [liveProOrigin, setLiveProOrigin] = useState<LatLng | null>(null);
+  // Once the pro broadcasts real GPS, live positions win over the scripted glide.
+  const liveActiveRef = useRef(false);
 
   const handlePosition = useCallback((pos: TrackPosition) => {
-    // keep animating pro position on screen
+    liveActiveRef.current = true;
     setProCoord({ lat: pos.lat, lng: pos.lng });
     // capture first seen pro origin for routing (only if not demo)
     if (!isDemoBooking && !liveProOrigin) {

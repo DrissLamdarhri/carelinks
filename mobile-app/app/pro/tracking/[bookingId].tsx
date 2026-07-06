@@ -15,8 +15,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle2, MapPin, Navigation, Phone } from "lucide-react-native";
-import * as Location from "expo-location";
 import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
+import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { openNavigation } from "@/lib/nav";
@@ -83,24 +83,10 @@ export default function ProTrackingScreen() {
     return () => { cancelled = true; };
   }, [bookingId]);
 
-  // ── Watch the nurse's live GPS ─────────────────────────────────────────────
-  useEffect(() => {
-    let sub: Location.LocationSubscription | null = null;
-    void (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
-        const cur = await Location.getCurrentPositionAsync({});
-        setNurse({ lat: cur.coords.latitude, lng: cur.coords.longitude });
-        sub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, distanceInterval: 15 },
-          (loc) => setNurse({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
-        );
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => { sub?.remove(); };
+  // The nurse's live GPS is watched + broadcast to the patient by
+  // <LiveTrackingChannel mode="broadcast"> below; onPosition updates our map.
+  const onNursePosition = useCallback((p: { lat: number; lng: number }) => {
+    setNurse({ lat: p.lat, lng: p.lng });
   }, []);
 
   // ── Fetch the road route once both endpoints are known ─────────────────────
@@ -154,6 +140,11 @@ export default function ProTrackingScreen() {
 
   return (
     <View style={s.root}>
+      {/* Broadcast the nurse's real GPS to the patient's live tracking. */}
+      {bookingId ? (
+        <LiveTrackingChannel bookingId={bookingId} mode="broadcast" onPosition={onNursePosition} />
+      ) : null}
+
       <View style={s.mapWrap}>
         {loading ? (
           <View style={s.center}><ActivityIndicator color={NAVY} /></View>
