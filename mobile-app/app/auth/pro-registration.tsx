@@ -245,25 +245,32 @@ export default function ProRegistrationScreen() {
       if (uid && pendingUploads.length > 0) {
         for (const file of pendingUploads) {
           try {
-            // Build storage path: <uid>/<type>-<timestamp>-<originalName>
-            const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
-            const storagePath = `${uid}/${file.type}-${Date.now()}-${file.name}`;
+            // Attempt upload using shared helpers with retry
+            let uploadResult: { url: string; path: string } | null = null;
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              try {
+                if (file.type === "selfie") {
+                  uploadResult = await uploadSelfieToSupabase(uid, file.uri, file.mimeType);
+                } else {
+                  uploadResult = await uploadDocumentToSupabase(uid, file.uri, file.name, file.mimeType);
+                }
+                if (uploadResult) break;
+                // else retry
+              } catch (upErr) {
+                console.error(`Upload attempt ${attempt} failed for ${file.name}:`, upErr);
+              }
+              // small backoff
+              await new Promise((r) => setTimeout(r, 600 * attempt));
+            }
 
-            // Fetch local file and upload
-            const resp = await fetch(file.uri);
-            const blob = await resp.blob();
-
-            const { error: uploadError } = await supabase.storage
-              .from("pro-documents")
-              .upload(storagePath, blob, {
-                contentType: file.mimeType || "application/octet-stream",
-                upsert: true,
-              });
-            if (uploadError) {
-              console.error("Upload failed for", storagePath, uploadError);
-              showToast("Échec de l'upload d'un document. Réessayez.");
+            if (!uploadResult) {
+              console.error("Upload failed after retries for", file.name);
+              showToast("Échec de l'upload d'un document. Vérifiez votre connexion et réessayez.");
               continue;
             }
+
+            const storagePath = uploadResult.path;
 
             // Insert pro_documents row (RLS allows when authenticated as owner)
             const { error: insertError } = await supabase.from("pro_documents").insert({
