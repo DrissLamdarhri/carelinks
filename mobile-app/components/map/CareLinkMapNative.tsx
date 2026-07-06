@@ -21,7 +21,7 @@ import {
   type PressEventWithFeatures,
   ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
-import { ProAvatarMarker, MeMarker } from "./MapMarkers";
+import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
 import type { ProPinData } from "./Pins";
@@ -59,6 +59,7 @@ function circleFeature(center: LatLng, radiusKm: number, steps = 64): GeoJSON.Fe
 export default function CareLinkMapNative({
   center,
   patient,
+  destination,
   pros = [],
   pro,
   route,
@@ -73,6 +74,7 @@ export default function CareLinkMapNative({
   nightAuto,
   recenterKey,
   fitAllKey,
+  follow,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -117,6 +119,11 @@ export default function CareLinkMapNative({
   useEffect(() => {
     const cam = cameraRef.current;
     if (!cam) return;
+    if (follow) {
+      // Navigation mode — keep the camera locked on the driver (tight zoom + tilt).
+      cam.flyTo({ center: [center.lng, center.lat], zoom: 16.5, pitch: 50, duration: 700 });
+      return;
+    }
     if (hasRoute) {
       if (didFit.current) return;
       const lngs = fitCoords!.map((c) => c.lng);
@@ -131,7 +138,7 @@ export default function CareLinkMapNative({
       cam.flyTo({ center: [center.lng, center.lat], zoom: radiusKm > 0 ? 14 : 15, pitch: radiusKm > 0 ? 30 : 0, duration: 500 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRoute, center.lat, center.lng, radiusKm]);
+  }, [hasRoute, center.lat, center.lng, radiusKm, follow]);
 
   // Re-center FAB → re-frame the route (tracking) or fly back to the patient (booking).
   useEffect(() => {
@@ -172,9 +179,10 @@ export default function CareLinkMapNative({
       mapStyle={mapStyleSpec}
       attribution={false}
       logo={false}
-      compass={false}
-      touchRotate={false}
-      touchPitch={false}
+      compass
+      compassHiddenFacingNorth
+      touchRotate
+      touchPitch
       onPress={(e: NativeSyntheticEvent<PressEvent | PressEventWithFeatures>) => {
         const coords = (e.nativeEvent as unknown as { geometry?: { coordinates?: number[] } })?.geometry
           ?.coordinates;
@@ -254,6 +262,12 @@ export default function CareLinkMapNative({
       {patient ? (
         <ViewAnnotation lngLat={[patient.lng, patient.lat]} anchor="center">
           <MeMarker />
+        </ViewAnnotation>
+      ) : null}
+
+      {destination ? (
+        <ViewAnnotation lngLat={[destination.lng, destination.lat]} anchor="bottom">
+          <DestinationPin />
         </ViewAnnotation>
       ) : null}
 

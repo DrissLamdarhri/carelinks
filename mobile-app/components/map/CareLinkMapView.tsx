@@ -24,7 +24,7 @@ import {
 import Svg, { Path as SvgPath } from "react-native-svg";
 import { StaticMapLayer } from "./StaticMapLayer";
 import { type ProPinData } from "./Pins";
-import { ProAvatarMarker, MeMarker } from "./MapMarkers";
+import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
 import { CREAM, DEFAULT_ZOOM, NAVY, project } from "./engine";
 
 export type LatLng = { lat: number; lng: number };
@@ -34,6 +34,8 @@ export type CareLinkMapViewProps = {
   center: LatLng;
   /** Patient ("Vous") pin + radius origin. */
   patient?: LatLng;
+  /** Destination drop-pin (e.g. the patient's home on the nurse's navigation map). */
+  destination?: LatLng;
   /** Nearby professionals to plot. */
   pros?: ProPinData[];
   /** Moving professional (tracking) — position + who they are (for the photo pin). */
@@ -65,6 +67,8 @@ export type CareLinkMapViewProps = {
   recenterKey?: number;
   /** Increment to zoom-to-fit all pros (booking envelope button). */
   fitAllKey?: number;
+  /** Navigation mode — camera continuously follows `center` (tight zoom + pitch). */
+  follow?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -109,6 +113,7 @@ export function CareLinkMapView(props: CareLinkMapViewProps) {
 function FallbackMap({
   center,
   patient,
+  destination,
   pros = [],
   pro,
   route,
@@ -174,6 +179,12 @@ function FallbackMap({
       {patient ? (
         <View pointerEvents="none" style={[fb.pin, { left: toXY(patient).x - 13, top: toXY(patient).y - 13 }]}>
           <MeMarker />
+        </View>
+      ) : null}
+
+      {destination ? (
+        <View pointerEvents="none" style={[fb.pin, { left: toXY(destination).x - 17, top: toXY(destination).y - 42 }]}>
+          <DestinationPin />
         </View>
       ) : null}
     </View>

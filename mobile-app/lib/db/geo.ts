@@ -49,6 +49,28 @@ export const geo = {
    * matched pro's current origin, both as plain lat/lng (from PostGIS). Either
    * may be null (pro hasn't published a location, or destination not set).
    */
+  /** Forward-geocode an address string to coordinates (for the nurse's map). */
+  async geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+    try {
+      const res = await Location.geocodeAsync(address);
+      if (res && res.length > 0) return { lat: res[0].latitude, lng: res[0].longitude };
+    } catch {
+      // ignore
+    }
+    return null;
+  },
+
+  /** Matched pro's current coords from the public view (deployed; approved pros). */
+  async getProCoords(proId: string): Promise<{ lat: number; lng: number } | null> {
+    const { data, error } = await supabase
+      .from("v_pros_public")
+      .select("lat, lng")
+      .eq("id", proId)
+      .maybeSingle();
+    if (error) return null;
+    return data?.lat != null && data?.lng != null ? { lat: data.lat, lng: data.lng } : null;
+  },
+
   async getTrackCoords(bookingId: string): Promise<{
     dest: { lat: number; lng: number } | null;
     pro: { lat: number; lng: number } | null;
