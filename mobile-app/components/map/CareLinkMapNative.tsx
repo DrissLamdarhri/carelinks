@@ -179,9 +179,10 @@ export default function CareLinkMapNative({
       mapStyle={mapStyleSpec}
       attribution={false}
       logo={false}
-      compass={false}
-      touchRotate={false}
-      touchPitch={false}
+      compass
+      compassHiddenFacingNorth
+      touchRotate
+      touchPitch
       onPress={(e: NativeSyntheticEvent<PressEvent | PressEventWithFeatures>) => {
         const coords = (e.nativeEvent as unknown as { geometry?: { coordinates?: number[] } })?.geometry
           ?.coordinates;
