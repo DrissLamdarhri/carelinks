@@ -1029,6 +1029,30 @@ app.get("/make-server-aa5d1aa6/admin/professionals/:id/documents", async (c) => 
   }
 });
 
+// GET /admin/storage/signed-url  → create signed URL for admin (service-role)
+app.get("/make-server-aa5d1aa6/admin/storage/signed-url", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const path = c.req.query("path");
+    const bucket = c.req.query("bucket") || "pro-documents";
+    const expires = parseInt(c.req.query("expires") || "60", 10);
+    if (!path) return c.json({ error: "path query required" }, 400);
+    const sb = supabaseAdmin();
+    const { data: signedData, error: signedErr } = await sb.storage.from(bucket).createSignedUrl(path, expires);
+    if (signedErr) {
+      console.log("admin/storage/signed-url error:", signedErr);
+      return c.json({ error: signedErr.message || "failed to create signed url" }, 400);
+    }
+    return c.json({ signedUrl: signedData?.signedUrl ?? signedData?.signedURL ?? null });
+  } catch (e) {
+    console.log("admin/storage/signed-url exception:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
 // PUT /admin/professionals/:id/approve  → approve a pro
 app.put("/make-server-aa5d1aa6/admin/professionals/:id/approve", async (c) => {
   const adminKey = c.req.header("X-Admin-Key");

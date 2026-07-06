@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { sendApprovalEmail, sendRejectionEmail } from "../../lib/api";
+import { sendApprovalEmail, sendRejectionEmail, getAdminSignedUrl } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -39,8 +39,14 @@ export function KycModerationQueue() {
   useEffect(() => { fetchQueue(); }, []);
 
   const signedUrl = async (path: string) => {
-    const { data } = await supabase.storage.from("pro-documents").createSignedUrl(path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    try {
+      const res = await getAdminSignedUrl(path);
+      if (res?.signedUrl) window.open(res.signedUrl, "_blank");
+      else toast.error("Impossible d'ouvrir le document");
+    } catch (e) {
+      console.error('Error getting admin signed url', e);
+      toast.error("Erreur lors de l'ouverture du document");
+    }
   };
 
   const decide = async (proId: string, status: "approved" | "rejected") => {

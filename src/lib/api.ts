@@ -192,6 +192,10 @@ export async function getProDocumentsAdmin(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/documents`, {}, true);
 }
 
+export async function getAdminSignedUrl(path: string, bucket = "pro-documents", expires = 60) {
+  return fetchAPI(`/admin/storage/signed-url?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(bucket)}&expires=${expires}`, {}, true);
+}
+
 export async function approvePro(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/approve`, { method: "PUT" }, true);
 }

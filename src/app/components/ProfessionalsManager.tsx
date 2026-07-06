@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { approvePro, rejectPro, getProDocumentsAdmin } from "../../lib/api";
+import { approvePro, rejectPro, getProDocumentsAdmin, getAdminSignedUrl } from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
 type Professional = {
@@ -177,9 +178,24 @@ export function ProfessionalsManager() {
     }
   };
 
+  const { isAdminAuthed } = useAuth();
+
   const loadProDocuments = async (proId: string) => {
     setDocsLoading(true);
     try {
+      // If the admin UI flag is set, prefer the admin API (service-role) first — avoids RLS filtering
+      if (isAdminAuthed) {
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          if (res?.documents && res.documents.length > 0) {
+            setProDocuments(res.documents);
+            return;
+          }
+        } catch (adminErr) {
+          console.warn("Admin API pro documents error (falling back to client):", adminErr);
+        }
+      }
+
       const { data, error } = await supabase
         .from("pro_documents")
         .select("id,doc_type,storage_path,is_verified,uploaded_at")
@@ -933,11 +949,11 @@ export function ProfessionalsManager() {
                           </div>
                           <button onClick={async () => {
                             try {
-                              const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
-                              if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                              const res = await getAdminSignedUrl(d.storage_path);
+                              if (res?.signedUrl) window.open(res.signedUrl, "_blank");
                               else toast.error("Impossible d'ouvrir le document");
                             } catch (e) {
-                              console.error("Error opening doc:", e);
+                              console.error("Error opening doc via admin signed-url:", e);
                               toast.error("Erreur lors de l'ouverture du document");
                             }
                           }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#0D0870] text-white rounded-xl text-[12px] hover:opacity-90" style={{ fontWeight: 600 }}>
