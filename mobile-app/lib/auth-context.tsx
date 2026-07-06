@@ -272,12 +272,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const resolveMfaRequirement = async (p: UserProfile | null): Promise<boolean> => {
-    const level = await getAssuranceLevel();
-    if (p?.mfaMethod === "sms") {
-      return level.currentLevel !== "aal2";
-    }
-    return level.currentLevel !== "aal2" && level.nextLevel === "aal2";
+  // MFA removed (client did not want it): sign-in never requires an MFA step.
+  const resolveMfaRequirement = async (_p: UserProfile | null): Promise<boolean> => {
+    return false;
   };
 
   useEffect(() => {
