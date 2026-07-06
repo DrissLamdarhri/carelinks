@@ -94,9 +94,9 @@ export default function OnboardingScreen() {
                 <Text style={styles.secondaryBtnText}>Je suis professionnel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push("/admin")}>
+              {/* <TouchableOpacity onPress={() => router.push("/admin")}>
                 <Text style={styles.adminLink}>Admin Panel</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
           )}
         </View>
