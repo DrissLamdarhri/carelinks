@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   Activity,
   Banknote,
+  Bell,
   ChevronRight,
   FileText,
   MapPin,
@@ -24,9 +25,9 @@ import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
 import { openNavigation } from "@/lib/nav";
 import { showToast } from "@/lib/toast";
 import { mockProProfile } from "@/lib/mock-data";
-import { NotificationBell } from "@/components/NotificationBell";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
@@ -42,6 +43,7 @@ export default function ProHomeScreen() {
   const [specialty, setSpecialty] = useState<ProSpecialty | null>(null);
   const [appointments, setAppointments] = useState<Booking[]>([]);
   const [rating, setRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 });
+  const [unread, setUnread] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useFocusEffect(
@@ -59,6 +61,12 @@ export default function ProHomeScreen() {
           }
           const list = await db.bookings.listForPro(user.id);
           if (!cancelled) setAppointments(list.filter((b) => b.status !== "open"));
+          const un = await supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .is("read_at", null);
+          if (!cancelled) setUnread(un.count ?? 0);
         } catch {
           /* pro may not be set up yet */
         }
@@ -128,7 +136,14 @@ export default function ProHomeScreen() {
               <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
           </View>
-          <NotificationBell />
+          <TouchableOpacity style={styles.bell} onPress={() => router.push("/pro/notifications")}>
+            <Bell size={20} color="#FFFFFF" />
+            {unread > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeTxt}>{unread > 9 ? "9+" : unread}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
         </View>
 
         {/* Online switch — big + clear */}
@@ -318,6 +333,9 @@ const styles = StyleSheet.create({
   avatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)" },
   greeting: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   userName: { color: "white", fontSize: 18, fontWeight: "700" },
+  bell: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+  bellBadge: { position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#E24B4A", alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  bellBadgeTxt: { color: "white", fontSize: 9, fontWeight: "800" },
 
   onlineCard: {
     flexDirection: "row", alignItems: "center", gap: 11,
