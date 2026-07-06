@@ -41,10 +41,14 @@ import { toDbSpecialty } from "@/lib/db/types";
 import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { useServiceTypes } from "@/lib/service-types";
 =======
+=======
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
 import type { ProPinData } from "../../components/map/Pins";
 import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
+import { useServiceTypes } from "@/lib/service-types";
 
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
@@ -74,7 +78,10 @@ function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
     distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
   }));
 }
+<<<<<<< HEAD
 >>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
+=======
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
@@ -126,7 +133,8 @@ export default function PatientRequestScreen() {
   const normalizedService = initialService.toLowerCase();
   const isKine = isKineService(normalizedService);
   const serviceCategory = isKine ? "Kinésithérapeute" : "Infirmier";
-  
+  const serviceKey = isKine ? "kine" : "infirmier";
+
   // Fetch service types from database
   const { serviceTypes, loading } = useServiceTypes(serviceCategory);
   
@@ -286,6 +294,7 @@ export default function PatientRequestScreen() {
     setSubmitting(true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
       if (demoMode) {
         const serviceKey = isKine ? "kine" : "infirmier";
         const mockBookingId = `demo-${serviceKey}-${Date.now()}`;
@@ -298,6 +307,9 @@ export default function PatientRequestScreen() {
 =======
       // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
 >>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
+=======
+      // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
       await db.patients.upsert({ id: user.id });
 
       const [hour, minute] = times[selectedTime].split(":");
@@ -313,7 +325,6 @@ export default function PatientRequestScreen() {
         }
       }
 
-      const serviceKey = isKine ? "kine" : "infirmier";
       const booking = await db.bookings.create({
         patient_id: user.id,
         specialty: toDbSpecialty(serviceKey),

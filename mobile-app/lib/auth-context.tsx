@@ -398,7 +398,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
   // ── Password reset (email link → app/auth/reset-password) ───────────────────
   const sendPasswordReset = async (email: string): Promise<void> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
@@ -413,7 +416,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── Email/password sign-up ──────────────────────────────────────────────────
+<<<<<<< HEAD
 >>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
+=======
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
   const signUpWithEmail = async (
     email: string,
     password: string,
@@ -477,8 +483,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Insert documents if provided — prefer supabase-js client insert (uses user's session & RLS)
         if (options?.documents && options.documents.length > 0) {
           try {
+            const uid = data.user.id;
             const docsToInsert = options.documents.map((d: any) => ({
-              professional_id: data.user.id,
+              professional_id: uid,
               doc_type: d.doc_type,
               storage_path: d.storage_path,
               is_verified: false,

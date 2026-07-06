@@ -1,6 +1,7 @@
 import PatientAuthFlowScreen from "./patient-auth-flow";
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 export default PatientAuthFlowScreen;
 =======
 export default function PatientLoginScreen() {
@@ -271,3 +272,6 @@ const styles = StyleSheet.create({
   oauthSpacer: { height: 10 },
 });
 >>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
+=======
+export default PatientAuthFlowScreen;
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511

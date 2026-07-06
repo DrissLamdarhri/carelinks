@@ -129,12 +129,16 @@ export default function OnboardingScreen() {
               </TouchableOpacity>
 
 <<<<<<< HEAD
+<<<<<<< HEAD
               {/* Admin Panel link removed from onboarding for security */}
 =======
               {/* <TouchableOpacity onPress={() => router.push("/admin")}>
                 <Text style={styles.adminLink}>Admin Panel</Text>
               </TouchableOpacity> */}
 >>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
+=======
+              {/* Admin Panel link removed from onboarding for security */}
+>>>>>>> 7608fae5864a48c65491a0428638fb076459c511
             </View>
           )}
         </View>
