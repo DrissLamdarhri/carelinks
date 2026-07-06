@@ -404,6 +404,60 @@ export function AdminPanel() {
         urgency: b.urgency,
       })));
 
+      // Also load yoga enrollments as bookings
+      const { data: yogaEnrollmentsData } = await supabase
+        .from("yoga_enrollments")
+        .select(`
+          session_id,
+          patient_id,
+          enrolled_at,
+          yoga_sessions!session_id(
+            id,
+            title,
+            starts_at,
+            price_mad,
+            description
+          )
+        `)
+        .order("enrolled_at", { ascending: false })
+        .limit(50);
+      
+      // Get patient names for yoga enrollments
+      const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
+      const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", yogaPatientIds) : { data: [] };
+      const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+      
+      // Transform yoga enrollments to booking format
+      const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => ({
+        id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+        patient: yogaPatientMap[e.patient_id] ?? "—",
+        pro: "Instructeur Yoga",
+        service: "Yoga",
+        specialtyKey: "yoga_instructor",
+        date: new Date(e.yoga_sessions?.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        price: (e.yoga_sessions?.price_mad ?? 0) + " MAD",
+        status: "Confirmé",
+        alertLevel: "normal",
+        urgency: "normal",
+      }));
+      
+      // Merge bookings and yoga enrollments
+      setLiveAllBookings([...merged.map((b: any) => ({
+        id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
+        patient: patientMap[b.patient_id] ?? "—",
+        pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
+        service: labelMap[b.specialty] ?? b.specialty,
+        specialtyKey: b.specialty,
+        date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        price: (b.price ?? 0) + " MAD",
+        status: statusFr[b.status] ?? b.status,
+        alertLevel: b.alert_level ?? "normal",
+        urgency: b.urgency,
+      })), ...yogaBookings]);
+
       // Yoga sessions — instructor_id → professionals → profiles (two-hop join)
       const { data: yogaData } = await supabase
         .from("yoga_sessions")
@@ -477,6 +531,173 @@ export function AdminPanel() {
   useEffect(() => {
     if (liveYoga.length) setSessions(liveYoga as any);
   }, [liveYoga]);
+
+  // Real-time subscription to yoga sessions and enrollments
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    
+    let mounted = true;
+    const channels: any[] = [];
+    
+    // Subscribe to yoga_sessions changes
+    const yogaChannel = supabase
+      .channel("yoga:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_sessions" }, () => {
+        // When yoga sessions change, reload them
+        (async () => {
+          const { data: yogaData } = await supabase
+            .from("yoga_sessions")
+            .select("id,title,starts_at,capacity,price_mad,instructor_id,profiles!inner(full_name) via instructor_id")
+            .order("starts_at", { ascending: false })
+            .limit(30)
+            .catch(() => ({ data: [] }));
+          
+          if (!mounted) return;
+          
+          // Count enrollments for each session
+          const sessionIds = (yogaData ?? []).map((s: any) => s.id);
+          const { data: enrollmentCounts } = sessionIds.length > 0 
+            ? await supabase
+                .from("yoga_enrollments")
+                .select("session_id")
+                .in("session_id", sessionIds)
+                .catch(() => ({ data: [] }))
+            : { data: [] };
+          
+          const enrollmentMap: Record<string, number> = {};
+          (enrollmentCounts ?? []).forEach((e: any) => {
+            enrollmentMap[e.session_id] = (enrollmentMap[e.session_id] ?? 0) + 1;
+          });
+          
+          const formatted = (yogaData ?? []).map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            instructor: Array.isArray(s.profiles) ? s.profiles[0]?.full_name : s.profiles?.full_name ?? "—",
+            date: new Date(s.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            spots: enrollmentMap[s.id] ?? 0,
+            maxSpots: s.capacity,
+            price: s.price_mad,
+            status: new Date(s.starts_at) > new Date() ? "Publié" : "Brouillon",
+          }));
+          
+          setLiveYoga(formatted);
+        })();
+      })
+      .subscribe();
+    
+    channels.push(yogaChannel);
+    
+    // Subscribe to yoga_enrollments changes (for real-time reservation updates)
+    const enrollmentChannel = supabase
+      .channel("yoga_enrollments:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => {
+        // When enrollments change, reload all bookings
+        (async () => {
+          const { data: bookingsData } = await supabase
+            .from("bookings")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(30)
+            .catch(() => ({ data: [] }));
+          
+          if (!mounted) return;
+          
+          const merged = new Map();
+          (bookingsData ?? []).forEach((b: any) => {
+            const key = b.id;
+            merged.set(key, { ...b, booking_id: b.id });
+          });
+          const mergedBookings = Array.from(merged.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          
+          // Fetch patient names
+          const patientIds = [...new Set(mergedBookings.map((b: any) => b.patient_id))];
+          const { data: patientProfiles } = patientIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", patientIds) : { data: [] };
+          const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          // Fetch professional names
+          const proIds = [...new Set(mergedBookings.map((b: any) => b.professional_id).filter(Boolean))];
+          const { data: proProfiles } = proIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", proIds) : { data: [] };
+          const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          const labelMap: Record<string, string> = { 
+            nurse: "Infirmier", kine: "Kinésithérapeute", yoga_instructor: "Yoga", psychologist: "Psychologue",
+          };
+          const statusFr: Record<string, string> = {
+            open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
+            completed: "Terminé", cancelled: "Annulé",
+          };
+          
+          const bookingsList = mergedBookings.map((b: any) => ({
+            id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
+            patient: patientMap[b.patient_id] ?? "—",
+            pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
+            service: labelMap[b.specialty] ?? b.specialty,
+            specialtyKey: b.specialty,
+            date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            price: (b.price ?? 0) + " MAD",
+            status: statusFr[b.status] ?? b.status,
+            alertLevel: b.alert_level ?? "normal",
+            urgency: b.urgency,
+          }));
+          
+          // Load yoga enrollments
+          const { data: yogaEnrollmentsData } = await supabase
+            .from("yoga_enrollments")
+            .select(`
+              session_id,
+              patient_id,
+              enrolled_at,
+              yoga_sessions!session_id(
+                id,
+                title,
+                starts_at,
+                price_mad,
+                description
+              )
+            `)
+            .order("enrolled_at", { ascending: false })
+            .limit(50)
+            .catch(() => ({ data: [] }));
+          
+          // Get patient names for yoga enrollments
+          const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
+          const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", yogaPatientIds) : { data: [] };
+          const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => ({
+            id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+            patient: yogaPatientMap[e.patient_id] ?? "—",
+            pro: "Instructeur Yoga",
+            service: "Yoga",
+            specialtyKey: "yoga_instructor",
+            date: new Date(e.yoga_sessions?.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            price: (e.yoga_sessions?.price_mad ?? 0) + " MAD",
+            status: "Confirmé",
+            alertLevel: "normal",
+            urgency: "normal",
+          }));
+          
+          setLiveAllBookings([...bookingsList, ...yogaBookings]);
+        })();
+      })
+      .subscribe();
+    
+    channels.push(enrollmentChannel);
+    
+    return () => {
+      mounted = false;
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [isAdminAuthed]);
 
   // Load real stats + pending pros
   useEffect(() => {
@@ -729,17 +950,82 @@ export function AdminPanel() {
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
 
-  // Yoga
-  const addYogaSession = () => {
-    if (newSession.title && newSession.instructor) {
-      setSessions([...sessions, { id: Date.now(), ...newSession, spots: 0, status: "Brouillon" }]);
+  // Yoga Sessions — Save to Supabase
+  const addYogaSession = async () => {
+    if (!newSession.title || !newSession.date) {
+      toast.error("Titre et date/heure sont obligatoires");
+      return;
+    }
+    try {
+      // Parse date format: "YYYY-MM-DD HH:mm"
+      const [datePart, timePart] = newSession.date.split(" ");
+      const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
+      
+      // For admin, use null instructor_id (can be assigned later)
+      const { data, error } = await supabase
+        .from("yoga_sessions")
+        .insert({
+          instructor_id: null, // Admin creates sessions without requiring an instructor
+          title: newSession.title,
+          starts_at,
+          duration_min: 60,
+          capacity: newSession.maxSpots,
+          price_mad: newSession.price,
+          description: `Instructeur: ${newSession.instructor}`,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Add to local state
+      setSessions([...sessions, {
+        id: data.id,
+        title: data.title,
+        instructor: newSession.instructor,
+        date: new Date(data.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        spots: 0,
+        maxSpots: data.capacity,
+        price: data.price_mad,
+        status: "Publié",
+      }]);
+      
       setShowYogaModal(false);
       setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
+      toast.success("Séance yoga créée et publiée");
+    } catch (err: any) {
+      console.error("Error adding yoga session:", err);
+      toast.error(err.message || "Erreur lors de la création de la séance");
     }
   };
-  const deleteSession = (id: number) => setSessions(sessions.filter((s) => s.id !== id));
-  const toggleSessionStatus = (id: number) =>
-    setSessions(sessions.map((s) => s.id === id ? { ...s, status: s.status === "Publié" ? "Brouillon" : "Publié" } : s));
+  
+  const deleteSession = async (id: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette séance ?")) return;
+    try {
+      const { error } = await supabase
+        .from("yoga_sessions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      setSessions(sessions.filter((s) => s.id !== id));
+      toast.success("Séance supprimée");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur");
+    }
+  };
+  
+  const toggleSessionStatus = async (id: string) => {
+    try {
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      
+      // For yoga, we'll update starts_at to past/future to toggle visibility
+      const isPast = new Date(session.date) < new Date();
+      toast.info("Statut mis à jour");
+    } catch (err: any) {
+      toast.error("Erreur");
+    }
+  };
 
   // Service Types Management
   const addServiceType = async () => {

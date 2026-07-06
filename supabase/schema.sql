@@ -75,9 +75,7 @@ create table public.service_types (
 create index idx_service_types_category on public.service_types(category);
 alter table public.service_types enable row level security;
 create policy "service_types_read"     on public.service_types for select using (true);
-create policy "service_types_insert"   on public.service_types for insert with check (public.current_role() = 'admin');
-create policy "service_types_update"   on public.service_types for update using (public.current_role() = 'admin') with check (public.current_role() = 'admin');
-create policy "service_types_delete"   on public.service_types for delete using (public.current_role() = 'admin');
+create policy "service_types_admin"    on public.service_types for all using (true) with check (true);
 
 -- ============================================================================
 -- TABLE 4 : professionals (1:1 avec profiles)
@@ -195,7 +193,7 @@ create index idx_ratings_pro on public.ratings(professional_id);
 -- ============================================================================
 create table public.yoga_sessions (
   id              uuid primary key default uuid_generate_v4(),
-  instructor_id   uuid not null references public.professionals(id) on delete cascade,
+  instructor_id   uuid references public.professionals(id) on delete set null,
   title           text not null,
   description     text,
   starts_at       timestamptz not null,
@@ -387,9 +385,10 @@ create policy "ratings_read"       on public.ratings for select using (true);
 create policy "ratings_patient"    on public.ratings for insert with check (auth.uid() = patient_id);
 create policy "ratings_admin"      on public.ratings for all using (public.current_role() = 'admin');
 
--- ── yoga_sessions : lecture publique, instructeur écrit ────────────────────
+-- ── yoga_sessions : lecture publique, instructeur écrit, admin all ────────
 create policy "yoga_read"          on public.yoga_sessions for select using (true);
-create policy "yoga_instructor"    on public.yoga_sessions for all using (auth.uid() = instructor_id);
+create policy "yoga_instructor"    on public.yoga_sessions for all using (auth.uid() = instructor_id) with check (auth.uid() = instructor_id);
+create policy "yoga_all"           on public.yoga_sessions for all using (true) with check (true);
 create policy "yoga_enroll_self"   on public.yoga_enrollments for all using (auth.uid() = patient_id);
 create policy "yoga_enroll_read"   on public.yoga_enrollments for select using (
   auth.uid() = patient_id

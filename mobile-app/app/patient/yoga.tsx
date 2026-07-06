@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Image,
   ScrollView,
@@ -15,10 +15,12 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
+import { useYogaSessions } from "@/lib/yoga-sessions";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
-const sessions = [
+// Fallback sessions for when database is unavailable
+const fallbackSessions = [
   {
     id: "s1",
     name: "Hatha Flow Matinal",
@@ -66,14 +68,38 @@ const sessions = [
 export default function YogaCatalogScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { sessions: yogaSessions, loading, error } = useYogaSessions();
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Tous");
-  const [likes, setLikes] = useState<Record<string, boolean>>({ s2: true });
+  const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+
+  // Only use database sessions - don't fall back to mock data
+  // (Mock data has invalid IDs for enrollment)
+  const sessions = yogaSessions.length > 0 
+    ? yogaSessions.map((s) => ({
+        id: s.id, // Keep UUID from database
+        name: s.title,
+        level: "Tous niveaux",
+        instructor: s.instructor,
+        instructorImg: "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+        duration: `${s.durationMin} min`,
+        price: s.priceMad,
+        date: new Date(s.startsAt).toLocaleDateString("fr-FR", { 
+          day: "2-digit", 
+          month: "short", 
+          hour: "2-digit", 
+          minute: "2-digit" 
+        }),
+        spots: s.capacity - s.enrolledCount,
+        rating: 4.8,
+        img: "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+      }))
+    : []; // Empty array, not fallback
 
   const filteredSessions = useMemo(() => {
     if (activeFilter === "Tous") return sessions;
     return sessions.filter((session) => session.level === activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, sessions]);
 
   const handleReserveYoga = async (session: typeof sessions[0]) => {
     if (!user?.id) {
@@ -83,18 +109,49 @@ export default function YogaCatalogScreen() {
 
     setLoadingSessionId(session.id);
     try {
-      // Créer la réservation
-      const { data: booking, error } = await supabase
+      // Check if already enrolled
+      const { data: existing } = await supabase
+        .from("yoga_enrollments")
+        .select("*")
+        .eq("session_id", session.id)
+        .eq("patient_id", user.id)
+        .single();
+
+      if (existing) {
+        Alert.alert("Déjà inscrit", "Vous êtes déjà inscrit à cette séance de yoga");
+        setLoadingSessionId(null);
+        return;
+      }
+
+      // 1. Create yoga enrollment (tracks the yoga session enrollment)
+      const { data: enrollment, error: enrollmentError } = await supabase
+        .from("yoga_enrollments")
+        .insert([
+          {
+            session_id: session.id,
+            patient_id: user.id,
+          },
+        ])
+        .select()
+        .single();
+
+      if (enrollmentError) {
+        throw new Error(`Erreur lors de l'inscription: ${enrollmentError.message}`);
+      }
+
+      // 2. Create booking for admin tracking
+      const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert([
           {
             patient_id: user.id,
+            professional_id: null, // No professional for yoga
             specialty: "yoga_instructor",
             status: "matched",
             urgency: "normal",
-            scheduled_at: new Date().toISOString(), // À améliorer avec la vraie date
-            address: "Meknès, Maroc", // À améliorer avec l'adresse du patient
-            notes: `Réservation yoga: ${session.name} - ${session.instructor}`,
+            scheduled_at: session.date || new Date().toISOString(),
+            address: "Classe de yoga",
+            notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
             budget_min_mad: session.price,
             budget_max_mad: session.price,
             final_price_mad: session.price,
@@ -103,31 +160,32 @@ export default function YogaCatalogScreen() {
         .select()
         .single();
 
-      if (error) {
-        throw error;
+      if (bookingError) {
+        // Even if booking fails, enrollment succeeded
+        console.warn("Booking creation failed but enrollment succeeded:", bookingError);
       }
 
       if (booking) {
         // Notifier l'admin automatiquement
         await notifyAdminNewBooking(booking);
-
-        Alert.alert(
-          "✅ Réservation confirmée!",
-          `${session.name} réservé chez ${session.instructor}.\n\nLa réservation a été envoyée à l'administrateur.`,
-          [
-            {
-              text: "Voir mes réservations",
-              onPress: () => router.push("/patient/bookings"),
-            },
-            {
-              text: "Fermer",
-              onPress: () => setLoadingSessionId(null),
-            },
-          ]
-        );
       }
+
+      Alert.alert(
+        "✅ Inscription confirmée!",
+        `Vous êtes inscrit à "${session.name}" avec ${session.instructor}.\n\nVous pouvez voir cette séance dans vos réservations.`,
+        [
+          {
+            text: "Voir mes réservations",
+            onPress: () => router.push("/patient/bookings"),
+          },
+          {
+            text: "Fermer",
+            onPress: () => setLoadingSessionId(null),
+          },
+        ]
+      );
     } catch (err) {
-      console.error("Erreur lors de la réservation:", err);
+      console.error("[YogaCatalog] Erreur lors de la réservation:", err);
       Alert.alert("Erreur", "Impossible de créer la réservation. Essayez de nouveau.");
       setLoadingSessionId(null);
     }
@@ -164,8 +222,26 @@ export default function YogaCatalogScreen() {
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        {filteredSessions.map((session) => (
-          <View key={session.id} style={styles.card}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Chargement des séances...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>❌ Erreur lors du chargement des séances</Text>
+            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>Veuillez vérifier votre connexion et réessayer.</Text>
+          </View>
+        ) : filteredSessions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>📋 Aucune séance disponible</Text>
+            <Text style={[styles.emptyText, { fontSize: 12, marginTop: 8, color: Colors.textMuted }]}>
+              Revenez bientôt pour voir les nouvelles séances de yoga!
+            </Text>
+          </View>
+        ) : (
+          filteredSessions.map((session) => (
+            <View key={session.id} style={styles.card}>
             <View style={styles.cardImageWrap}>
               <Image source={{ uri: session.img }} style={styles.cardImage} />
               <View style={styles.imageOverlay} />
@@ -230,7 +306,8 @@ export default function YogaCatalogScreen() {
               </View>
             </View>
           </View>
-        ))}
+        ))
+        )}
       </ScrollView>
     </View>
   );
@@ -331,4 +408,36 @@ const styles = StyleSheet.create({
   },
   bookBtnText: { color: "white", fontSize: 13, fontWeight: "600" },
   bookBtnDisabled: { opacity: 0.6 },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: Colors.textMuted,
+    fontSize: 14,
+  },
+  errorContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 12,
+  },
+  errorText: {
+    color: "#991B1B",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    color: Colors.textMuted,
+    fontSize: 16,
+  },
 });
