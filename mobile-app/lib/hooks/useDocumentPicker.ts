@@ -1,6 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { showToast } from "@/lib/toast";
+import * as ImageManipulator from "expo-image-manipulator";
 
 export interface DocumentAsset {
   uri: string;
@@ -68,33 +68,42 @@ export async function uploadDocumentToSupabase(
   bucket: string = "pro-documents"
 ): Promise<{ url: string; path: string } | null> {
   try {
-    const fileExtension = documentName.split(".").pop() || "pdf";
+    // Optionally resize large images to avoid timeouts
+    let uploadUri = documentUri;
+    if (documentType.startsWith("image/")) {
+      try {
+        const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
+        if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+      } catch (manipErr) {
+        console.warn("ImageManipulator resize failed, continuing with original file:", manipErr);
+      }
+    }
+
     const fileName = `${userId}/${Date.now()}-${documentName}`;
 
-    // Read file as binary
-    const fileContent = await FileSystem.readAsStringAsync(documentUri, {
-      encoding: "base64" as any,
-    });
-
-    // Convert base64 to bytes
-    const binaryString = atob(fileContent);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    const formData = new FormData();
+    formData.append("file", {
+      uri: uploadUri,
+      name: fileName.split("/").pop(),
+      type: documentType || "application/octet-stream",
+    } as any);
 
     const { supabase } = await import("@/lib/supabase");
 
+    // Use the storage-js helper; passing FormData works on React Native via fetch
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(fileName, bytes, {
+      .upload(fileName, formData as any, {
         contentType: documentType,
-        cacheControl: "3600",
         upsert: true,
-      });
+      } as any);
 
     if (error) {
-      console.error("Upload error:", error);
+      console.error("Upload error:", error, {
+        message: error.message,
+        status: (error as any).status ?? null,
+        details: (error as any).details ?? null,
+      });
       if (error.message?.includes("row-level security")) {
         showToast("Erreur de sécurité. Veuillez réessayer ou contacter le support.");
       } else if (error.message?.includes("Bucket not found")) {

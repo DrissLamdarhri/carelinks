@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { showToast } from "@/lib/toast";
+import * as ImageManipulator from "expo-image-manipulator";
 
 export interface CameraAsset {
   uri: string;
@@ -48,32 +48,35 @@ export async function uploadSelfieToSupabase(
   mimeType: string = "image/jpeg"
 ): Promise<{ url: string; path: string } | null> {
   try {
+    // Resize to avoid huge uploads
+    let uploadUri = imageUri;
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
+      if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+    } catch (mErr) {
+      console.warn("ImageManipulator failed to resize selfie, continuing with original:", mErr);
+    }
+
     const fileName = `${userId}/selfie-${Date.now()}.jpg`;
 
-    // Read file as binary
-    const fileContent = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: "base64" as any,
-    });
-
-    // Convert base64 to bytes
-    const binaryString = atob(fileContent);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    const formData = new FormData();
+    formData.append("file", {
+      uri: uploadUri,
+      name: fileName.split("/").pop(),
+      type: mimeType,
+    } as any);
 
     const { supabase } = await import("@/lib/supabase");
 
     const { data, error } = await supabase.storage
       .from("pro-documents")
-      .upload(fileName, bytes, {
+      .upload(fileName, formData as any, {
         contentType: mimeType,
-        cacheControl: "3600",
         upsert: true,
-      });
+      } as any);
 
     if (error) {
-      console.error("Upload error:", error);
+      console.error("Upload error:", error, { message: error.message, status: (error as any).status ?? null });
       if (error.message?.includes("row-level security")) {
         showToast("Erreur de sécurité. Veuillez réessayer ou contacter le support.");
       } else if (error.message?.includes("Bucket not found")) {
