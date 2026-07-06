@@ -32,3 +32,19 @@ export function getOAuthRedirectUrl(): string {
     preferLocalhost: false,
   });
 }
+
+const resetFallback = "ma.carelink.app://auth/reset-password";
+
+/** Deep link the password-reset email should open (→ app/auth/reset-password). */
+export function getPasswordResetRedirectUrl(): string {
+  if (!makeRedirectUri) return resetFallback;
+  if (Platform.OS === "web") return makeRedirectUri({ path: "auth/reset-password" });
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  if (isExpoGo) return makeRedirectUri({ path: "auth/reset-password", preferLocalhost: false });
+  return makeRedirectUri({
+    native: resetFallback,
+    scheme: "ma.carelink.app",
+    path: "auth/reset-password",
+    preferLocalhost: false,
+  });
+}

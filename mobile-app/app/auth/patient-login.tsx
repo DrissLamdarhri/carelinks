@@ -18,7 +18,7 @@ import { showToast } from "@/lib/toast";
 
 export default function PatientLoginScreen() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -171,7 +171,20 @@ export default function PatientLoginScreen() {
           </View>
         </View>
 
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={async () => {
+            if (!email.trim()) {
+              showToast("Entrez votre email d'abord");
+              return;
+            }
+            try {
+              await sendPasswordReset(email);
+              showToast("Email de réinitialisation envoyé ✓");
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "Envoi impossible");
+            }
+          }}
+        >
           <Text style={styles.forgot}>Mot de passe oublié ?</Text>
         </TouchableOpacity>
 
