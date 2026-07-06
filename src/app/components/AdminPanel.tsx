@@ -1575,90 +1575,150 @@ export function AdminPanel() {
           {/* ======= BOOKINGS ======= */}
           {tab === "bookings" && (
             <div>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-[#888780]">{(liveAllBookings).length} réservations</p>
-                <div className="flex gap-2 items-center">
-                  <div className="inline-flex rounded-xl overflow-hidden" style={{ background: "#F3F3F5" }}>
-                    <button
-                      onClick={() => setBookingFilter(null)}
-                      className="px-3 py-2 text-sm"
-                      style={{ fontWeight: bookingFilter === null ? 700 : 500, color: bookingFilter === null ? "#0D0870" : "#888780", background: bookingFilter === null ? "white" : "transparent" }}
-                    >
-                      Tous
-                    </button>
-                    <button
-                      onClick={() => setBookingFilter("yoga_instructor")}
-                      className="px-3 py-2 text-sm"
-                      style={{ fontWeight: bookingFilter === "yoga_instructor" ? 700 : 500, color: bookingFilter === "yoga_instructor" ? "#0D0870" : "#888780", background: bookingFilter === "yoga_instructor" ? "white" : "transparent" }}
-                    >
-                      Yoga
-                    </button>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {[
+                  { label: "Total", value: liveAllBookings?.length || 0, icon: BookOpen, color: "#0D0870" },
+                  { label: "En attente", value: liveAllBookings?.filter((b: any) => b.status === "open")?.length || 0, icon: Clock, color: "#F59E0B" },
+                  { label: "En cours", value: liveAllBookings?.filter((b: any) => b.status === "in_progress")?.length || 0, icon: Activity, color: "#10B981" },
+                  { label: "Complétées", value: liveAllBookings?.filter((b: any) => b.status === "completed")?.length || 0, icon: CheckCircle2, color: "#8B5CF6" },
+                ].map((card, i) => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={i} className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: `${card.color}15` }}>
+                          <Icon size={20} style={{ color: card.color }} />
+                        </div>
+                      </div>
+                      <p className="text-3xl text-[#1A1A1A] mb-1" style={{ fontWeight: 700 }}>{card.value}</p>
+                      <p className="text-xs text-[#888780]">{card.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Filter & Action Bar */}
+              <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+                <p className="text-sm text-[#888780]">{liveAllBookings?.length || 0} réservations au total</p>
+                <div className="flex gap-2 items-center flex-wrap">
+                  {/* Status Filter */}
+                  <div className="flex gap-1 rounded-xl p-1" style={{ background: "#F3F3F5" }}>
+                    {[
+                      { key: null, label: "Tous", icon: null },
+                      { key: "open", label: "Ouvertes", icon: Clock },
+                      { key: "in_progress", label: "En cours", icon: Activity },
+                      { key: "completed", label: "Complétées", icon: CheckCircle2 },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setBookingFilter(f.key)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                        style={{
+                          background: bookingFilter === f.key ? "white" : "transparent",
+                          color: bookingFilter === f.key ? "#0D0870" : "#888780",
+                          fontWeight: bookingFilter === f.key ? 600 : 400,
+                        }}
+                      >
+                        {f.icon && <f.icon size={12} />}
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
-                  <button onClick={() => setShowBookingFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
-                    <Filter size={14} /> Filtrer
-                  </button>
-                  <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
-                    <Download size={14} /> Exporter CSV
+
+                  <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780] hover:bg-[#F3F3F5] transition-colors" style={{ background: "#F3F3F5" }}>
+                    <Download size={14} /> Exporter
                   </button>
                 </div>
               </div>
-              <div
-                className="bg-white rounded-2xl overflow-hidden"
-                style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-              >
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr style={{ background: "#F8F8FC" }}>
-                        {["ID", "Patient", "Professionnel", "Service", "Date", "Prix", "Priorité", "Statut", "Actions"].map((h) => (
-                          <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => {
-                        const alertColors: Record<string, { bg: string; color: string }> = {
-                          critical: { bg: "#FCA5A5", color: "#991B1B" },
-                          high: { bg: "#FEF08A", color: "#9A3412" },
-                          normal: { bg: "#F3F4F6", color: "#6B7280" },
-                        };
-                        const alertColor = alertColors[b.alertLevel] || alertColors.normal;
-                        const alertLabels: Record<string, string> = {
-                          critical: "🚨 CRITIQUE",
-                          high: "⚠️ ÉLEVÉE",
-                          normal: "ℹ️ NORMAL",
-                        };
-                        return (
-                          <tr key={b.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
-                            <td className="px-5 py-4 text-xs text-[#888780]" style={{ fontFamily: "monospace" }}>{b.id}</td>
-                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{b.patient}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.pro}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.service}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.date}</td>
-                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.price}</td>
-                            <td className="px-5 py-4">
+
+              {/* Bookings List */}
+              {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                  <BookOpen size={40} className="mx-auto mb-3 text-[#D0D0D0]" />
+                  <p className="text-[#888780]">Aucune réservation pour cette période</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).map((b: any) => {
+                    const statusColors: Record<string, { bg: string; color: string; icon: any }> = {
+                      open: { bg: "#FEF3C7", color: "#92400E", icon: Clock },
+                      in_progress: { bg: "#D1FAE5", color: "#065F46", icon: Activity },
+                      completed: { bg: "#E9D5FF", color: "#581C87", icon: CheckCircle2 },
+                      cancelled: { bg: "#FEE2E2", color: "#991B1B", icon: X },
+                    };
+                    const urgencyColors: Record<string, string> = {
+                      normal: "#10B981",
+                      urgent: "#F59E0B",
+                      emergency: "#EF4444",
+                    };
+                    const sColors = statusColors[b.status] || statusColors.open;
+                    const StatusIcon = sColors.icon;
+
+                    return (
+                      <div
+                        key={b.id}
+                        className="bg-white rounded-2xl p-5 border border-[#F0F0F0] hover:border-[#E0E0E0] hover:shadow-md transition-all"
+                        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-xs px-3 py-1 rounded-full font-mono" style={{ background: "#F3F3F5", color: "#888780" }}>{b.id}</span>
                               <span
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs"
-                                style={{ background: alertColor.bg, color: alertColor.color, fontWeight: 600 }}
+                                className="text-xs px-3 py-1 rounded-full flex items-center gap-1.5"
+                                style={{ background: sColors.bg, color: sColors.color, fontWeight: 600 }}
                               >
-                                {alertLabels[b.alertLevel] || "—"}
+                                <StatusIcon size={12} /> {b.status?.toUpperCase()}
                               </span>
-                            </td>
-                            <td className="px-5 py-4"><StatusBadge status={b.status} /></td>
-                            <td className="px-5 py-4">
-                              <button onClick={() => setSelectedBookingForView(b)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
-                                <Eye size={14} className="text-[#888780]" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              <span
+                                className="text-xs px-3 py-1 rounded-full font-semibold"
+                                style={{
+                                  background: `${urgencyColors[b.urgency || "normal"]}20`,
+                                  color: urgencyColors[b.urgency || "normal"],
+                                }}
+                              >
+                                {b.urgency?.toUpperCase() || "NORMAL"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-6 text-sm">
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Patient</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.patient}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Professionnel</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.pro || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Service</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.service}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl text-[#0D0870] font-bold">{b.price}</p>
+                            <p className="text-xs text-[#888780]">MAD</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-[#F0F0F0]">
+                          <div className="flex items-center gap-4 text-xs text-[#888780]">
+                            <span className="flex items-center gap-1"><Calendar size={12} /> {b.date}</span>
+                            <span className="flex items-center gap-1"><MapPin size={12} /> {b.address || "—"}</span>
+                          </div>
+                          <button
+                            onClick={() => setSelectedBookingForView(b)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
+                          >
+                            <Eye size={14} className="text-[#888780]" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1985,7 +2045,6 @@ export function AdminPanel() {
                 {[
                   { label: "Titre de la séance", key: "title", type: "text", placeholder: "ex: Hatha Flow Matinal" },
                   { label: "Instructeur", key: "instructor", type: "text", placeholder: "Nom de l'instructeur" },
-                  { label: "Date & Heure", key: "date", type: "text", placeholder: "ex: 25 Avr. 10h00" },
                 ].map((f) => (
                   <div key={f.key}>
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>{f.label}</label>
@@ -1998,6 +2057,32 @@ export function AdminPanel() {
                     />
                   </div>
                 ))}
+                
+                {/* Date & Time Picker */}
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Date & Heure</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      value={newSession.date.split(" ")[0] || ""}
+                      onChange={(e) => {
+                        const time = newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00";
+                        setNewSession({ ...newSession, date: `${e.target.value} ${time}` });
+                      }}
+                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                    />
+                    <input
+                      type="time"
+                      value={newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00"}
+                      onChange={(e) => {
+                        const date = newSession.date.split(" ")[0] || new Date().toISOString().split("T")[0];
+                        setNewSession({ ...newSession, date: `${date} ${e.target.value}` });
+                      }}
+                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Places max</label>
