@@ -75,6 +75,7 @@ export default function ProHomeScreen() {
       ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
       : mockProProfile.name;
   const avatar = profile?.avatar || DEFAULT_AVATAR;
+  const activeMission = appointments.find((b) => b.status === "matched" || b.status === "in_progress") ?? null;
 
   // Go online = become available + publish current GPS so patients see you on
   // their map. Needs a specialty first (set it in "Demandes proches").
@@ -182,6 +183,41 @@ export default function ProHomeScreen() {
           <Text style={styles.quickActionText}>Documents KYC</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Active mission hero — one tap to the live nav map */}
+      {activeMission ? (
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => router.push(`/pro/tracking/${activeMission.id}`)}
+          style={styles.missionShadow}
+        >
+          <LinearGradient
+            colors={Gradients.nurse}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.missionCard}
+          >
+            <View style={styles.missionTop}>
+              <View style={styles.missionBadge}>
+                <Navigation size={13} color="#FFFFFF" strokeWidth={2.4} />
+                <Text style={styles.missionBadgeTxt}>
+                  {activeMission.status === "in_progress" ? "Mission en cours" : "Mission acceptée"}
+                </Text>
+              </View>
+              <Text style={styles.missionGo}>Voir l'itinéraire →</Text>
+            </View>
+            <Text style={styles.missionPatient}>
+              Patient · {(activeMission.specialty ?? "").replaceAll("_", " ")}
+            </Text>
+            {activeMission.address ? (
+              <View style={styles.missionAddrRow}>
+                <MapPin size={13} color="rgba(255,255,255,0.85)" />
+                <Text style={styles.missionAddr} numberOfLines={1}>{activeMission.address}</Text>
+              </View>
+            ) : null}
+          </LinearGradient>
+        </TouchableOpacity>
+      ) : null}
 
       <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 26 }}>
         {tab === "requests" ? (
@@ -339,6 +375,28 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.surfaceWarm,
   },
+  missionShadow: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 18,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  missionCard: { borderRadius: 18, padding: 16 },
+  missionTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  missionBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+  },
+  missionBadgeTxt: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  missionGo: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  missionPatient: { color: "#FFFFFF", fontSize: 17, fontWeight: "800", textTransform: "capitalize" },
+  missionAddrRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  missionAddr: { flex: 1, color: "rgba(255,255,255,0.9)", fontSize: 12 },
   quickActionBtn: {
     flex: 1,
     height: 40,
