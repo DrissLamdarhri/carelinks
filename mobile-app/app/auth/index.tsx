@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  FlatList,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -27,12 +31,35 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const lastStep = onboardingSlides.length - 1;
-  const slide = onboardingSlides[step];
-  const Icon = iconMap[slide.icon];
+  const scrollRef = useRef<FlatList<(typeof onboardingSlides)[0]> | null>(null);
+  const screenWidth = Dimensions.get("window").width;
 
   const next = () => {
-    if (step < lastStep) setStep((s) => s + 1);
+    if (step < lastStep) {
+      const nextIndex = step + 1;
+      scrollRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+      setStep(nextIndex);
+    }
   };
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offset / screenWidth);
+    setStep(Math.min(index, lastStep));
+  }, [screenWidth, lastStep]);
+
+  const renderSlide = useCallback(({ item }: { item: typeof onboardingSlides[number] }) => {
+    const SlideIcon = iconMap[item.icon];
+    return (
+      <View style={[styles.slideContainer, { width: screenWidth }]}>
+        <View style={styles.iconCard}>
+          <SlideIcon size={36} color="white" />
+        </View>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.subtitle}>{item.subtitle}</Text>
+      </View>
+    );
+  }, [screenWidth]);
 
   return (
     <LinearGradient colors={Gradients.onboarding} style={styles.root}>
@@ -53,11 +80,18 @@ export default function OnboardingScreen() {
             <View style={styles.logoLine} />
           </View>
 
-          <View style={styles.iconCard}>
-            <Icon size={36} color="white" />
-          </View>
-          <Text style={styles.title}>{slide.title}</Text>
-          <Text style={styles.subtitle}>{slide.subtitle}</Text>
+          <FlatList
+            ref={scrollRef as any}
+            data={onboardingSlides as any}
+            renderItem={renderSlide}
+            keyExtractor={(item) => item.id}
+            horizontal
+            pagingEnabled
+            scrollEventThrottle={16}
+            onScroll={handleScroll}
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+          />
         </View>
 
         <View style={styles.bottom}>
@@ -94,9 +128,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.secondaryBtnText}>Je suis professionnel</Text>
               </TouchableOpacity>
 
-              {/* <TouchableOpacity onPress={() => router.push("/admin")}>
-                <Text style={styles.adminLink}>Admin Panel</Text>
-              </TouchableOpacity> */}
+              {/* Admin Panel link removed from onboarding for security */}
             </View>
           )}
         </View>
@@ -107,23 +139,24 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  safe: { flex: 1, paddingHorizontal: 24, paddingBottom: 32 },
+  safe: { flex: 1, paddingHorizontal: 0, paddingBottom: 32 },
   topRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
     marginTop: 8,
+    paddingHorizontal: 24,
     zIndex: 4,
   },
   skip: { color: "rgba(255,255,255,0.65)", fontSize: 13 },
   center: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
+    justifyContent: "flex-start",
+    paddingHorizontal: 0,
     zIndex: 3,
   },
-  logoWrap: { alignItems: "center", marginBottom: 44 },
+  logoWrap: { alignItems: "center", marginBottom: 44, marginTop: 20 },
   logo: {
     fontSize: 38,
     color: "white",
@@ -136,6 +169,12 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  slideContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   iconCard: {
     width: 80,
@@ -159,7 +198,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: "center",
   },
-  bottom: { zIndex: 3 },
+  bottom: { zIndex: 3, paddingHorizontal: 24 },
   dots: {
     flexDirection: "row",
     justifyContent: "center",

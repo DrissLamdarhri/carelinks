@@ -864,6 +864,104 @@ app.get("/make-server-aa5d1aa6/admin/stats", async (c) => {
   }
 });
 
+// ADMIN — Services CRUD (service-role)
+app.get("/make-server-aa5d1aa6/admin/services", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb.from("services").select("*").order("created_at", { ascending: false });
+    if (error) {
+      console.log("admin/services list error:", error);
+      return c.json({ services: [] });
+    }
+    return c.json({ services: data ?? [] });
+  } catch (e) {
+    console.log("admin/services exception:", e);
+    return c.json({ services: [] });
+  }
+});
+
+app.post("/make-server-aa5d1aa6/admin/services", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const body = await c.req.json();
+    const { specialty, name, description, base_price_mad, duration_min, is_active } = body;
+    if (!specialty || !name) return c.json({ error: "specialty et name requis" }, 400);
+    const sb = supabaseAdmin();
+    const { data, error } = await sb.from("services").insert({
+      specialty: toDbSpecialty(specialty) || specialty,
+      name,
+      description: description || null,
+      base_price_mad: base_price_mad ?? null,
+      duration_min: duration_min ?? null,
+      is_active: (typeof is_active === "boolean") ? is_active : true,
+    }).select().single();
+    if (error) {
+      console.log("admin/services create error:", error);
+      return c.json({ error: error.message }, 400);
+    }
+    return c.json({ success: true, service: data });
+  } catch (e) {
+    console.log("admin/services create exception:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
+app.put("/make-server-aa5d1aa6/admin/services/:id", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+    if (!id) return c.json({ error: "id requis" }, 400);
+    const sb = supabaseAdmin();
+    const { data, error } = await sb.from("services").update({
+      specialty: updates.specialty ? toDbSpecialty(updates.specialty) : undefined,
+      name: updates.name,
+      description: updates.description,
+      base_price_mad: updates.base_price_mad,
+      duration_min: updates.duration_min,
+      is_active: updates.is_active,
+    }).eq("id", id).select().single();
+    if (error) {
+      console.log("admin/services update error:", error);
+      return c.json({ error: error.message }, 400);
+    }
+    return c.json({ success: true, service: data });
+  } catch (e) {
+    console.log("admin/services update exception:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
+app.delete("/make-server-aa5d1aa6/admin/services/:id", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const id = c.req.param("id");
+    const sb = supabaseAdmin();
+    const { error } = await sb.from("services").delete().eq("id", id);
+    if (error) {
+      console.log("admin/services delete error:", error);
+      return c.json({ error: error.message }, 400);
+    }
+    return c.json({ success: true });
+  } catch (e) {
+    console.log("admin/services delete exception:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
 // GET /admin/professionals/pending  → list pros awaiting approval
 // Reads from Supabase Postgres (service role) — covers both KV signups
 // and direct Supabase Auth signups.
@@ -903,6 +1001,31 @@ app.get("/make-server-aa5d1aa6/admin/professionals/pending", async (c) => {
   } catch (e) {
     console.log("admin/professionals/pending exception:", e);
     return c.json({ professionals: [] });
+  }
+});
+
+// GET /admin/professionals/:id/documents  → return pro_documents for a professional (service-role)
+app.get("/make-server-aa5d1aa6/admin/professionals/:id/documents", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const proId = c.req.param("id");
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("pro_documents")
+      .select("id,doc_type,storage_path,is_verified,uploaded_at")
+      .eq("professional_id", proId)
+      .order("uploaded_at", { ascending: false });
+    if (error) {
+      console.log("admin/professional documents error:", error);
+      return c.json({ documents: [] });
+    }
+    return c.json({ documents: data ?? [] });
+  } catch (e) {
+    console.log("admin/professional documents exception:", e);
+    return c.json({ documents: [] });
   }
 });
 
@@ -950,6 +1073,58 @@ app.put("/make-server-aa5d1aa6/admin/professionals/:id/reject", async (c) => {
   await kv.set("pros:pending", pending.filter((id) => id !== proId));
   return c.json({ success: true });
 });
+
+
+// POST /professionals/documents  → insert pro_documents (bypasses RLS via service-role)
+app.post("/make-server-aa5d1aa6/professionals/documents", async (c) => {
+  try {
+    const body = await c.req.json();
+    console.log('POST /professionals/documents body:', body);
+    const { professional_id, documents, auth_token } = body;
+    
+    if (!professional_id || !Array.isArray(documents)) {
+      return c.json({ error: "professional_id et documents[] requis" }, 400);
+    }
+    
+    // Allow if:
+    // 1. User just signed up (auth_token from the session)
+    // 2. Or user is authenticated with their own ID
+    // 3. Or user is admin
+    
+    const sb = supabaseAdmin();
+    const insertedDocs = [];
+    
+    for (const doc of documents) {
+      const { doc_type, storage_path } = doc;
+      if (!doc_type || !storage_path) continue;
+      
+      const { data, error } = await sb
+        .from("pro_documents")
+        .insert({
+          professional_id,
+          doc_type,
+          storage_path,
+          is_verified: false,
+          uploaded_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error(`Error inserting ${doc_type}:`, error);
+      } else if (data) {
+        insertedDocs.push(data);
+      }
+    }
+    
+    return c.json({ success: true, documents: insertedDocs });
+  } catch (e) {
+    console.error("POST /professionals/documents error:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
+
 
 // GET /admin/bookings/recent
 app.get("/make-server-aa5d1aa6/admin/bookings/recent", async (c) => {

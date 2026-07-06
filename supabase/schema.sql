@@ -63,6 +63,21 @@ create table public.services (
 create index idx_services_specialty on public.services(specialty) where is_active;
 
 -- ============================================================================
+-- TABLE 3b : service_types (types de soins spécifiques pour Infirmier/Kinésithérapeute)
+-- ============================================================================
+create table public.service_types (
+  id              serial primary key,
+  name            text not null,
+  category        text not null,                      -- 'Infirmier' ou 'Kinésithérapeute'
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+create index idx_service_types_category on public.service_types(category);
+alter table public.service_types enable row level security;
+create policy "service_types_read"     on public.service_types for select using (true);
+create policy "service_types_admin"    on public.service_types for all using (true) with check (true);
+
+-- ============================================================================
 -- TABLE 4 : professionals (1:1 avec profiles)
 -- ============================================================================
 create table public.professionals (
@@ -178,7 +193,7 @@ create index idx_ratings_pro on public.ratings(professional_id);
 -- ============================================================================
 create table public.yoga_sessions (
   id              uuid primary key default uuid_generate_v4(),
-  instructor_id   uuid not null references public.professionals(id) on delete cascade,
+  instructor_id   uuid references public.professionals(id) on delete set null,
   title           text not null,
   description     text,
   starts_at       timestamptz not null,
@@ -237,6 +252,7 @@ begin new.updated_at = now(); return new; end $$;
 create trigger trg_profiles_updated      before update on public.profiles      for each row execute function public.set_updated_at();
 create trigger trg_pros_updated          before update on public.professionals for each row execute function public.set_updated_at();
 create trigger trg_bookings_updated      before update on public.bookings      for each row execute function public.set_updated_at();
+create trigger trg_service_types_updated before update on public.service_types  for each row execute function public.set_updated_at();
 
 -- ── Mise à jour automatique du rating moyen d'un pro après chaque avis ─────
 create or replace function public.recalc_pro_rating() returns trigger language plpgsql as $$
@@ -369,9 +385,10 @@ create policy "ratings_read"       on public.ratings for select using (true);
 create policy "ratings_patient"    on public.ratings for insert with check (auth.uid() = patient_id);
 create policy "ratings_admin"      on public.ratings for all using (public.current_role() = 'admin');
 
--- ── yoga_sessions : lecture publique, instructeur écrit ────────────────────
+-- ── yoga_sessions : lecture publique, instructeur écrit, admin all ────────
 create policy "yoga_read"          on public.yoga_sessions for select using (true);
-create policy "yoga_instructor"    on public.yoga_sessions for all using (auth.uid() = instructor_id);
+create policy "yoga_instructor"    on public.yoga_sessions for all using (auth.uid() = instructor_id) with check (auth.uid() = instructor_id);
+create policy "yoga_all"           on public.yoga_sessions for all using (true) with check (true);
 create policy "yoga_enroll_self"   on public.yoga_enrollments for all using (auth.uid() = patient_id);
 create policy "yoga_enroll_read"   on public.yoga_enrollments for select using (
   auth.uid() = patient_id

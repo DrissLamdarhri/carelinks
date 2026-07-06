@@ -22,7 +22,7 @@ async function fetchAPI<T = any>(
   const token = await getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(useAdminKey ? { "X-Admin-Key": ADMIN_KEY } : {}),
     ...(options.headers as Record<string, string> || {}),
   };
@@ -188,6 +188,10 @@ export async function getPendingPros() {
   return fetchAPI("/admin/professionals/pending", {}, true);
 }
 
+export async function getProDocumentsAdmin(proId: string) {
+  return fetchAPI(`/admin/professionals/${proId}/documents`, {}, true);
+}
+
 export async function approvePro(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/approve`, { method: "PUT" }, true);
 }
@@ -196,6 +200,53 @@ export async function rejectPro(proId: string) {
   return fetchAPI(`/admin/professionals/${proId}/reject`, { method: "PUT" }, true);
 }
 
+export async function sendApprovalEmail(email: string, name: string, specialty?: string) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-approval-email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ email, name, specialty }),
+  });
+  return res.json();
+}
+
+export async function sendRejectionEmail(email: string, name: string, reason?: string) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejection-email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ email, name, reason }),
+  });
+  return res.json();
+}
+
 export async function getRecentBookings() {
   return fetchAPI("/admin/bookings/recent", {}, true);
 }
+
+export async function getAdminServices() {
+  return fetchAPI("/admin/services", {}, true);
+}
+
+export async function createAdminService(payload: {
+  name: string; category: string; icon?: string; base_price: number; duration: number; description?: string; is_active?: boolean;
+}) {
+  return fetchAPI("/admin/services", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateAdminService(id: string | number, updates: any) {
+  return fetchAPI(`/admin/services/${id}`, { method: "PUT", body: JSON.stringify(updates) }, true);
+}
+
+export async function deleteAdminService(id: string | number) {
+  return fetchAPI(`/admin/services/${id}`, { method: "DELETE" }, true);
+}
+

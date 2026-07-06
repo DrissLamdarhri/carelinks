@@ -42,6 +42,7 @@ import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkM
 import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
 import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
+import { useServiceTypes } from "@/lib/service-types";
 
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
@@ -75,7 +76,7 @@ function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
 
-const nurseCareTypes = [
+const fallbackNurseCareTypes = [
   "Pansement",
   "Injection IM",
   "Injection SC",
@@ -84,7 +85,7 @@ const nurseCareTypes = [
   "Soins post-op",
   "Sonde urinaire",
 ];
-const kineCareTypes = [
+const fallbackKineCareTypes = [
   "Rééducation fonctionnelle",
   "Massage thérapeutique",
   "Mobilisation articulaire",
@@ -121,18 +122,28 @@ export default function PatientRequestScreen() {
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
   const normalizedService = initialService.toLowerCase();
   const isKine = isKineService(normalizedService);
+  const serviceCategory = isKine ? "Kinésithérapeute" : "Infirmier";
   const serviceKey = isKine ? "kine" : "infirmier";
-  const careTypes = useMemo(
-    () => (serviceKey === "kine" ? kineCareTypes : nurseCareTypes),
-    [serviceKey]
-  );
-  const theme = useMemo(() => getServiceTheme(serviceKey) ?? ({
+
+  // Fetch service types from database
+  const { serviceTypes, loading } = useServiceTypes(serviceCategory);
+  
+  // Use fetched types, fallback to hardcoded if loading or empty
+  const careTypes = useMemo(() => {
+    if (loading || serviceTypes.length === 0) {
+      return isKine ? fallbackKineCareTypes : fallbackNurseCareTypes;
+    }
+    return serviceTypes.map(st => st.name);
+  }, [loading, serviceTypes, isKine]);
+
+  const theme = useMemo(() => getServiceTheme(isKine ? "kine" : "infirmier") ?? ({
     primary: Colors.primary,
     surface: Colors.surfaceWarm,
     surfaceStrong: Colors.surfaceWarm,
     inputBorder: Colors.border,
     badgeBg: Colors.surfaceWarm,
-  }), [serviceKey]);
+  }), [isKine]);
+  
   const [careType, setCareType] = useState(0);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
@@ -171,7 +182,7 @@ export default function PatientRequestScreen() {
   useEffect(() => {
     setCareType(0);
     setShowCareMenu(false);
-  }, [serviceKey]);
+  }, [isKine]);
 
   // Fetch real nearby professionals for the map once we know the patient's GPS.
   // Empty result → BookingMap shows its empty state (never fake pros in prod).
@@ -481,7 +492,7 @@ export default function PatientRequestScreen() {
         {isKine ? (
           /* Kiné: visual chip grid */
           <View style={styles.kineCareGrid}>
-            {kineCareTypes.map((item, index) => {
+            {careTypes.map((item: string, index: number) => {
               const Icon = kineCareIcons[index] ?? Activity;
               const active = careType === index;
               return (

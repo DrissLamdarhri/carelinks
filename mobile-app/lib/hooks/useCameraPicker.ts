@@ -46,7 +46,7 @@ export async function uploadSelfieToSupabase(
   userId: string,
   imageUri: string,
   mimeType: string = "image/jpeg"
-): Promise<string | null> {
+): Promise<{ url: string; path: string } | null> {
   try {
     const fileName = `${userId}/selfie-${Date.now()}.jpg`;
 
@@ -90,7 +90,7 @@ export async function uploadSelfieToSupabase(
       .from("pro-documents")
       .getPublicUrl(fileName);
 
-    return publicUrl.publicUrl;
+    return { url: publicUrl.publicUrl, path: fileName };
   } catch (error) {
     console.error("Error uploading selfie:", error);
     const errorMsg = error instanceof Error ? error.message : String(error);

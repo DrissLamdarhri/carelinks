@@ -218,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[] }
+    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
@@ -236,7 +236,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.from("professionals").upsert({
           id: data.user.id,
           specialty: options?.profession || "nurse",
+          years_experience: options?.experience ? parseInt(options.experience) : 0,
         });
+        
+        // Insert documents if provided — prefer supabase-js client insert (uses user's session & RLS)
+        if (options?.documents && options.documents.length > 0) {
+          try {
+            const docsToInsert = options.documents.map((d: any) => ({
+              professional_id: data.user.id,
+              doc_type: d.doc_type,
+              storage_path: d.storage_path,
+              is_verified: false,
+              uploaded_at: new Date().toISOString(),
+            }));
+
+            console.log("[Auth] Attempting pro_documents insert via supabase client", { count: docsToInsert.length });
+
+            const { data: insertedDocs, error: insertError } = await supabase.from("pro_documents").insert(docsToInsert).select();
+            if (insertError) {
+              console.warn("[Auth] pro_documents insert (client) error:", insertError);
+
+              // Fallback: call server function if client-side insert is blocked (log URL for debugging)
+              const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
+              const fnUrl = `${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/professionals/documents`;
+              console.log("[Auth] Falling back to server function URL (for diagnostics):", fnUrl);
+
+              try {
+                const sessionRes2 = await supabase.auth.getSession();
+                const token2 = sessionRes2.data?.session?.access_token ?? null;
+                const headers: Record<string, string> = { "Content-Type": "application/json" };
+                if (token2) headers["Authorization"] = "Bearer " + token2;
+
+                const resp = await fetch(fnUrl, {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify({ professional_id: data.user.id, documents: options.documents, auth_token: token2 }),
+                });
+
+                let bodyText: string | null = null;
+                try { bodyText = await resp.text(); } catch (e) { bodyText = null; }
+                if (!resp.ok) {
+                  console.error("[Auth] server function fallback failed:", resp.status, bodyText);
+                } else {
+                  console.log("[Auth] server function fallback succeeded:", bodyText);
+                }
+              } catch (e) {
+                console.error("[Auth] Exception calling server fallback function:", e);
+              }
+            } else {
+              console.log("[Auth] pro_documents inserted client-side", { insertedCount: insertedDocs?.length ?? 0 });
+            }
+          } catch (e) {
+            console.error("[Auth] Exception inserting documents via supabase client:", e);
+          }
+        }
       }
     }
   };
@@ -264,3 +317,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+

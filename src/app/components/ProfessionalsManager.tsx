@@ -3,9 +3,11 @@ import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import {
   Check, X, Eye, Clock, AlertCircle, CheckCircle2, XCircle,
-  Mail, MapPin, Phone, Award, Filter, Download, Search, UserX,
+  Mail, MapPin, Phone, Award, Filter, Download, Search, UserX, ExternalLink, FileText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
+import { approvePro, rejectPro, getProDocumentsAdmin } from "../../lib/api";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
 type Professional = {
@@ -36,10 +38,68 @@ export function ProfessionalsManager() {
   const [rejectReason, setRejectReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [proDocuments, setProDocuments] = useState<any[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [specialtyFilter, setSpecialtyFilter] = useState<string>("all");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [experienceFilter, setExperienceFilter] = useState<string>("all");
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   useEffect(() => {
     loadProfessionals();
-  }, [filter]);
+    
+    // Subscribe to real-time changes on professionals table
+    const subscription = supabase
+      .channel('professionals_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'professionals' },
+        (payload: any) => {
+          console.log('Professional updated:', payload.new);
+          // Update selected pro if it's the one being updated
+          if (selectedPro && payload.new.id === selectedPro.id) {
+            const updatedPro = {
+              ...selectedPro,
+              verification_status: payload.new.verification_status,
+              rejection_reason: payload.new.rejection_reason,
+            };
+            setSelectedPro(updatedPro);
+          }
+          // Refresh professionals list when status changes
+          loadProfessionals();
+        }
+      )
+      .subscribe();
+
+    // Fallback: Listen to CustomEvent from AdminPanel for immediate UI updates
+    const handleProStatusChanged = (event: any) => {
+      console.log('CustomEvent pro-status-changed received:', event.detail);
+      const { id, status } = event.detail;
+      
+      // Update professionals list optimistically
+      setProfessionals((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, verification_status: status } : p
+        )
+      );
+      
+      // Update selected professional if it's the one changed
+      if (selectedPro && selectedPro.id === id) {
+        setSelectedPro((s) => s ? { ...s, verification_status: status } : s);
+      }
+      
+      // Refresh in background after a short delay
+      setTimeout(() => loadProfessionals(), 500);
+    };
+    
+    window.addEventListener('pro-status-changed', handleProStatusChanged);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('pro-status-changed', handleProStatusChanged);
+    };
+  }, [filter, specialtyFilter, experienceFilter, selectedCities]);
 
   const loadProfessionals = async () => {
     try {
@@ -53,6 +113,10 @@ export function ProfessionalsManager() {
 
       if (filter !== "all") {
         prosQuery = prosQuery.eq("verification_status", filter);
+      }
+
+      if (specialtyFilter && specialtyFilter !== "all") {
+        prosQuery = prosQuery.eq("specialty", specialtyFilter);
       }
 
       const { data: prosData, error: prosError } = await prosQuery;
@@ -113,27 +177,133 @@ export function ProfessionalsManager() {
     }
   };
 
+  const loadProDocuments = async (proId: string) => {
+    setDocsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("pro_documents")
+        .select("id,doc_type,storage_path,is_verified,uploaded_at")
+        .eq("professional_id", proId)
+        .order("uploaded_at", { ascending: false });
+
+      if (error) {
+        console.warn("Error fetching pro documents via RLS:", error);
+        // Try admin API fallback
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          setProDocuments(res.documents ?? []);
+          return;
+        } catch (apiErr) {
+          console.error("Admin API pro documents error:", apiErr);
+          setProDocuments([]);
+          return;
+        }
+      }
+
+      if (!data || data.length === 0) {
+        // Fallback in case RLS filtered results
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          if (res.documents && res.documents.length > 0) {
+            setProDocuments(res.documents);
+            return;
+          }
+        } catch (apiErr) {
+          // ignore
+        }
+      }
+
+      setProDocuments(data ?? []);
+    } catch (e) {
+      console.error("Error loading pro documents:", e);
+      try {
+        const res = await getProDocumentsAdmin(proId);
+        setProDocuments(res.documents ?? []);
+      } catch (_) {
+        setProDocuments([]);
+      }
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const openDetailsModal = async (pro: Professional) => {
+    setSelectedPro(pro);
+    setShowDetailsModal(true);
+    // Load documents when modal opens
+    await loadProDocuments(pro.id);
+  };
+
   const handleApprovePro = async (pro?: Professional) => {
     const target = pro || selectedPro;
     if (!target) return;
     setActionLoading(true);
+    
+    // Save previous state for rollback if needed
+    const previousProfessionals = professionals;
+    
     try {
-      const { error: updateError } = await supabase
+      // OPTIMISTIC UPDATE: Immediately update local state
+      setProfessionals((prevPros) =>
+        prevPros.map((p) =>
+          p.id === target.id
+            ? { ...p, verification_status: "approved" as ProfessionalStatus, verified_at: new Date().toISOString() }
+            : p
+        )
+      );
+
+      // Update the selected pro in the modal too
+      if (selectedPro?.id === target.id) {
+        setSelectedPro((s) =>
+          s ? { ...s, verification_status: "approved", verified_at: new Date().toISOString() } : s
+        );
+      }
+
+      const nowIso = new Date().toISOString();
+      
+      // Update database with proper error handling
+      const { error } = await supabase
         .from("professionals")
         .update({
           verification_status: "approved",
-          verified_at: new Date().toISOString(),
+          verified_at: nowIso,
         })
         .eq("id", target.id);
 
-      if (updateError) throw updateError;
+      if (error) {
+        throw error; // Fail fast - don't use fallback silently
+      }
 
-      await sendApprovalNotification(target);
-
+      // Show success immediately (optimistic update succeeded and DB update confirmed)
       toast.success(`${target.full_name} a été approuvé(e)`);
+
+      // Send notification (non-blocking)
+      try {
+        await supabase.from('notifications').insert({
+          user_id: target.id,
+          kind: 'approval',
+          title: 'Compte approuvé',
+          body: 'Votre compte professionnel a été approuvé! Vous pouvez maintenant recevoir des demandes.',
+        });
+        try { await sendApprovalNotification(target); } catch (e) { console.warn('Notification failed', e); }
+      } catch (e) {
+        console.warn('Failed to send approval notification', e);
+      }
+
+      // Refresh in background after a longer delay to allow DB replication
+      // 500ms minimum to ensure all replicas are updated before refetch
+      setTimeout(() => loadProfessionals(), 500);
+      
+      // Clear modals
       setShowDetailsModal(false);
-      loadProfessionals();
+      setSelectedPro(null);
     } catch (error) {
+      // ROLLBACK: Revert to previous state if update fails
+      setProfessionals(previousProfessionals);
+      if (selectedPro?.id === target.id) {
+        setSelectedPro((s) => s ? { ...s, verification_status: "pending" } : s);
+      }
+      
       console.error("Error approving professional:", error);
       toast.error("Erreur lors de l'approbation");
     } finally {
@@ -147,8 +317,27 @@ export function ProfessionalsManager() {
       return;
     }
     setActionLoading(true);
+    
+    // Save previous state for rollback if needed
+    const previousProfessionals = professionals;
+    
     try {
-      const { error: updateError } = await supabase
+      // OPTIMISTIC UPDATE: Immediately update local state
+      setProfessionals((prevPros) =>
+        prevPros.map((p) =>
+          p.id === selectedPro.id
+            ? { ...p, verification_status: "rejected" as ProfessionalStatus, rejection_reason: rejectReason }
+            : p
+        )
+      );
+
+      // Update the selected pro in the modal too
+      setSelectedPro((s) =>
+        s ? { ...s, verification_status: "rejected", rejection_reason: rejectReason } : s
+      );
+
+      // Update database with proper error handling
+      const { error } = await supabase
         .from("professionals")
         .update({
           verification_status: "rejected",
@@ -156,16 +345,40 @@ export function ProfessionalsManager() {
         })
         .eq("id", selectedPro.id);
 
-      if (updateError) throw updateError;
+      if (error) {
+        throw error; // Fail fast - don't use fallback silently
+      }
 
-      await sendRejectionNotification(selectedPro, rejectReason);
-
+      // Show success immediately (optimistic update succeeded and DB update confirmed)
       toast.success(`${selectedPro.full_name} a été rejeté(e)`);
+
+      // Send notification (non-blocking)
+      try {
+        await supabase.from('notifications').insert({
+          user_id: selectedPro.id,
+          kind: 'rejection',
+          title: 'Compte rejeté',
+          body: "Votre dossier a été rejeté. Veuillez consulter l'application pour plus d'informations.",
+        });
+        try { await sendRejectionNotification(selectedPro, rejectReason); } catch (e) { console.warn('Notification failed', e); }
+      } catch (e) {
+        console.warn('Failed to send rejection notification', e);
+      }
+
+      // Refresh in background after a longer delay to allow DB replication
+      // 500ms minimum to ensure all replicas are updated before refetch
+      setTimeout(() => loadProfessionals(), 500);
+
+      // Clear modals
       setShowRejectModal(false);
       setShowDetailsModal(false);
       setRejectReason("");
-      loadProfessionals();
+      setSelectedPro(null);
     } catch (error) {
+      // ROLLBACK: Revert to previous state if update fails
+      setProfessionals(previousProfessionals);
+      setSelectedPro((s) => s ? { ...s, verification_status: "pending" } : s);
+      
       console.error("Error rejecting professional:", error);
       toast.error("Erreur lors du rejet");
     } finally {
@@ -283,11 +496,43 @@ export function ProfessionalsManager() {
     );
   };
 
-  const filtered = professionals.filter(
-    (p) =>
+  const filtered = professionals.filter((p) => {
+    // Apply search filter
+    const matchesSearch =
       p.full_name.toLowerCase().includes(searchQ.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQ.toLowerCase())
-  );
+      p.email.toLowerCase().includes(searchQ.toLowerCase());
+    
+    // Apply status filter
+    const matchesStatus = filter === "all" || p.verification_status === filter;
+    
+    // Apply specialty filter
+    const matchesSpecialty =
+      specialtyFilter === "all" || !specialtyFilter || p.specialty === specialtyFilter;
+    
+    // Apply experience filter
+    let matchesExperience = true;
+    if (experienceFilter !== "all" && experienceFilter) {
+      const years = p.years_experience || 0;
+      if (experienceFilter === "0-5") {
+        matchesExperience = years >= 0 && years <= 5;
+      } else if (experienceFilter === "5-10") {
+        matchesExperience = years > 5 && years <= 10;
+      } else if (experienceFilter === "10+") {
+        matchesExperience = years > 10;
+      }
+    }
+    
+    // Apply city filter
+    const matchesCity = selectedCities.length === 0 || selectedCities.includes(p.city);
+    
+    return matchesSearch && matchesStatus && matchesSpecialty && matchesExperience && matchesCity;
+  });
+
+  // Get unique cities from professionals
+  const availableCities = Array.from(
+    new Set(professionals.map((p) => p.city).filter(Boolean))
+  ).sort();
+
 
   return (
     <div>
@@ -296,7 +541,7 @@ export function ProfessionalsManager() {
           <p className="text-sm text-[#888780]">{(professionals ?? []).length} professionnels inscrits</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => {}} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+          <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
             <Filter size={14} /> Filtrer
           </button>
           <button onClick={() => {}} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
@@ -320,6 +565,101 @@ export function ProfessionalsManager() {
             />
           </div>
         </div>
+
+        {/* Advanced Filters */}
+        {showFilterDropdown && (
+          <div className="px-4 py-4 border-b border-[#F0F0F0] bg-[#FAFAFA]">
+            <div className="grid grid-cols-3 gap-4">
+              {/* Specialty Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Spécialité
+                </label>
+                <select
+                  value={specialtyFilter}
+                  onChange={(e) => setSpecialtyFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                >
+                  <option value="all">Toutes les spécialités</option>
+                  <option value="nurse">Infirmière</option>
+                  <option value="psychologist">Psychologue</option>
+                  <option value="physiotherapist">Kinésithérapeute</option>
+                  <option value="yoga_instructor">Instructeur de Yoga</option>
+                </select>
+              </div>
+
+              {/* Experience Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Expérience
+                </label>
+                <select
+                  value={experienceFilter}
+                  onChange={(e) => setExperienceFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                >
+                  <option value="all">Toutes les expériences</option>
+                  <option value="0-5">0-5 ans</option>
+                  <option value="5-10">5-10 ans</option>
+                  <option value="10+">10+ ans</option>
+                </select>
+              </div>
+
+              {/* City Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Ville
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCityDropdown(!showCityDropdown)}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] text-left bg-white flex items-center justify-between"
+                  >
+                    <span className="text-[#888780]">
+                      {selectedCities.length === 0
+                        ? "Toutes les villes"
+                        : `${selectedCities.length} ville${selectedCities.length !== 1 ? "s" : ""}`}
+                    </span>
+                    <span className="text-xs">▼</span>
+                  </button>
+                  {showCityDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E0E0E0] rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                      <div className="p-2">
+                        <button
+                          onClick={() => setSelectedCities([])}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#F3F3F5] rounded"
+                        >
+                          Toutes les villes
+                        </button>
+                        {availableCities.map((city) => (
+                          <button
+                            key={city}
+                            onClick={() => {
+                              setSelectedCities((prev) =>
+                                prev.includes(city)
+                                  ? prev.filter((c) => c !== city)
+                                  : [...prev, city]
+                              );
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-[#F3F3F5] rounded flex items-center gap-2"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCities.includes(city)}
+                              onChange={() => {}}
+                              className="w-3 h-3"
+                            />
+                            {city}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2 px-4 py-3 border-b border-[#F0F0F0] overflow-x-auto">
           {(["all", "pending", "approved", "rejected"] as const).map((f) => (
@@ -395,7 +735,7 @@ export function ProfessionalsManager() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>
-                      {pro.years_experience} ans
+                      {pro.years_experience && pro.years_experience > 0 ? `${pro.years_experience} ans` : "—"}
                     </td>
                     <td className="px-5 py-4">
                       {pro.verification_status === "pending" && (
@@ -443,10 +783,7 @@ export function ProfessionalsManager() {
                           </>
                         )}
                         <button
-                          onClick={() => {
-                            setSelectedPro(pro);
-                            setShowDetailsModal(true);
-                          }}
+                          onClick={() => openDetailsModal(pro)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
                           title="Voir détails"
                         >
@@ -571,8 +908,45 @@ export function ProfessionalsManager() {
                     <p className="text-xs text-[#888780] mb-1" style={{ fontWeight: 600 }}>
                       Expérience
                     </p>
-                    <p className="text-sm text-[#1A1A1A]">{selectedPro.years_experience} ans</p>
+                    <p className="text-sm text-[#1A1A1A]">{selectedPro.years_experience && selectedPro.years_experience > 0 ? `${selectedPro.years_experience} ans` : "—"}</p>
                   </div>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs text-[#888780] mb-2" style={{ fontWeight: 600 }}>Documents</p>
+                  {docsLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0D0870]"></div>
+                      <span className="ml-2 text-xs text-[#888780]">Chargement des documents...</span>
+                    </div>
+                  ) : proDocuments.length === 0 ? (
+                    <div style={{ background: "#F8F8FC", borderRadius: 12, padding: 12 }}>
+                      <p className="text-sm text-[#888780]">Aucun document téléchargé</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {proDocuments.map((d: any) => (
+                        <div key={d.id} style={{ background: "#F8F8FC", borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{d.doc_type}</p>
+                            <p className="text-xs text-[#888780]">{new Date(d.uploaded_at).toLocaleDateString("fr-FR")}</p>
+                          </div>
+                          <button onClick={async () => {
+                            try {
+                              const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
+                              if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                              else toast.error("Impossible d'ouvrir le document");
+                            } catch (e) {
+                              console.error("Error opening doc:", e);
+                              toast.error("Erreur lors de l'ouverture du document");
+                            }
+                          }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#0D0870] text-white rounded-xl text-[12px] hover:opacity-90" style={{ fontWeight: 600 }}>
+                            <FileText size={12} /> Ouvrir
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

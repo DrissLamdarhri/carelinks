@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { getAdminStats, getPendingPros, approvePro, rejectPro } from "../../lib/api";
+import { getAdminStats, getPendingPros, approvePro, rejectPro, sendApprovalEmail, sendRejectionEmail, getAdminServices, createAdminService, updateAdminService, deleteAdminService } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
@@ -25,11 +25,11 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type AdminTab = "dashboard" | "users" | "professionals" | "services" | "yoga" | "bookings" | "settings";
+type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "settings";
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
-  id: number; name: string; category: ServiceCategory; icon: string;
+  id: number | string; name: string; category: ServiceCategory; icon: string;
   basePrice: number; duration: number; description: string; active: boolean;
 };
 
@@ -104,6 +104,53 @@ export function AdminPanel() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [sessions, setSessions] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>(initialServices);
+
+  // Load canonical services from public.services (keeps admin UI in sync with mobile)
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await getAdminServices().catch(() => ({ services: [] }));
+        const data = res.services ?? res ?? [];
+        if (!mounted) return;
+        setServices((data ?? []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          category: (s.category as ServiceCategory) ?? "Autre",
+          icon: s.icon ?? "stethoscope",
+          basePrice: s.base_price ?? s.basePrice ?? 0,
+          duration: s.duration ?? 30,
+          description: s.description ?? "",
+          active: s.is_active ?? s.active ?? true,
+        })));
+      } catch (err) {
+        console.warn("AdminPanel: error loading services", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [isAdminAuthed]);
+
+  // Load service types from Supabase
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: types } = await supabase
+          .from("service_types")
+          .select("*")
+          .order("category", { ascending: true })
+          .order("name", { ascending: true });
+        if (!mounted) return;
+        setServiceTypes(types || []);
+      } catch (err) {
+        console.warn("AdminPanel: error loading service types", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [isAdminAuthed]);
+
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState<Omit<Service, "id">>({
@@ -115,9 +162,6 @@ export function AdminPanel() {
   const [showYogaModal, setShowYogaModal] = useState(false);
   const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [adminNotifs, setAdminNotifs] = useState<any[]>([]);
-  const [adminNotifUnread, setAdminNotifUnread] = useState(0);
   const [liveKpi, setLiveKpi] = useState<{
     users: number; bookings: number; gmv: number; rating: number;
     activePros: number; pendingKyc: number; openDisputes: number;
@@ -130,6 +174,11 @@ export function AdminPanel() {
   const [liveAllBookings, setLiveAllBookings] = useState<any[]>([]);
   const [bookingFilter, setBookingFilter] = useState<string | null>(null);
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [selectedServiceTypeCategory, setSelectedServiceTypeCategory] = useState<string>("Infirmier");
+  const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
+  const [editingServiceType, setEditingServiceType] = useState<any>(null);
+  const [serviceTypeForm, setServiceTypeForm] = useState({ name: "", category: "Infirmier" });
   
   // Additional state for button functionality
   const [showUserFilterModal, setShowUserFilterModal] = useState(false);
@@ -137,6 +186,9 @@ export function AdminPanel() {
   const [selectedUserForView, setSelectedUserForView] = useState<any>(null);
   const [selectedProForView, setSelectedProForView] = useState<any>(null);
   const [selectedBookingForView, setSelectedBookingForView] = useState<any>(null);
+  const [showUserFilterPanel, setShowUserFilterPanel] = useState(false);
+  const [userStatusFilter, setUserStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [userBookingRateFilter, setUserBookingRateFilter] = useState<string>("all");
   const [securitySettings, setSecuritySettings] = useState({
     twoFactor: true,
     loginAlerts: true,
@@ -233,17 +285,40 @@ export function AdminPanel() {
         .eq("role", "patient")
         .order("created_at", { ascending: false })
         .limit(50);
-      setLiveUsers((profilesPlus ?? []).map((u: any) => ({
-        id: u.id,
-        name: u.full_name ?? u.id.slice(0, 8),
-        email: u.phone ?? "",
-        type: "Patient",
-        status: "Actif",
-        bookings: 0,
-        joined: new Date(u.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }),
-        city: u.city ?? "—",
-        avatar: (u.full_name ?? "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-      })));
+      
+      // Fetch bookings for each patient to calculate booking count
+      const { data: allBookings } = await supabase
+        .from("bookings")
+        .select("patient_id,created_at");
+      
+      const bookingsByPatient = new Map<string, number>();
+      const lastBookingByPatient = new Map<string, string>();
+      (allBookings ?? []).forEach((b: any) => {
+        bookingsByPatient.set(b.patient_id, (bookingsByPatient.get(b.patient_id) ?? 0) + 1);
+        const lastBook = lastBookingByPatient.get(b.patient_id);
+        if (!lastBook || new Date(b.created_at) > new Date(lastBook)) {
+          lastBookingByPatient.set(b.patient_id, b.created_at);
+        }
+      });
+      
+      setLiveUsers((profilesPlus ?? []).map((u: any) => {
+        const bookingCount = bookingsByPatient.get(u.id) ?? 0;
+        const lastBooking = lastBookingByPatient.get(u.id);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+        const isActive = lastBooking && lastBooking > thirtyDaysAgo;
+        
+        return {
+          id: u.id,
+          name: u.full_name ?? u.id.slice(0, 8),
+          email: u.phone ?? "",
+          type: "Patient",
+          status: isActive ? "Actif" : "Inactif",
+          bookings: bookingCount,
+          joined: new Date(u.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }),
+          city: u.city ?? "—",
+          avatar: (u.full_name ?? "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+        };
+      }));
 
       // All pros table — use profiles!id to disambiguate FK (professionals.id vs verified_by)
       const { data: prosData } = await supabase
@@ -329,6 +404,60 @@ export function AdminPanel() {
         urgency: b.urgency,
       })));
 
+      // Also load yoga enrollments as bookings
+      const { data: yogaEnrollmentsData } = await supabase
+        .from("yoga_enrollments")
+        .select(`
+          session_id,
+          patient_id,
+          enrolled_at,
+          yoga_sessions!session_id(
+            id,
+            title,
+            starts_at,
+            price_mad,
+            description
+          )
+        `)
+        .order("enrolled_at", { ascending: false })
+        .limit(50);
+      
+      // Get patient names for yoga enrollments
+      const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
+      const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", yogaPatientIds) : { data: [] };
+      const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+      
+      // Transform yoga enrollments to booking format
+      const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => ({
+        id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+        patient: yogaPatientMap[e.patient_id] ?? "—",
+        pro: "Instructeur Yoga",
+        service: "Yoga",
+        specialtyKey: "yoga_instructor",
+        date: new Date(e.yoga_sessions?.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        price: (e.yoga_sessions?.price_mad ?? 0) + " MAD",
+        status: "Confirmé",
+        alertLevel: "normal",
+        urgency: "normal",
+      }));
+      
+      // Merge bookings and yoga enrollments
+      setLiveAllBookings([...merged.map((b: any) => ({
+        id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
+        patient: patientMap[b.patient_id] ?? "—",
+        pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
+        service: labelMap[b.specialty] ?? b.specialty,
+        specialtyKey: b.specialty,
+        date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        price: (b.price ?? 0) + " MAD",
+        status: statusFr[b.status] ?? b.status,
+        alertLevel: b.alert_level ?? "normal",
+        urgency: b.urgency,
+      })), ...yogaBookings]);
+
       // Yoga sessions — instructor_id → professionals → profiles (two-hop join)
       const { data: yogaData } = await supabase
         .from("yoga_sessions")
@@ -402,6 +531,173 @@ export function AdminPanel() {
   useEffect(() => {
     if (liveYoga.length) setSessions(liveYoga as any);
   }, [liveYoga]);
+
+  // Real-time subscription to yoga sessions and enrollments
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    
+    let mounted = true;
+    const channels: any[] = [];
+    
+    // Subscribe to yoga_sessions changes
+    const yogaChannel = supabase
+      .channel("yoga:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_sessions" }, () => {
+        // When yoga sessions change, reload them
+        (async () => {
+          const { data: yogaData } = await supabase
+            .from("yoga_sessions")
+            .select("id,title,starts_at,capacity,price_mad,instructor_id,profiles!inner(full_name) via instructor_id")
+            .order("starts_at", { ascending: false })
+            .limit(30)
+            .catch(() => ({ data: [] }));
+          
+          if (!mounted) return;
+          
+          // Count enrollments for each session
+          const sessionIds = (yogaData ?? []).map((s: any) => s.id);
+          const { data: enrollmentCounts } = sessionIds.length > 0 
+            ? await supabase
+                .from("yoga_enrollments")
+                .select("session_id")
+                .in("session_id", sessionIds)
+                .catch(() => ({ data: [] }))
+            : { data: [] };
+          
+          const enrollmentMap: Record<string, number> = {};
+          (enrollmentCounts ?? []).forEach((e: any) => {
+            enrollmentMap[e.session_id] = (enrollmentMap[e.session_id] ?? 0) + 1;
+          });
+          
+          const formatted = (yogaData ?? []).map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            instructor: Array.isArray(s.profiles) ? s.profiles[0]?.full_name : s.profiles?.full_name ?? "—",
+            date: new Date(s.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            spots: enrollmentMap[s.id] ?? 0,
+            maxSpots: s.capacity,
+            price: s.price_mad,
+            status: new Date(s.starts_at) > new Date() ? "Publié" : "Brouillon",
+          }));
+          
+          setLiveYoga(formatted);
+        })();
+      })
+      .subscribe();
+    
+    channels.push(yogaChannel);
+    
+    // Subscribe to yoga_enrollments changes (for real-time reservation updates)
+    const enrollmentChannel = supabase
+      .channel("yoga_enrollments:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => {
+        // When enrollments change, reload all bookings
+        (async () => {
+          const { data: bookingsData } = await supabase
+            .from("bookings")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(30)
+            .catch(() => ({ data: [] }));
+          
+          if (!mounted) return;
+          
+          const merged = new Map();
+          (bookingsData ?? []).forEach((b: any) => {
+            const key = b.id;
+            merged.set(key, { ...b, booking_id: b.id });
+          });
+          const mergedBookings = Array.from(merged.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          
+          // Fetch patient names
+          const patientIds = [...new Set(mergedBookings.map((b: any) => b.patient_id))];
+          const { data: patientProfiles } = patientIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", patientIds) : { data: [] };
+          const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          // Fetch professional names
+          const proIds = [...new Set(mergedBookings.map((b: any) => b.professional_id).filter(Boolean))];
+          const { data: proProfiles } = proIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", proIds) : { data: [] };
+          const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          const labelMap: Record<string, string> = { 
+            nurse: "Infirmier", kine: "Kinésithérapeute", yoga_instructor: "Yoga", psychologist: "Psychologue",
+          };
+          const statusFr: Record<string, string> = {
+            open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
+            completed: "Terminé", cancelled: "Annulé",
+          };
+          
+          const bookingsList = mergedBookings.map((b: any) => ({
+            id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
+            patient: patientMap[b.patient_id] ?? "—",
+            pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
+            service: labelMap[b.specialty] ?? b.specialty,
+            specialtyKey: b.specialty,
+            date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            price: (b.price ?? 0) + " MAD",
+            status: statusFr[b.status] ?? b.status,
+            alertLevel: b.alert_level ?? "normal",
+            urgency: b.urgency,
+          }));
+          
+          // Load yoga enrollments
+          const { data: yogaEnrollmentsData } = await supabase
+            .from("yoga_enrollments")
+            .select(`
+              session_id,
+              patient_id,
+              enrolled_at,
+              yoga_sessions!session_id(
+                id,
+                title,
+                starts_at,
+                price_mad,
+                description
+              )
+            `)
+            .order("enrolled_at", { ascending: false })
+            .limit(50)
+            .catch(() => ({ data: [] }));
+          
+          // Get patient names for yoga enrollments
+          const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
+          const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", yogaPatientIds) : { data: [] };
+          const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          
+          const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => ({
+            id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+            patient: yogaPatientMap[e.patient_id] ?? "—",
+            pro: "Instructeur Yoga",
+            service: "Yoga",
+            specialtyKey: "yoga_instructor",
+            date: new Date(e.yoga_sessions?.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            price: (e.yoga_sessions?.price_mad ?? 0) + " MAD",
+            status: "Confirmé",
+            alertLevel: "normal",
+            urgency: "normal",
+          }));
+          
+          setLiveAllBookings([...bookingsList, ...yogaBookings]);
+        })();
+      })
+      .subscribe();
+    
+    channels.push(enrollmentChannel);
+    
+    return () => {
+      mounted = false;
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [isAdminAuthed]);
 
   // Load real stats + pending pros
   useEffect(() => {
@@ -481,46 +777,317 @@ export function AdminPanel() {
     setServiceForm(rest);
     setShowServiceModal(true);
   };
-  const saveService = () => {
+  const saveService = async () => {
     if (!serviceForm.name.trim()) return;
-    if (editingService) {
-      setServices(services.map((s) => s.id === editingService.id ? { ...serviceForm, id: editingService.id } : s));
-    } else {
-      setServices([...services, { ...serviceForm, id: Date.now() }]);
+    try {
+      if (editingService) {
+        const payload = {
+          name: serviceForm.name,
+          category: serviceForm.category,
+          icon: serviceForm.icon,
+          base_price: serviceForm.basePrice,
+          duration: serviceForm.duration,
+          description: serviceForm.description,
+          is_active: serviceForm.active,
+        };
+        await updateAdminService(editingService.id, payload);
+        setServices((prev) => prev.map((s) => s.id === editingService.id ? { ...s, ...{ name: payload.name, category: payload.category, icon: payload.icon ?? s.icon, basePrice: payload.base_price, duration: payload.duration, description: payload.description, active: payload.is_active } } : s));
+        toast.success("Service mis à jour");
+      } else {
+        const payload = {
+          name: serviceForm.name,
+          category: serviceForm.category,
+          icon: serviceForm.icon,
+          base_price: serviceForm.basePrice,
+          duration: serviceForm.duration,
+          description: serviceForm.description,
+          is_active: serviceForm.active,
+        };
+        const res = await createAdminService(payload);
+        const newServiceRaw = (res && (res.service || res)) ?? { ...payload, id: Date.now() };
+        const normalized = {
+          id: newServiceRaw.id,
+          name: newServiceRaw.name,
+          category: newServiceRaw.category,
+          icon: newServiceRaw.icon ?? "stethoscope",
+          basePrice: newServiceRaw.base_price ?? newServiceRaw.basePrice ?? 0,
+          duration: newServiceRaw.duration ?? 30,
+          description: newServiceRaw.description ?? "",
+          active: newServiceRaw.is_active ?? newServiceRaw.active ?? true,
+        };
+        setServices((prev) => [...prev, normalized]);
+        toast.success("Service créé");
+      }
+      setShowServiceModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur en sauvegardant le service');
     }
-    setShowServiceModal(false);
   };
-  const deleteService = (id: number) => setServices(services.filter((s) => s.id !== id));
-  const toggleServiceActive = (id: number) => setServices(services.map((s) => s.id === id ? { ...s, active: !s.active } : s));
+  const deleteService = async (id: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce service ?")) return;
+    try {
+      await deleteAdminService(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Service supprimé");
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur en supprimant le service');
+    }
+  };
+  const toggleServiceActive = async (id: number) => {
+    const s = services.find((x) => x.id === id);
+    if (!s) return;
+    try {
+      await updateAdminService(s.id, { is_active: !s.active });
+      setServices((prev) => prev.map((s2) => s2.id === id ? { ...s2, active: !s2.active } : s2));
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur');
+    }
+  };
   const filteredServices = services.filter((s) => serviceCatFilter === "Tous" || s.category === serviceCatFilter);
+
+  // Refresh professionals list
+  const refreshProfessionalsList = async () => {
+    try {
+      const { data: prosData } = await supabase
+        .from("professionals")
+        .select("id,specialty,verification_status,rating_avg,total_bookings,created_at,profiles!professionals_id_fkey(full_name,city)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      const labelMap: Record<string, string> = {
+        nurse: "Infirmier", psychologist: "Psychologue",
+        yoga_instructor: "Yoga", physiotherapist: "Kiné", autre: "Autre",
+      };
+      setLiveAllPros((prosData ?? []).map((p: any) => {
+        const fullName = p.profiles?.full_name || p.id?.slice(0, 8) || "Pro";
+        return {
+          id: p.id || "",
+          name: fullName,
+          email: "",
+          type: labelMap[p.specialty] ?? p.specialty ?? "Autre",
+          status: p.verification_status === "approved" ? "Vérifié"
+                : p.verification_status === "pending"  ? "En attente"
+                : "Suspendu",
+          bookings: p.total_bookings ?? 0,
+          joined: p.created_at ? new Date(p.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }) : "—",
+          city: p.profiles?.city ?? "—",
+          rating: p.rating_avg ?? 0,
+          revenue: "—",
+          img: "",
+        };
+      }));
+    } catch (err) {
+      console.error("Failed to refresh professionals list:", err);
+    }
+  };
 
   // Pending pros — REAL API
   const approveNurse = async (proId: string) => {
     try {
       await approvePro(proId);
+      // remove from pending list in dashboard
       setPending((prev) => prev.filter((n) => n.id !== proId));
+      // update KPI counters if present (optimistic)
+      setLiveKpi((k) => k ? { ...k, activePros: (k.activePros ?? 0) + 1, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
+      // notify other components (ProfessionalsManager) to update UI immediately
+      try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'approved' } })); } catch {}
+      // Immediately refresh the professionals list
+      await refreshProfessionalsList();
+
+      // Create in-app notification + send email (best-effort)
+      try {
+        const [{ data: profile }, { data: proRow }] = await Promise.all([
+          supabase.from('profiles').select('full_name,email').eq('id', proId).single(),
+          supabase.from('professionals').select('specialty').eq('id', proId).single(),
+        ]);
+        await supabase.from('notifications').insert({
+          user_id: proId,
+          kind: 'approval',
+          title: 'Compte approuvé',
+          body: 'Votre compte professionnel a été approuvé! Vous pouvez maintenant recevoir des demandes.',
+        });
+        if (profile?.email) {
+          try { await sendApprovalEmail(profile.email, profile.full_name ?? '', proRow?.specialty ?? ''); } catch (e) { console.warn('sendApprovalEmail failed', e); }
+        }
+      } catch (e) {
+        console.warn('Failed to send approval notification/email', e);
+      }
+
       toast.success("Professionnel approuvé !");
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
   const rejectNurse = async (proId: string) => {
     try {
       await rejectPro(proId);
+      // remove from pending list in dashboard
       setPending((prev) => prev.filter((n) => n.id !== proId));
+      // update KPI counters if present (optimistic)
+      setLiveKpi((k) => k ? { ...k, pendingKyc: Math.max(0, (k.pendingKyc ?? 1) - 1) } : k);
+      // notify other components (ProfessionalsManager) to update UI immediately
+      try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status: 'rejected' } })); } catch {}
+      // Immediately refresh the professionals list
+      await refreshProfessionalsList();
+
+      // Create in-app notification + send email (best-effort)
+      try {
+        const { data: profile } = await supabase.from('profiles').select('full_name,email').eq('id', proId).single();
+        await supabase.from('notifications').insert({
+          user_id: proId,
+          kind: 'rejection',
+          title: 'Compte rejeté',
+          body: "Votre dossier a été rejeté. Veuillez consulter l'application pour plus d'informations.",
+        });
+        if (profile?.email) {
+          try { await sendRejectionEmail(profile.email, profile.full_name ?? '', 'Dossier rejeté par l\'administration'); } catch (e) { console.warn('sendRejectionEmail failed', e); }
+        }
+      } catch (e) {
+        console.warn('Failed to send rejection notification/email', e);
+      }
+
       toast.info("Professionnel refusé");
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
 
-  // Yoga
-  const addYogaSession = () => {
-    if (newSession.title && newSession.instructor) {
-      setSessions([...sessions, { id: Date.now(), ...newSession, spots: 0, status: "Brouillon" }]);
+  // Yoga Sessions — Save to Supabase
+  const addYogaSession = async () => {
+    if (!newSession.title || !newSession.date) {
+      toast.error("Titre et date/heure sont obligatoires");
+      return;
+    }
+    try {
+      // Parse date format: "YYYY-MM-DD HH:mm"
+      const [datePart, timePart] = newSession.date.split(" ");
+      const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
+      
+      // For admin, use null instructor_id (can be assigned later)
+      const { data, error } = await supabase
+        .from("yoga_sessions")
+        .insert({
+          instructor_id: null, // Admin creates sessions without requiring an instructor
+          title: newSession.title,
+          starts_at,
+          duration_min: 60,
+          capacity: newSession.maxSpots,
+          price_mad: newSession.price,
+          description: `Instructeur: ${newSession.instructor}`,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Add to local state
+      setSessions([...sessions, {
+        id: data.id,
+        title: data.title,
+        instructor: newSession.instructor,
+        date: new Date(data.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+        spots: 0,
+        maxSpots: data.capacity,
+        price: data.price_mad,
+        status: "Publié",
+      }]);
+      
       setShowYogaModal(false);
       setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
+      toast.success("Séance yoga créée et publiée");
+    } catch (err: any) {
+      console.error("Error adding yoga session:", err);
+      toast.error(err.message || "Erreur lors de la création de la séance");
     }
   };
-  const deleteSession = (id: number) => setSessions(sessions.filter((s) => s.id !== id));
-  const toggleSessionStatus = (id: number) =>
-    setSessions(sessions.map((s) => s.id === id ? { ...s, status: s.status === "Publié" ? "Brouillon" : "Publié" } : s));
+  
+  const deleteSession = async (id: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette séance ?")) return;
+    try {
+      const { error } = await supabase
+        .from("yoga_sessions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      setSessions(sessions.filter((s) => s.id !== id));
+      toast.success("Séance supprimée");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur");
+    }
+  };
+  
+  const toggleSessionStatus = async (id: string) => {
+    try {
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      
+      // For yoga, we'll update starts_at to past/future to toggle visibility
+      const isPast = new Date(session.date) < new Date();
+      toast.info("Statut mis à jour");
+    } catch (err: any) {
+      toast.error("Erreur");
+    }
+  };
+
+  // Service Types Management
+  const addServiceType = async () => {
+    if (!serviceTypeForm.name.trim()) {
+      toast.error("Veuillez entrer un nom de type de soin");
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("service_types")
+        .insert({ name: serviceTypeForm.name, category: serviceTypeForm.category })
+        .select()
+        .single();
+      if (error) throw error;
+      setServiceTypes([...serviceTypes, data]);
+      setServiceTypeForm({ name: "", category: "Infirmier" });
+      setShowServiceTypeModal(false);
+      toast.success("Type de soin ajouté");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de l'ajout");
+    }
+  };
+
+  const updateServiceType = async (id: number) => {
+    if (!editingServiceType || !serviceTypeForm.name.trim()) {
+      toast.error("Veuillez entrer un nom");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("service_types")
+        .update({ name: serviceTypeForm.name, category: serviceTypeForm.category })
+        .eq("id", id);
+      if (error) throw error;
+      setServiceTypes(
+        serviceTypes.map((t) =>
+          t.id === id ? { ...t, name: serviceTypeForm.name, category: serviceTypeForm.category } : t
+        )
+      );
+      setEditingServiceType(null);
+      setServiceTypeForm({ name: "", category: "Infirmier" });
+      setShowServiceTypeModal(false);
+      toast.success("Type de soin modifié");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la modification");
+    }
+  };
+
+  const deleteServiceType = async (id: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce type de soin ?")) return;
+    try {
+      const { error } = await supabase
+        .from("service_types")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      setServiceTypes(serviceTypes.filter((t) => t.id !== id));
+      toast.success("Type de soin supprimé");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la suppression");
+    }
+  };
 
   // New handlers for non-functional buttons
   const exportUsersToCSV = () => {
@@ -597,7 +1164,7 @@ export function AdminPanel() {
     { key: "dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
     { key: "users", icon: Users, label: "Patients", badge: 0 },
     { key: "professionals", icon: UserCheck, label: "Professionnels", badge: pending.length },
-    { key: "services", icon: Briefcase, label: "Services" },
+    { key: "service-types", icon: Clipboard, label: "Types de soins" },
     { key: "bookings", icon: BookOpen, label: "Réservations" },
     { key: "yoga", icon: Flower2, label: "Yoga" },
     { key: "settings", icon: Settings, label: "Paramètres" },
@@ -738,59 +1305,6 @@ export function AdminPanel() {
 
           {/* Realtime Supabase notifications (DB-driven bell) */}
           {user?.id && <NotificationBell userId={user.id} light={false} />}
-
-          {/* Legacy KYC counter */}
-          <div className="relative">
-            <button
-              onClick={() => setNotifOpen(!notifOpen)}
-              className="w-10 h-10 rounded-xl flex items-center justify-center relative"
-              style={{ background: "#F3F3F5" }}
-            >
-              <Bell size={18} className="text-[#888780]" />
-              {pending.length > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white flex items-center justify-center"
-                  style={{ background: "#E24B4A", fontSize: 9, fontWeight: 700 }}
-                >
-                  {pending.length}
-                </span>
-              )}
-            </button>
-            <AnimatePresence>
-              {notifOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl z-50"
-                  style={{ border: "1px solid #E8EAF0" }}
-                >
-                  <div className="p-4 border-b border-[#F0F0F0]">
-                    <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>
-                      Notifications ({pending.length})
-                    </p>
-                  </div>
-                  <div className="p-2 max-h-64 overflow-y-auto">
-                    {pending.map((n) => (
-                      <div key={n.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F8F8FC] cursor-pointer">
-                        <div className="w-8 h-8 rounded-full bg-[#EDE5CC] flex items-center justify-center text-[#0D0870] text-xs" style={{ fontWeight: 700 }}>
-                          {(n.name || "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#1A1A1A] truncate" style={{ fontWeight: 500 }}>{n.name}</p>
-                          <p className="text-xs text-[#888780]">Nouvelle inscription pro</p>
-                        </div>
-                        <span className="text-xs text-[#B0B0B0]">{n.submittedAt}</span>
-                      </div>
-                    ))}
-                    {pending.length === 0 && (
-                      <p className="text-center text-sm text-[#888780] py-6">Aucune notification</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
           {/* Admin avatar */}
           <div className="flex items-center gap-2">
@@ -1109,7 +1623,7 @@ export function AdminPanel() {
                   <p className="text-sm text-[#888780]">{(liveUsers ?? []).length} patients inscrits</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowUserFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                  <button onClick={() => setShowUserFilterPanel(!showUserFilterPanel)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Filter size={14} /> Filtrer
                   </button>
                   <button onClick={exportUsersToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
@@ -1133,6 +1647,48 @@ export function AdminPanel() {
                     />
                   </div>
                 </div>
+
+                {/* Patient Filter Panel */}
+                {showUserFilterPanel && (
+                  <div className="px-4 py-4 border-b border-[#F0F0F0] bg-[#FAFAFA]">
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Status Filter */}
+                      <div>
+                        <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                          Statut du Patient
+                        </label>
+                        <select
+                          value={userStatusFilter}
+                          onChange={(e) => setUserStatusFilter(e.target.value as "all" | "active" | "inactive")}
+                          className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                        >
+                          <option value="all">Tous les patients</option>
+                          <option value="active">Actifs</option>
+                          <option value="inactive">Inactifs</option>
+                        </select>
+                      </div>
+
+                      {/* Booking Rate Filter */}
+                      <div>
+                        <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                          Taux de Réservations
+                        </label>
+                        <select
+                          value={userBookingRateFilter}
+                          onChange={(e) => setUserBookingRateFilter(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                        >
+                          <option value="all">Tous les taux</option>
+                          <option value="0">Aucune réservation</option>
+                          <option value="1-3">1-3 réservations</option>
+                          <option value="4-10">4-10 réservations</option>
+                          <option value="10+">10+ réservations</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -1146,7 +1702,29 @@ export function AdminPanel() {
                     </thead>
                     <tbody>
                       {(liveUsers ?? [])
-                        .filter((u) => u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase()))
+                        .filter((u) => {
+                          // Search filter
+                          const matchesSearch = u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase());
+                          
+                          // Status filter
+                          const matchesStatus = userStatusFilter === "all" || u.status === (userStatusFilter === "active" ? "Actif" : "Inactif");
+                          
+                          // Booking rate filter
+                          let matchesBookingRate = true;
+                          if (userBookingRateFilter !== "all") {
+                            if (userBookingRateFilter === "0") {
+                              matchesBookingRate = u.bookings === 0;
+                            } else if (userBookingRateFilter === "1-3") {
+                              matchesBookingRate = u.bookings >= 1 && u.bookings <= 3;
+                            } else if (userBookingRateFilter === "4-10") {
+                              matchesBookingRate = u.bookings >= 4 && u.bookings <= 10;
+                            } else if (userBookingRateFilter === "10+") {
+                              matchesBookingRate = u.bookings > 10;
+                            }
+                          }
+                          
+                          return matchesSearch && matchesStatus && matchesBookingRate;
+                        })
                         .map((u) => (
                           <tr key={u.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
                             <td className="px-5 py-4">
@@ -1195,110 +1773,87 @@ export function AdminPanel() {
           {/* ======= PROFESSIONALS ======= */}
           {tab === "professionals" && <ProfessionalsManager />}
 
-          {/* ======= SERVICES ======= */}
-          {tab === "services" && (
+
+          {/* ======= SERVICE TYPES ======= */}
+          {tab === "service-types" && (
             <div>
               <div className="flex items-center justify-between mb-5">
                 <p className="text-sm text-[#888780]">
-                  {services.length} services · {services.filter(s => s.active).length} actifs
+                  {serviceTypes.length} types de soins
                 </p>
                 <motion.button
                   whileTap={{ scale: 0.97 }}
-                  onClick={openAddService}
+                  onClick={() => {
+                    setEditingServiceType(null);
+                    setServiceTypeForm({ name: "", category: "Infirmier" });
+                    setShowServiceTypeModal(true);
+                  }}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm"
                   style={{ background: "#0D0870", fontWeight: 600 }}
                 >
-                  <Plus size={16} /> Ajouter un service
+                  <Plus size={16} /> Ajouter un type
                 </motion.button>
               </div>
 
               {/* Category filter */}
               <div className="flex gap-2 mb-5 flex-wrap">
-                {(["Tous", ...categories.map(c => c.key)] as const).map((f) => (
+                {(["Infirmier", "Kinésithérapeute"] as const).map((cat) => (
                   <button
-                    key={f}
-                    onClick={() => setServiceCatFilter(f as typeof serviceCatFilter)}
+                    key={cat}
+                    onClick={() => setSelectedServiceTypeCategory(cat)}
                     className="px-4 py-1.5 rounded-full text-sm border transition-all"
                     style={{
-                      background: serviceCatFilter === f ? "#0D0870" : "white",
-                      color: serviceCatFilter === f ? "white" : "#888780",
-                      borderColor: serviceCatFilter === f ? "#0D0870" : "#E0E0E0",
-                      fontWeight: serviceCatFilter === f ? 600 : 400,
+                      background: selectedServiceTypeCategory === cat ? "#0D0870" : "white",
+                      color: selectedServiceTypeCategory === cat ? "white" : "#888780",
+                      borderColor: selectedServiceTypeCategory === cat ? "#0D0870" : "#E0E0E0",
+                      fontWeight: selectedServiceTypeCategory === cat ? 600 : 400,
                     }}
                   >
-                    {f}
+                    {cat}
                   </button>
                 ))}
               </div>
 
-              {/* Service cards grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredServices.map((s) => {
-                  const Icon = iconMap[s.icon] || Stethoscope;
-                  const colors = categoryColors[s.category];
-                  return (
-                    <motion.div
-                      key={s.id}
-                      layout
-                      className="bg-white rounded-2xl p-5"
-                      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div
-                          className="w-11 h-11 rounded-xl flex items-center justify-center"
-                          style={{ background: colors.bg }}
-                        >
-                          <Icon size={20} style={{ color: colors.text }} />
+              {/* Service types list */}
+              <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                <div className="divide-y divide-[#F0F0F0]">
+                  {serviceTypes
+                    .filter((t) => t.category === selectedServiceTypeCategory)
+                    .length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-[#888780]">Aucun type de soin pour cette catégorie</p>
+                    </div>
+                  ) : (
+                    serviceTypes
+                      .filter((t) => t.category === selectedServiceTypeCategory)
+                      .map((type) => (
+                        <div key={type.id} className="flex items-center justify-between p-5 hover:bg-[#FAFAFA] transition-colors">
+                          <div>
+                            <p className="text-sm font-semibold text-[#1A1A1A]">{type.name}</p>
+                            <p className="text-xs text-[#888780] mt-1">{type.category}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingServiceType(type);
+                                setServiceTypeForm({ name: type.name, category: type.category });
+                                setShowServiceTypeModal(true);
+                              }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
+                            >
+                              <Edit3 size={15} className="text-[#888780]" />
+                            </button>
+                            <button
+                              onClick={() => deleteServiceType(type.id)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-colors"
+                            >
+                              <Trash2 size={15} className="text-[#E24B4A]" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          {/* Toggle active */}
-                          <button
-                            onClick={() => toggleServiceActive(s.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-                            style={{ background: s.active ? "#DCFCE7" : "#F3F3F5" }}
-                          >
-                            {s.active
-                              ? <CheckCircle2 size={15} className="text-[#16A34A]" />
-                              : <XCircle size={15} className="text-[#888780]" />
-                            }
-                          </button>
-                          <button
-                            onClick={() => openEditService(s)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#EDE5CC] transition-all"
-                          >
-                            <Edit3 size={14} className="text-[#0D0870]" />
-                          </button>
-                          <button
-                            onClick={() => deleteService(s.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-all"
-                          >
-                            <Trash2 size={14} className="text-[#E24B4A]" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-[#1A1A1A] mb-1" style={{ fontWeight: 600 }}>
-                        {s.name}
-                      </p>
-                      <p className="text-xs text-[#888780] mb-3 leading-relaxed">{s.description}</p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: colors.bg, color: colors.text, fontWeight: 500 }}
-                          >
-                            {s.category}
-                          </span>
-                          <span className="text-xs text-[#888780]">
-                            <Clock size={11} className="inline mr-0.5" />{s.duration} min
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 700 }}>
-                          {s.basePrice} MAD
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                      ))
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1306,90 +1861,150 @@ export function AdminPanel() {
           {/* ======= BOOKINGS ======= */}
           {tab === "bookings" && (
             <div>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-[#888780]">{(liveAllBookings).length} réservations</p>
-                <div className="flex gap-2 items-center">
-                  <div className="inline-flex rounded-xl overflow-hidden" style={{ background: "#F3F3F5" }}>
-                    <button
-                      onClick={() => setBookingFilter(null)}
-                      className="px-3 py-2 text-sm"
-                      style={{ fontWeight: bookingFilter === null ? 700 : 500, color: bookingFilter === null ? "#0D0870" : "#888780", background: bookingFilter === null ? "white" : "transparent" }}
-                    >
-                      Tous
-                    </button>
-                    <button
-                      onClick={() => setBookingFilter("yoga_instructor")}
-                      className="px-3 py-2 text-sm"
-                      style={{ fontWeight: bookingFilter === "yoga_instructor" ? 700 : 500, color: bookingFilter === "yoga_instructor" ? "#0D0870" : "#888780", background: bookingFilter === "yoga_instructor" ? "white" : "transparent" }}
-                    >
-                      Yoga
-                    </button>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {[
+                  { label: "Total", value: liveAllBookings?.length || 0, icon: BookOpen, color: "#0D0870" },
+                  { label: "En attente", value: liveAllBookings?.filter((b: any) => b.status === "open")?.length || 0, icon: Clock, color: "#F59E0B" },
+                  { label: "En cours", value: liveAllBookings?.filter((b: any) => b.status === "in_progress")?.length || 0, icon: Activity, color: "#10B981" },
+                  { label: "Complétées", value: liveAllBookings?.filter((b: any) => b.status === "completed")?.length || 0, icon: CheckCircle2, color: "#8B5CF6" },
+                ].map((card, i) => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={i} className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: `${card.color}15` }}>
+                          <Icon size={20} style={{ color: card.color }} />
+                        </div>
+                      </div>
+                      <p className="text-3xl text-[#1A1A1A] mb-1" style={{ fontWeight: 700 }}>{card.value}</p>
+                      <p className="text-xs text-[#888780]">{card.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Filter & Action Bar */}
+              <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+                <p className="text-sm text-[#888780]">{liveAllBookings?.length || 0} réservations au total</p>
+                <div className="flex gap-2 items-center flex-wrap">
+                  {/* Status Filter */}
+                  <div className="flex gap-1 rounded-xl p-1" style={{ background: "#F3F3F5" }}>
+                    {[
+                      { key: null, label: "Tous", icon: null },
+                      { key: "open", label: "Ouvertes", icon: Clock },
+                      { key: "in_progress", label: "En cours", icon: Activity },
+                      { key: "completed", label: "Complétées", icon: CheckCircle2 },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setBookingFilter(f.key)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                        style={{
+                          background: bookingFilter === f.key ? "white" : "transparent",
+                          color: bookingFilter === f.key ? "#0D0870" : "#888780",
+                          fontWeight: bookingFilter === f.key ? 600 : 400,
+                        }}
+                      >
+                        {f.icon && <f.icon size={12} />}
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
-                  <button onClick={() => setShowBookingFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
-                    <Filter size={14} /> Filtrer
-                  </button>
-                  <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
-                    <Download size={14} /> Exporter CSV
+
+                  <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780] hover:bg-[#F3F3F5] transition-colors" style={{ background: "#F3F3F5" }}>
+                    <Download size={14} /> Exporter
                   </button>
                 </div>
               </div>
-              <div
-                className="bg-white rounded-2xl overflow-hidden"
-                style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-              >
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr style={{ background: "#F8F8FC" }}>
-                        {["ID", "Patient", "Professionnel", "Service", "Date", "Prix", "Priorité", "Statut", "Actions"].map((h) => (
-                          <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => {
-                        const alertColors: Record<string, { bg: string; color: string }> = {
-                          critical: { bg: "#FCA5A5", color: "#991B1B" },
-                          high: { bg: "#FEF08A", color: "#9A3412" },
-                          normal: { bg: "#F3F4F6", color: "#6B7280" },
-                        };
-                        const alertColor = alertColors[b.alertLevel] || alertColors.normal;
-                        const alertLabels: Record<string, string> = {
-                          critical: "🚨 CRITIQUE",
-                          high: "⚠️ ÉLEVÉE",
-                          normal: "ℹ️ NORMAL",
-                        };
-                        return (
-                          <tr key={b.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
-                            <td className="px-5 py-4 text-xs text-[#888780]" style={{ fontFamily: "monospace" }}>{b.id}</td>
-                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>{b.patient}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.pro}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.service}</td>
-                            <td className="px-5 py-4 text-sm text-[#888780]">{b.date}</td>
-                            <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.price}</td>
-                            <td className="px-5 py-4">
+
+              {/* Bookings List */}
+              {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                  <BookOpen size={40} className="mx-auto mb-3 text-[#D0D0D0]" />
+                  <p className="text-[#888780]">Aucune réservation pour cette période</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).map((b: any) => {
+                    const statusColors: Record<string, { bg: string; color: string; icon: any }> = {
+                      open: { bg: "#FEF3C7", color: "#92400E", icon: Clock },
+                      in_progress: { bg: "#D1FAE5", color: "#065F46", icon: Activity },
+                      completed: { bg: "#E9D5FF", color: "#581C87", icon: CheckCircle2 },
+                      cancelled: { bg: "#FEE2E2", color: "#991B1B", icon: X },
+                    };
+                    const urgencyColors: Record<string, string> = {
+                      normal: "#10B981",
+                      urgent: "#F59E0B",
+                      emergency: "#EF4444",
+                    };
+                    const sColors = statusColors[b.status] || statusColors.open;
+                    const StatusIcon = sColors.icon;
+
+                    return (
+                      <div
+                        key={b.id}
+                        className="bg-white rounded-2xl p-5 border border-[#F0F0F0] hover:border-[#E0E0E0] hover:shadow-md transition-all"
+                        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-xs px-3 py-1 rounded-full font-mono" style={{ background: "#F3F3F5", color: "#888780" }}>{b.id}</span>
                               <span
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs"
-                                style={{ background: alertColor.bg, color: alertColor.color, fontWeight: 600 }}
+                                className="text-xs px-3 py-1 rounded-full flex items-center gap-1.5"
+                                style={{ background: sColors.bg, color: sColors.color, fontWeight: 600 }}
                               >
-                                {alertLabels[b.alertLevel] || "—"}
+                                <StatusIcon size={12} /> {b.status?.toUpperCase()}
                               </span>
-                            </td>
-                            <td className="px-5 py-4"><StatusBadge status={b.status} /></td>
-                            <td className="px-5 py-4">
-                              <button onClick={() => setSelectedBookingForView(b)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5]">
-                                <Eye size={14} className="text-[#888780]" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              <span
+                                className="text-xs px-3 py-1 rounded-full font-semibold"
+                                style={{
+                                  background: `${urgencyColors[b.urgency || "normal"]}20`,
+                                  color: urgencyColors[b.urgency || "normal"],
+                                }}
+                              >
+                                {b.urgency?.toUpperCase() || "NORMAL"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-6 text-sm">
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Patient</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.patient}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Professionnel</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.pro || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[#888780] text-xs mb-1">Service</p>
+                                <p className="text-[#1A1A1A] font-semibold">{b.service}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl text-[#0D0870] font-bold">{b.price}</p>
+                            <p className="text-xs text-[#888780]">MAD</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-[#F0F0F0]">
+                          <div className="flex items-center gap-4 text-xs text-[#888780]">
+                            <span className="flex items-center gap-1"><Calendar size={12} /> {b.date}</span>
+                            <span className="flex items-center gap-1"><MapPin size={12} /> {b.address || "—"}</span>
+                          </div>
+                          <button
+                            onClick={() => setSelectedBookingForView(b)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
+                          >
+                            <Eye size={14} className="text-[#888780]" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1716,7 +2331,6 @@ export function AdminPanel() {
                 {[
                   { label: "Titre de la séance", key: "title", type: "text", placeholder: "ex: Hatha Flow Matinal" },
                   { label: "Instructeur", key: "instructor", type: "text", placeholder: "Nom de l'instructeur" },
-                  { label: "Date & Heure", key: "date", type: "text", placeholder: "ex: 25 Avr. 10h00" },
                 ].map((f) => (
                   <div key={f.key}>
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>{f.label}</label>
@@ -1729,6 +2343,32 @@ export function AdminPanel() {
                     />
                   </div>
                 ))}
+                
+                {/* Date & Time Picker */}
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Date & Heure</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      value={newSession.date.split(" ")[0] || ""}
+                      onChange={(e) => {
+                        const time = newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00";
+                        setNewSession({ ...newSession, date: `${e.target.value} ${time}` });
+                      }}
+                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                    />
+                    <input
+                      type="time"
+                      value={newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00"}
+                      onChange={(e) => {
+                        const date = newSession.date.split(" ")[0] || new Date().toISOString().split("T")[0];
+                        setNewSession({ ...newSession, date: `${date} ${e.target.value}` });
+                      }}
+                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Places max</label>
@@ -1743,6 +2383,94 @@ export function AdminPanel() {
               <div className="flex gap-3 mt-5">
                 <button onClick={() => setShowYogaModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
                 <button onClick={addYogaSession} className="flex-1 py-3 rounded-2xl text-white text-sm" style={{ background: "#0D0870", fontWeight: 600 }}>Créer la séance</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Service Type Modal ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {showServiceTypeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowServiceTypeModal(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>
+                  {editingServiceType ? "Modifier un type de soin" : "Ajouter un type de soin"}
+                </h3>
+                <button onClick={() => setShowServiceTypeModal(false)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
+                  <X size={18} className="text-[#888780]" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-[#888780] mb-2.5 block" style={{ fontWeight: 600 }}>Catégorie</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: "Infirmier", label: "Infirmier", icon: "💉" },
+                      { value: "Kinésithérapeute", label: "Kinésithérapeute", icon: "🏥" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setServiceTypeForm({ ...serviceTypeForm, category: option.value })}
+                        className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+                        style={{
+                          background: serviceTypeForm.category === option.value ? "#0D0870" : "white",
+                          borderColor: serviceTypeForm.category === option.value ? "#0D0870" : "#E0E0E0",
+                        }}
+                      >
+                        <span className="text-2xl">{option.icon}</span>
+                        <span
+                          className="text-sm"
+                          style={{
+                            color: serviceTypeForm.category === option.value ? "white" : "#1A1A1A",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {option.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Nom du type de soin</label>
+                  <input
+                    type="text"
+                    value={serviceTypeForm.name}
+                    onChange={(e) => setServiceTypeForm({ ...serviceTypeForm, name: e.target.value })}
+                    placeholder="Ex: Pansement, Massage thérapeutique..."
+                    className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setShowServiceTypeModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
+                <button
+                  onClick={() => {
+                    if (editingServiceType) {
+                      updateServiceType(editingServiceType.id);
+                    } else {
+                      addServiceType();
+                    }
+                  }}
+                  className="flex-1 py-3 rounded-2xl text-white text-sm"
+                  style={{ background: "#0D0870", fontWeight: 600 }}
+                >
+                  {editingServiceType ? "Modifier" : "Ajouter"}
+                </button>
               </div>
             </motion.div>
           </motion.div>

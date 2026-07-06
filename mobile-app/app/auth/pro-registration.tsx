@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -33,21 +33,68 @@ import {
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
 import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
 import { showToast } from "@/lib/toast";
 
 const professions = ["Psychologue", "Infirmier", "Kinésithérapeute"];
-const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
-const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const startTimes = ["06:00", "07:00", "08:00", "09:00", "10:00"];
 const endTimes = ["16:00", "17:00", "18:00", "19:00", "20:00", "22:00"];
+
+// Dynamic services loaded from public.services (fallback to inline lists when missing)
+
+// Map French category to internal specialty key (keeps compatibility with different schemas)
+const frenchToKey: Record<string, string> = {
+  "Infirmier": "nurse",
+  "Kinésithérapeute": "physiotherapist",
+  "Psychologue": "psychologist",
+};
+
+// Hardcoded fallbacks used only when the services table is unavailable
+const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin", "Soins post-op", "Sonde urinaire"];
+const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 
 export default function ProRegistrationScreen() {
   const router = useRouter();
   const { signUpWithEmail } = useAuth();
   const [step, setStep] = useState(0);
+
+  // servicesMap state moved inside component so hooks are valid in component body
+  const [servicesMap, setServicesMap] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("services").select("name,category,is_active");
+        if (error) {
+          console.warn("Failed to load services:", error);
+          return;
+        }
+        const map: Record<string, string[]> = {};
+        (data ?? []).forEach((s: any) => {
+          if (s.is_active === false) return;
+          const cat = s.category ?? "Autre";
+          map[cat] = map[cat] || [];
+          map[cat].push(s.name);
+          const eng = frenchToKey[cat];
+          if (eng) {
+            map[eng] = map[eng] || [];
+            map[eng].push(s.name);
+          }
+        });
+        if (mounted) setServicesMap(map);
+      } catch (e) {
+        console.warn("Failed to load services:", e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -69,10 +116,13 @@ export default function ProRegistrationScreen() {
 
   const [diploma, setDiploma] = useState(false);
   const [diplomaUrl, setDiplomaUrl] = useState<string | null>(null);
+  const [diplomaPath, setDiplomaPath] = useState<string | null>(null);
   const [cin, setCin] = useState(false);
   const [cinUrl, setCinUrl] = useState<string | null>(null);
+  const [cinPath, setCinPath] = useState<string | null>(null);
   const [selfie, setSelfie] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
+  const [selfiePath, setSelfiePath] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrDone, setOcrDone] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -116,10 +166,11 @@ export default function ProRegistrationScreen() {
           setUploading(null);
           return;
         }
-        const url = await uploadSelfieToSupabase(form.email || "user", photo.uri);
-        if (url) {
+        const result = await uploadSelfieToSupabase(form.email || "user", photo.uri);
+        if (result) {
           setSelfie(true);
-          setSelfieUrl(url);
+          setSelfieUrl(result.url);
+          setSelfiePath(result.path);
           showToast("Selfie téléchargé avec succès.");
         }
       } else {
@@ -129,15 +180,17 @@ export default function ProRegistrationScreen() {
           setUploading(null);
           return;
         }
-        const url = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
-        if (url) {
+        const result = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
+        if (result) {
           if (type === "diploma") {
             setDiploma(true);
-            setDiplomaUrl(url);
+            setDiplomaUrl(result.url);
+            setDiplomaPath(result.path);
             showToast("Diplôme téléchargé avec succès.");
           } else if (type === "cin") {
             setCin(true);
-            setCinUrl(url);
+            setCinUrl(result.url);
+            setCinPath(result.path);
             showToast("CIN téléchargée avec succès.");
           }
         }
@@ -161,6 +214,9 @@ export default function ProRegistrationScreen() {
   };
 
   const getAvailableServices = (): string[] => {
+    const key = getProfessionSpecialty();
+    const fromMap = servicesMap[key] ?? servicesMap[profession ?? ""] ?? [];
+    if (fromMap && fromMap.length) return fromMap;
     if (profession === "Infirmier") return infirmierServices;
     if (profession === "Kinésithérapeute") return kineServices;
     return [];
@@ -184,11 +240,24 @@ export default function ProRegistrationScreen() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
+      const documents = [];
+      if (diplomaPath) {
+        documents.push({ doc_type: getDiplomaTitle(), storage_path: diplomaPath });
+      }
+      if (cinPath) {
+        documents.push({ doc_type: "CIN", storage_path: cinPath });
+      }
+      if (selfiePath) {
+        documents.push({ doc_type: "Selfie", storage_path: selfiePath });
+      }
+      
       await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
         services: selectedServices,
+        experience: form.experience.trim(),
+        documents: documents.length > 0 ? documents : undefined,
       });
       setSubmitted(true);
     } catch (error) {
