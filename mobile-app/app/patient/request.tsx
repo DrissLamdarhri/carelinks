@@ -32,11 +32,12 @@ import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { BookingMap } from "../../components/BookingMap";
+import { useServiceTypes } from "@/lib/service-types";
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
 
-const nurseCareTypes = [
+const fallbackNurseCareTypes = [
   "Pansement",
   "Injection IM",
   "Injection SC",
@@ -45,7 +46,7 @@ const nurseCareTypes = [
   "Soins post-op",
   "Sonde urinaire",
 ];
-const kineCareTypes = [
+const fallbackKineCareTypes = [
   "Rééducation fonctionnelle",
   "Massage thérapeutique",
   "Mobilisation articulaire",
@@ -82,18 +83,27 @@ export default function PatientRequestScreen() {
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
   const normalizedService = initialService.toLowerCase();
   const isKine = isKineService(normalizedService);
-  const serviceKey = isKine ? "kine" : "infirmier";
-  const careTypes = useMemo(
-    () => (serviceKey === "kine" ? kineCareTypes : nurseCareTypes),
-    [serviceKey]
-  );
-  const theme = useMemo(() => getServiceTheme(serviceKey) ?? ({
+  const serviceCategory = isKine ? "Kinésithérapeute" : "Infirmier";
+  
+  // Fetch service types from database
+  const { serviceTypes, loading } = useServiceTypes(serviceCategory);
+  
+  // Use fetched types, fallback to hardcoded if loading or empty
+  const careTypes = useMemo(() => {
+    if (loading || serviceTypes.length === 0) {
+      return isKine ? fallbackKineCareTypes : fallbackNurseCareTypes;
+    }
+    return serviceTypes.map(st => st.name);
+  }, [loading, serviceTypes, isKine]);
+
+  const theme = useMemo(() => getServiceTheme(isKine ? "kine" : "infirmier") ?? ({
     primary: Colors.primary,
     surface: Colors.surfaceWarm,
     surfaceStrong: Colors.surfaceWarm,
     inputBorder: Colors.border,
     badgeBg: Colors.surfaceWarm,
-  }), [serviceKey]);
+  }), [isKine]);
+  
   const [careType, setCareType] = useState(0);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
@@ -129,7 +139,7 @@ export default function PatientRequestScreen() {
   useEffect(() => {
     setCareType(0);
     setShowCareMenu(false);
-  }, [serviceKey]);
+  }, [isKine]);
 
   const handleLocate = async () => {
     if (locating) return;
@@ -157,6 +167,7 @@ export default function PatientRequestScreen() {
     setSubmitting(true);
     try {
       if (demoMode) {
+        const serviceKey = isKine ? "kine" : "infirmier";
         const mockBookingId = `demo-${serviceKey}-${Date.now()}`;
         await new Promise(resolve => setTimeout(resolve, 800));
         router.push(`/patient/waiting/${mockBookingId}`);
@@ -179,6 +190,7 @@ export default function PatientRequestScreen() {
         }
       }
 
+      const serviceKey = isKine ? "kine" : "infirmier";
       const booking = await db.bookings.create({
         patient_id: user.id,
         specialty: toDbSpecialty(serviceKey),
@@ -263,7 +275,7 @@ export default function PatientRequestScreen() {
         {isKine ? (
           /* Kiné: visual chip grid */
           <View style={styles.kineCareGrid}>
-            {kineCareTypes.map((item, index) => {
+            {careTypes.map((item: string, index: number) => {
               const Icon = kineCareIcons[index] ?? Activity;
               const active = careType === index;
               return (

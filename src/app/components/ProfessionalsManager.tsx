@@ -42,6 +42,9 @@ export function ProfessionalsManager() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>("all");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [experienceFilter, setExperienceFilter] = useState<string>("all");
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   useEffect(() => {
     loadProfessionals();
@@ -96,7 +99,7 @@ export function ProfessionalsManager() {
       subscription.unsubscribe();
       window.removeEventListener('pro-status-changed', handleProStatusChanged);
     };
-  }, [filter, specialtyFilter]);
+  }, [filter, specialtyFilter, experienceFilter, selectedCities]);
 
   const loadProfessionals = async () => {
     try {
@@ -506,8 +509,30 @@ export function ProfessionalsManager() {
     const matchesSpecialty =
       specialtyFilter === "all" || !specialtyFilter || p.specialty === specialtyFilter;
     
-    return matchesSearch && matchesStatus && matchesSpecialty;
+    // Apply experience filter
+    let matchesExperience = true;
+    if (experienceFilter !== "all" && experienceFilter) {
+      const years = p.years_experience || 0;
+      if (experienceFilter === "0-5") {
+        matchesExperience = years >= 0 && years <= 5;
+      } else if (experienceFilter === "5-10") {
+        matchesExperience = years > 5 && years <= 10;
+      } else if (experienceFilter === "10+") {
+        matchesExperience = years > 10;
+      }
+    }
+    
+    // Apply city filter
+    const matchesCity = selectedCities.length === 0 || selectedCities.includes(p.city);
+    
+    return matchesSearch && matchesStatus && matchesSpecialty && matchesExperience && matchesCity;
   });
+
+  // Get unique cities from professionals
+  const availableCities = Array.from(
+    new Set(professionals.map((p) => p.city).filter(Boolean))
+  ).sort();
+
 
   return (
     <div>
@@ -516,7 +541,7 @@ export function ProfessionalsManager() {
           <p className="text-sm text-[#888780]">{(professionals ?? []).length} professionnels inscrits</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => {}} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+          <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
             <Filter size={14} /> Filtrer
           </button>
           <button onClick={() => {}} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
@@ -540,6 +565,101 @@ export function ProfessionalsManager() {
             />
           </div>
         </div>
+
+        {/* Advanced Filters */}
+        {showFilterDropdown && (
+          <div className="px-4 py-4 border-b border-[#F0F0F0] bg-[#FAFAFA]">
+            <div className="grid grid-cols-3 gap-4">
+              {/* Specialty Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Spécialité
+                </label>
+                <select
+                  value={specialtyFilter}
+                  onChange={(e) => setSpecialtyFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                >
+                  <option value="all">Toutes les spécialités</option>
+                  <option value="nurse">Infirmière</option>
+                  <option value="psychologist">Psychologue</option>
+                  <option value="physiotherapist">Kinésithérapeute</option>
+                  <option value="yoga_instructor">Instructeur de Yoga</option>
+                </select>
+              </div>
+
+              {/* Experience Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Expérience
+                </label>
+                <select
+                  value={experienceFilter}
+                  onChange={(e) => setExperienceFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                >
+                  <option value="all">Toutes les expériences</option>
+                  <option value="0-5">0-5 ans</option>
+                  <option value="5-10">5-10 ans</option>
+                  <option value="10+">10+ ans</option>
+                </select>
+              </div>
+
+              {/* City Filter */}
+              <div>
+                <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                  Ville
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCityDropdown(!showCityDropdown)}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] text-left bg-white flex items-center justify-between"
+                  >
+                    <span className="text-[#888780]">
+                      {selectedCities.length === 0
+                        ? "Toutes les villes"
+                        : `${selectedCities.length} ville${selectedCities.length !== 1 ? "s" : ""}`}
+                    </span>
+                    <span className="text-xs">▼</span>
+                  </button>
+                  {showCityDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E0E0E0] rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                      <div className="p-2">
+                        <button
+                          onClick={() => setSelectedCities([])}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#F3F3F5] rounded"
+                        >
+                          Toutes les villes
+                        </button>
+                        {availableCities.map((city) => (
+                          <button
+                            key={city}
+                            onClick={() => {
+                              setSelectedCities((prev) =>
+                                prev.includes(city)
+                                  ? prev.filter((c) => c !== city)
+                                  : [...prev, city]
+                              );
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-[#F3F3F5] rounded flex items-center gap-2"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCities.includes(city)}
+                              onChange={() => {}}
+                              className="w-3 h-3"
+                            />
+                            {city}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2 px-4 py-3 border-b border-[#F0F0F0] overflow-x-auto">
           {(["all", "pending", "approved", "rejected"] as const).map((f) => (

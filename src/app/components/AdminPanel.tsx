@@ -25,7 +25,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type AdminTab = "dashboard" | "users" | "professionals" | "services" | "yoga" | "bookings" | "settings";
+type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "settings";
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
@@ -130,6 +130,27 @@ export function AdminPanel() {
     })();
     return () => { mounted = false; };
   }, [isAdminAuthed]);
+
+  // Load service types from Supabase
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: types } = await supabase
+          .from("service_types")
+          .select("*")
+          .order("category", { ascending: true })
+          .order("name", { ascending: true });
+        if (!mounted) return;
+        setServiceTypes(types || []);
+      } catch (err) {
+        console.warn("AdminPanel: error loading service types", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [isAdminAuthed]);
+
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState<Omit<Service, "id">>({
@@ -153,6 +174,11 @@ export function AdminPanel() {
   const [liveAllBookings, setLiveAllBookings] = useState<any[]>([]);
   const [bookingFilter, setBookingFilter] = useState<string | null>(null);
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [selectedServiceTypeCategory, setSelectedServiceTypeCategory] = useState<string>("Infirmier");
+  const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
+  const [editingServiceType, setEditingServiceType] = useState<any>(null);
+  const [serviceTypeForm, setServiceTypeForm] = useState({ name: "", category: "Infirmier" });
   
   // Additional state for button functionality
   const [showUserFilterModal, setShowUserFilterModal] = useState(false);
@@ -160,6 +186,9 @@ export function AdminPanel() {
   const [selectedUserForView, setSelectedUserForView] = useState<any>(null);
   const [selectedProForView, setSelectedProForView] = useState<any>(null);
   const [selectedBookingForView, setSelectedBookingForView] = useState<any>(null);
+  const [showUserFilterPanel, setShowUserFilterPanel] = useState(false);
+  const [userStatusFilter, setUserStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [userBookingRateFilter, setUserBookingRateFilter] = useState<string>("all");
   const [securitySettings, setSecuritySettings] = useState({
     twoFactor: true,
     loginAlerts: true,
@@ -256,17 +285,40 @@ export function AdminPanel() {
         .eq("role", "patient")
         .order("created_at", { ascending: false })
         .limit(50);
-      setLiveUsers((profilesPlus ?? []).map((u: any) => ({
-        id: u.id,
-        name: u.full_name ?? u.id.slice(0, 8),
-        email: u.phone ?? "",
-        type: "Patient",
-        status: "Actif",
-        bookings: 0,
-        joined: new Date(u.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }),
-        city: u.city ?? "—",
-        avatar: (u.full_name ?? "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-      })));
+      
+      // Fetch bookings for each patient to calculate booking count
+      const { data: allBookings } = await supabase
+        .from("bookings")
+        .select("patient_id,created_at");
+      
+      const bookingsByPatient = new Map<string, number>();
+      const lastBookingByPatient = new Map<string, string>();
+      (allBookings ?? []).forEach((b: any) => {
+        bookingsByPatient.set(b.patient_id, (bookingsByPatient.get(b.patient_id) ?? 0) + 1);
+        const lastBook = lastBookingByPatient.get(b.patient_id);
+        if (!lastBook || new Date(b.created_at) > new Date(lastBook)) {
+          lastBookingByPatient.set(b.patient_id, b.created_at);
+        }
+      });
+      
+      setLiveUsers((profilesPlus ?? []).map((u: any) => {
+        const bookingCount = bookingsByPatient.get(u.id) ?? 0;
+        const lastBooking = lastBookingByPatient.get(u.id);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+        const isActive = lastBooking && lastBooking > thirtyDaysAgo;
+        
+        return {
+          id: u.id,
+          name: u.full_name ?? u.id.slice(0, 8),
+          email: u.phone ?? "",
+          type: "Patient",
+          status: isActive ? "Actif" : "Inactif",
+          bookings: bookingCount,
+          joined: new Date(u.created_at).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }),
+          city: u.city ?? "—",
+          avatar: (u.full_name ?? "P").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+        };
+      }));
 
       // All pros table — use profiles!id to disambiguate FK (professionals.id vs verified_by)
       const { data: prosData } = await supabase
@@ -689,6 +741,68 @@ export function AdminPanel() {
   const toggleSessionStatus = (id: number) =>
     setSessions(sessions.map((s) => s.id === id ? { ...s, status: s.status === "Publié" ? "Brouillon" : "Publié" } : s));
 
+  // Service Types Management
+  const addServiceType = async () => {
+    if (!serviceTypeForm.name.trim()) {
+      toast.error("Veuillez entrer un nom de type de soin");
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("service_types")
+        .insert({ name: serviceTypeForm.name, category: serviceTypeForm.category })
+        .select()
+        .single();
+      if (error) throw error;
+      setServiceTypes([...serviceTypes, data]);
+      setServiceTypeForm({ name: "", category: "Infirmier" });
+      setShowServiceTypeModal(false);
+      toast.success("Type de soin ajouté");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de l'ajout");
+    }
+  };
+
+  const updateServiceType = async (id: number) => {
+    if (!editingServiceType || !serviceTypeForm.name.trim()) {
+      toast.error("Veuillez entrer un nom");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("service_types")
+        .update({ name: serviceTypeForm.name, category: serviceTypeForm.category })
+        .eq("id", id);
+      if (error) throw error;
+      setServiceTypes(
+        serviceTypes.map((t) =>
+          t.id === id ? { ...t, name: serviceTypeForm.name, category: serviceTypeForm.category } : t
+        )
+      );
+      setEditingServiceType(null);
+      setServiceTypeForm({ name: "", category: "Infirmier" });
+      setShowServiceTypeModal(false);
+      toast.success("Type de soin modifié");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la modification");
+    }
+  };
+
+  const deleteServiceType = async (id: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce type de soin ?")) return;
+    try {
+      const { error } = await supabase
+        .from("service_types")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      setServiceTypes(serviceTypes.filter((t) => t.id !== id));
+      toast.success("Type de soin supprimé");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la suppression");
+    }
+  };
+
   // New handlers for non-functional buttons
   const exportUsersToCSV = () => {
     const headers = ["Nom", "Email", "Ville", "Réservations", "Inscrit", "Statut"];
@@ -764,7 +878,7 @@ export function AdminPanel() {
     { key: "dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
     { key: "users", icon: Users, label: "Patients", badge: 0 },
     { key: "professionals", icon: UserCheck, label: "Professionnels", badge: pending.length },
-    { key: "services", icon: Briefcase, label: "Services" },
+    { key: "service-types", icon: Clipboard, label: "Types de soins" },
     { key: "bookings", icon: BookOpen, label: "Réservations" },
     { key: "yoga", icon: Flower2, label: "Yoga" },
     { key: "settings", icon: Settings, label: "Paramètres" },
@@ -1223,7 +1337,7 @@ export function AdminPanel() {
                   <p className="text-sm text-[#888780]">{(liveUsers ?? []).length} patients inscrits</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowUserFilterModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
+                  <button onClick={() => setShowUserFilterPanel(!showUserFilterPanel)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
                     <Filter size={14} /> Filtrer
                   </button>
                   <button onClick={exportUsersToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780]" style={{ background: "#F3F3F5" }}>
@@ -1247,6 +1361,48 @@ export function AdminPanel() {
                     />
                   </div>
                 </div>
+
+                {/* Patient Filter Panel */}
+                {showUserFilterPanel && (
+                  <div className="px-4 py-4 border-b border-[#F0F0F0] bg-[#FAFAFA]">
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Status Filter */}
+                      <div>
+                        <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                          Statut du Patient
+                        </label>
+                        <select
+                          value={userStatusFilter}
+                          onChange={(e) => setUserStatusFilter(e.target.value as "all" | "active" | "inactive")}
+                          className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                        >
+                          <option value="all">Tous les patients</option>
+                          <option value="active">Actifs</option>
+                          <option value="inactive">Inactifs</option>
+                        </select>
+                      </div>
+
+                      {/* Booking Rate Filter */}
+                      <div>
+                        <label className="block text-xs text-[#888780] mb-2" style={{ fontWeight: 500 }}>
+                          Taux de Réservations
+                        </label>
+                        <select
+                          value={userBookingRateFilter}
+                          onChange={(e) => setUserBookingRateFilter(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0E0E0] outline-none"
+                        >
+                          <option value="all">Tous les taux</option>
+                          <option value="0">Aucune réservation</option>
+                          <option value="1-3">1-3 réservations</option>
+                          <option value="4-10">4-10 réservations</option>
+                          <option value="10+">10+ réservations</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -1260,7 +1416,29 @@ export function AdminPanel() {
                     </thead>
                     <tbody>
                       {(liveUsers ?? [])
-                        .filter((u) => u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase()))
+                        .filter((u) => {
+                          // Search filter
+                          const matchesSearch = u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase());
+                          
+                          // Status filter
+                          const matchesStatus = userStatusFilter === "all" || u.status === (userStatusFilter === "active" ? "Actif" : "Inactif");
+                          
+                          // Booking rate filter
+                          let matchesBookingRate = true;
+                          if (userBookingRateFilter !== "all") {
+                            if (userBookingRateFilter === "0") {
+                              matchesBookingRate = u.bookings === 0;
+                            } else if (userBookingRateFilter === "1-3") {
+                              matchesBookingRate = u.bookings >= 1 && u.bookings <= 3;
+                            } else if (userBookingRateFilter === "4-10") {
+                              matchesBookingRate = u.bookings >= 4 && u.bookings <= 10;
+                            } else if (userBookingRateFilter === "10+") {
+                              matchesBookingRate = u.bookings > 10;
+                            }
+                          }
+                          
+                          return matchesSearch && matchesStatus && matchesBookingRate;
+                        })
                         .map((u) => (
                           <tr key={u.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
                             <td className="px-5 py-4">
@@ -1309,110 +1487,87 @@ export function AdminPanel() {
           {/* ======= PROFESSIONALS ======= */}
           {tab === "professionals" && <ProfessionalsManager />}
 
-          {/* ======= SERVICES ======= */}
-          {tab === "services" && (
+
+          {/* ======= SERVICE TYPES ======= */}
+          {tab === "service-types" && (
             <div>
               <div className="flex items-center justify-between mb-5">
                 <p className="text-sm text-[#888780]">
-                  {services.length} services · {services.filter(s => s.active).length} actifs
+                  {serviceTypes.length} types de soins
                 </p>
                 <motion.button
                   whileTap={{ scale: 0.97 }}
-                  onClick={openAddService}
+                  onClick={() => {
+                    setEditingServiceType(null);
+                    setServiceTypeForm({ name: "", category: "Infirmier" });
+                    setShowServiceTypeModal(true);
+                  }}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm"
                   style={{ background: "#0D0870", fontWeight: 600 }}
                 >
-                  <Plus size={16} /> Ajouter un service
+                  <Plus size={16} /> Ajouter un type
                 </motion.button>
               </div>
 
               {/* Category filter */}
               <div className="flex gap-2 mb-5 flex-wrap">
-                {(["Tous", ...categories.map(c => c.key)] as const).map((f) => (
+                {(["Infirmier", "Kinésithérapeute"] as const).map((cat) => (
                   <button
-                    key={f}
-                    onClick={() => setServiceCatFilter(f as typeof serviceCatFilter)}
+                    key={cat}
+                    onClick={() => setSelectedServiceTypeCategory(cat)}
                     className="px-4 py-1.5 rounded-full text-sm border transition-all"
                     style={{
-                      background: serviceCatFilter === f ? "#0D0870" : "white",
-                      color: serviceCatFilter === f ? "white" : "#888780",
-                      borderColor: serviceCatFilter === f ? "#0D0870" : "#E0E0E0",
-                      fontWeight: serviceCatFilter === f ? 600 : 400,
+                      background: selectedServiceTypeCategory === cat ? "#0D0870" : "white",
+                      color: selectedServiceTypeCategory === cat ? "white" : "#888780",
+                      borderColor: selectedServiceTypeCategory === cat ? "#0D0870" : "#E0E0E0",
+                      fontWeight: selectedServiceTypeCategory === cat ? 600 : 400,
                     }}
                   >
-                    {f}
+                    {cat}
                   </button>
                 ))}
               </div>
 
-              {/* Service cards grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredServices.map((s) => {
-                  const Icon = iconMap[s.icon] || Stethoscope;
-                  const colors = categoryColors[s.category];
-                  return (
-                    <motion.div
-                      key={s.id}
-                      layout
-                      className="bg-white rounded-2xl p-5"
-                      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div
-                          className="w-11 h-11 rounded-xl flex items-center justify-center"
-                          style={{ background: colors.bg }}
-                        >
-                          <Icon size={20} style={{ color: colors.text }} />
+              {/* Service types list */}
+              <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                <div className="divide-y divide-[#F0F0F0]">
+                  {serviceTypes
+                    .filter((t) => t.category === selectedServiceTypeCategory)
+                    .length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-[#888780]">Aucun type de soin pour cette catégorie</p>
+                    </div>
+                  ) : (
+                    serviceTypes
+                      .filter((t) => t.category === selectedServiceTypeCategory)
+                      .map((type) => (
+                        <div key={type.id} className="flex items-center justify-between p-5 hover:bg-[#FAFAFA] transition-colors">
+                          <div>
+                            <p className="text-sm font-semibold text-[#1A1A1A]">{type.name}</p>
+                            <p className="text-xs text-[#888780] mt-1">{type.category}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingServiceType(type);
+                                setServiceTypeForm({ name: type.name, category: type.category });
+                                setShowServiceTypeModal(true);
+                              }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
+                            >
+                              <Edit3 size={15} className="text-[#888780]" />
+                            </button>
+                            <button
+                              onClick={() => deleteServiceType(type.id)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-colors"
+                            >
+                              <Trash2 size={15} className="text-[#E24B4A]" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          {/* Toggle active */}
-                          <button
-                            onClick={() => toggleServiceActive(s.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-                            style={{ background: s.active ? "#DCFCE7" : "#F3F3F5" }}
-                          >
-                            {s.active
-                              ? <CheckCircle2 size={15} className="text-[#16A34A]" />
-                              : <XCircle size={15} className="text-[#888780]" />
-                            }
-                          </button>
-                          <button
-                            onClick={() => openEditService(s)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#EDE5CC] transition-all"
-                          >
-                            <Edit3 size={14} className="text-[#0D0870]" />
-                          </button>
-                          <button
-                            onClick={() => deleteService(s.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FDE8E8] transition-all"
-                          >
-                            <Trash2 size={14} className="text-[#E24B4A]" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-[#1A1A1A] mb-1" style={{ fontWeight: 600 }}>
-                        {s.name}
-                      </p>
-                      <p className="text-xs text-[#888780] mb-3 leading-relaxed">{s.description}</p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: colors.bg, color: colors.text, fontWeight: 500 }}
-                          >
-                            {s.category}
-                          </span>
-                          <span className="text-xs text-[#888780]">
-                            <Clock size={11} className="inline mr-0.5" />{s.duration} min
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 700 }}>
-                          {s.basePrice} MAD
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                      ))
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1857,6 +2012,94 @@ export function AdminPanel() {
               <div className="flex gap-3 mt-5">
                 <button onClick={() => setShowYogaModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
                 <button onClick={addYogaSession} className="flex-1 py-3 rounded-2xl text-white text-sm" style={{ background: "#0D0870", fontWeight: 600 }}>Créer la séance</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Service Type Modal ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {showServiceTypeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowServiceTypeModal(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>
+                  {editingServiceType ? "Modifier un type de soin" : "Ajouter un type de soin"}
+                </h3>
+                <button onClick={() => setShowServiceTypeModal(false)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
+                  <X size={18} className="text-[#888780]" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-[#888780] mb-2.5 block" style={{ fontWeight: 600 }}>Catégorie</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: "Infirmier", label: "Infirmier", icon: "💉" },
+                      { value: "Kinésithérapeute", label: "Kinésithérapeute", icon: "🏥" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setServiceTypeForm({ ...serviceTypeForm, category: option.value })}
+                        className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+                        style={{
+                          background: serviceTypeForm.category === option.value ? "#0D0870" : "white",
+                          borderColor: serviceTypeForm.category === option.value ? "#0D0870" : "#E0E0E0",
+                        }}
+                      >
+                        <span className="text-2xl">{option.icon}</span>
+                        <span
+                          className="text-sm"
+                          style={{
+                            color: serviceTypeForm.category === option.value ? "white" : "#1A1A1A",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {option.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Nom du type de soin</label>
+                  <input
+                    type="text"
+                    value={serviceTypeForm.name}
+                    onChange={(e) => setServiceTypeForm({ ...serviceTypeForm, name: e.target.value })}
+                    placeholder="Ex: Pansement, Massage thérapeutique..."
+                    className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setShowServiceTypeModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
+                <button
+                  onClick={() => {
+                    if (editingServiceType) {
+                      updateServiceType(editingServiceType.id);
+                    } else {
+                      addServiceType();
+                    }
+                  }}
+                  className="flex-1 py-3 rounded-2xl text-white text-sm"
+                  style={{ background: "#0D0870", fontWeight: 600 }}
+                >
+                  {editingServiceType ? "Modifier" : "Ajouter"}
+                </button>
               </div>
             </motion.div>
           </motion.div>

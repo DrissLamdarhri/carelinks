@@ -63,6 +63,23 @@ create table public.services (
 create index idx_services_specialty on public.services(specialty) where is_active;
 
 -- ============================================================================
+-- TABLE 3b : service_types (types de soins spécifiques pour Infirmier/Kinésithérapeute)
+-- ============================================================================
+create table public.service_types (
+  id              serial primary key,
+  name            text not null,
+  category        text not null,                      -- 'Infirmier' ou 'Kinésithérapeute'
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+create index idx_service_types_category on public.service_types(category);
+alter table public.service_types enable row level security;
+create policy "service_types_read"     on public.service_types for select using (true);
+create policy "service_types_insert"   on public.service_types for insert with check (public.current_role() = 'admin');
+create policy "service_types_update"   on public.service_types for update using (public.current_role() = 'admin') with check (public.current_role() = 'admin');
+create policy "service_types_delete"   on public.service_types for delete using (public.current_role() = 'admin');
+
+-- ============================================================================
 -- TABLE 4 : professionals (1:1 avec profiles)
 -- ============================================================================
 create table public.professionals (
@@ -237,6 +254,7 @@ begin new.updated_at = now(); return new; end $$;
 create trigger trg_profiles_updated      before update on public.profiles      for each row execute function public.set_updated_at();
 create trigger trg_pros_updated          before update on public.professionals for each row execute function public.set_updated_at();
 create trigger trg_bookings_updated      before update on public.bookings      for each row execute function public.set_updated_at();
+create trigger trg_service_types_updated before update on public.service_types  for each row execute function public.set_updated_at();
 
 -- ── Mise à jour automatique du rating moyen d'un pro après chaque avis ─────
 create or replace function public.recalc_pro_rating() returns trigger language plpgsql as $$
