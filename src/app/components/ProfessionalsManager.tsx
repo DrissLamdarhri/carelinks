@@ -230,12 +230,19 @@ export function ProfessionalsManager() {
       }
 
       setProDocuments(data ?? []);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error loading pro documents:", e);
+      console.error("Pro documents error details:", {
+        message: e?.message ?? String(e),
+        code: e?.code ?? null,
+        status: e?.status ?? null,
+        stack: e?.stack ?? null,
+      });
       try {
         const res = await getProDocumentsAdmin(proId);
         setProDocuments(res.documents ?? []);
-      } catch (_) {
+      } catch (fallbackErr) {
+        console.error("Fallback admin API failed:", fallbackErr);
         setProDocuments([]);
       }
     } finally {

@@ -89,7 +89,7 @@ interface AuthContextValue {
     fullName: string,
     role: "patient" | "pro",
     options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
-  ) => Promise<void>;
+  ) => Promise<string | null>;
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
@@ -110,7 +110,7 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithGoogle: async () => ({ role: null, mfaRequired: false }),
   signInWithApple: async () => ({ role: null, mfaRequired: false }),
   signInWithEmail: async () => ({ role: null, mfaRequired: false }),
-  signUpWithEmail: async () => {},
+  signUpWithEmail: async () => null,
   sendPasswordReset: async () => {},
   updatePassword: async () => {},
   enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
@@ -397,11 +397,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { role: p?.role ?? intendedRole, mfaRequired };
   };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 7608fae5864a48c65491a0428638fb076459c511
   // ── Password reset (email link → app/auth/reset-password) ───────────────────
   const sendPasswordReset = async (email: string): Promise<void> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
@@ -416,10 +411,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── Email/password sign-up ──────────────────────────────────────────────────
-<<<<<<< HEAD
->>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
-=======
->>>>>>> 7608fae5864a48c65491a0428638fb076459c511
   const signUpWithEmail = async (
     email: string,
     password: string,
@@ -534,6 +525,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     }
+    return data.user?.id ?? null;
   };
 
   // ── MFA helpers ─────────────────────────────────────────────────────────────

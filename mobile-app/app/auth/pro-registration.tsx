@@ -127,6 +127,9 @@ export default function ProRegistrationScreen() {
   const [ocrDone, setOcrDone] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
 
+  // Pending uploads picked before sign-up; actual upload happens AFTER sign-up (when user id is available)
+  const [pendingUploads, setPendingUploads] = useState<Array<{ type: "diploma" | "cin" | "selfie"; uri: string; name: string; mimeType: string }>>([]);
+
   const [availDays, setAvailDays] = useState<string[]>(["Lun", "Mar", "Mer", "Ven"]);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
@@ -157,46 +160,33 @@ export default function ProRegistrationScreen() {
   );
 
   const handleUpload = async (type: "diploma" | "cin" | "selfie") => {
+    // Pick/capture document and store locally in pendingUploads.
+    // Actual upload to Supabase Storage will happen after successful sign-up (so we have the user id).
     setUploading(type);
     try {
       if (type === "selfie") {
-        // Use camera for selfie
         const photo = await useTakePhoto();
-        if (!photo) {
-          setUploading(null);
-          return;
-        }
-        const result = await uploadSelfieToSupabase(form.email || "user", photo.uri);
-        if (result) {
-          setSelfie(true);
-          setSelfieUrl(result.url);
-          setSelfiePath(result.path);
-          showToast("Selfie téléchargé avec succès.");
-        }
+        if (!photo) { setUploading(null); return; }
+        const fileName = photo.name ?? `selfie-${Date.now()}.jpg`;
+        setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: photo.type ?? "image/jpeg" }]);
+        setSelfie(true);
+        setSelfieUrl(photo.uri);
+        showToast("Selfie ajouté (upload après inscription)");
       } else {
-        // Use document picker for diploma and CIN
         const doc = await usePickDocument();
-        if (!doc) {
-          setUploading(null);
-          return;
+        if (!doc) { setUploading(null); return; }
+        setPendingUploads((p) => [...p, { type, uri: doc.uri, name: doc.name, mimeType: doc.type }]);
+        if (type === "diploma") {
+          setDiploma(true);
+          setDiplomaUrl(doc.uri);
+        } else if (type === "cin") {
+          setCin(true);
+          setCinUrl(doc.uri);
         }
-        const result = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
-        if (result) {
-          if (type === "diploma") {
-            setDiploma(true);
-            setDiplomaUrl(result.url);
-            setDiplomaPath(result.path);
-            showToast("Diplôme téléchargé avec succès.");
-          } else if (type === "cin") {
-            setCin(true);
-            setCinUrl(result.url);
-            setCinPath(result.path);
-            showToast("CIN téléchargée avec succès.");
-          }
-        }
+        showToast("Document ajouté (upload après inscription)");
       }
 
-      // Trigger OCR check if diploma and CIN are both uploaded
+      // Trigger OCR check if diploma and CIN are both present locally
       const nextDiploma = type === "diploma" ? true : diploma;
       const nextCin = type === "cin" ? true : cin;
       if (nextDiploma && nextCin) {
@@ -207,7 +197,8 @@ export default function ProRegistrationScreen() {
         }, 1700);
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("handleUpload error:", error);
+      showToast("Erreur lors de la sélection du document");
     } finally {
       setUploading(null);
     }
@@ -240,25 +231,69 @@ export default function ProRegistrationScreen() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      const documents = [];
-      if (diplomaPath) {
-        documents.push({ doc_type: getDiplomaTitle(), storage_path: diplomaPath });
-      }
-      if (cinPath) {
-        documents.push({ doc_type: "CIN", storage_path: cinPath });
-      }
-      if (selfiePath) {
-        documents.push({ doc_type: "Selfie", storage_path: selfiePath });
-      }
-      
-      await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
+      // 1) Sign up the user (create auth user + profile + professionals row)
+      const newUserId = await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
         services: selectedServices,
         experience: form.experience.trim(),
-        documents: documents.length > 0 ? documents : undefined,
       });
+
+      // 2) If sign-up succeeded and we have a user id, upload any pending documents using that id and insert pro_documents rows
+      const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
+      if (uid && pendingUploads.length > 0) {
+        for (const file of pendingUploads) {
+          try {
+            // Build storage path: <uid>/<type>-<timestamp>-<originalName>
+            const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+            const storagePath = `${uid}/${file.type}-${Date.now()}-${file.name}`;
+
+            // Fetch local file and upload
+            const resp = await fetch(file.uri);
+            const blob = await resp.blob();
+
+            const { error: uploadError } = await supabase.storage
+              .from("pro-documents")
+              .upload(storagePath, blob, {
+                contentType: file.mimeType || "application/octet-stream",
+                upsert: true,
+              });
+            if (uploadError) {
+              console.error("Upload failed for", storagePath, uploadError);
+              showToast("Échec de l'upload d'un document. Réessayez.");
+              continue;
+            }
+
+            // Insert pro_documents row (RLS allows when authenticated as owner)
+            const { error: insertError } = await supabase.from("pro_documents").insert({
+              professional_id: uid,
+              doc_type: file.type === "diploma" ? getDiplomaTitle() : file.type === "cin" ? "CIN" : "Selfie",
+              storage_path: storagePath,
+              is_verified: false,
+              uploaded_at: new Date().toISOString(),
+            });
+            if (insertError) {
+              console.error("Failed to insert pro_documents for", storagePath, insertError);
+              showToast("Erreur lors de l'enregistrement du document.");
+              continue;
+            }
+
+            // Update local state paths so UI shows uploaded docs
+            if (file.type === "diploma") {
+              setDiplomaPath(storagePath);
+            } else if (file.type === "cin") {
+              setCinPath(storagePath);
+            } else if (file.type === "selfie") {
+              setSelfiePath(storagePath);
+            }
+          } catch (e) {
+            console.error("Exception uploading pending file:", e);
+            showToast("Erreur lors de l'upload d'un document.");
+          }
+        }
+      }
+
       setSubmitted(true);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'inscription.");
