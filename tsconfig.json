@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -13,11 +17,26 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./shared/*"],
-      "@mobile/*": ["./mobile/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ],
+      "@mobile/*": [
+        "./mobile/*"
+      ]
     }
   },
-  "include": ["src", "shared", "mobile"],
-  "exclude": ["node_modules", "dist", ".expo"]
+  "include": [
+    "src",
+    "shared",
+    "mobile"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".expo"
+  ],
+  "extends": "expo/tsconfig.base"
 }

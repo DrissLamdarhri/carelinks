@@ -54,7 +54,7 @@ export function useBookingBids(bookingId: UUID | null) {
       if (!bookingId || isDemo) return;
 
       const channel = supabase
-        .channel(`bids:booking:${bookingId}`)
+        .channel(`bids:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
         .on(
           "postgres_changes",
           {
@@ -99,7 +99,7 @@ export function usePatientBookings(patientId: UUID | null) {
     useCallback(() => {
       if (!patientId) return;
       const channel = supabase
-        .channel(`bookings:patient:${patientId}`)
+        .channel(`bookings:patient:${patientId}:${Math.random().toString(36).slice(2)}`)
         .on(
           "postgres_changes",
           {
@@ -141,7 +141,7 @@ export function useOpenBookingsBySpecialty(specialty: ProSpecialty | null) {
     useCallback(() => {
       if (!specialty) return;
       const channel = supabase
-        .channel(`bookings:specialty:${specialty}`)
+        .channel(`bookings:specialty:${specialty}:${Math.random().toString(36).slice(2)}`)
         .on(
           "postgres_changes",
           {
@@ -194,7 +194,7 @@ export function useBookingMessages(bookingId: UUID | null) {
       if (!bookingId || isDemo) return;
 
       const channel = supabase
-        .channel(`messages:booking:${bookingId}`)
+        .channel(`messages:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
         .on(
           "postgres_changes",
           {

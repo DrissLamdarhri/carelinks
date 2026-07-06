@@ -6,6 +6,8 @@ export interface YogaSession {
   title: string;
   description?: string;
   instructor: string;
+  level: string;
+  imageUrl?: string;
   startsAt: string;
   durationMin: number;
   capacity: number;
@@ -42,6 +44,8 @@ export function useYogaSessions() {
             id,
             title,
             description,
+            level,
+            image_url,
             starts_at,
             duration_min,
             capacity,
@@ -92,6 +96,8 @@ export function useYogaSessions() {
             title: s.title,
             description: s.description,
             instructor: instructorName,
+            level: s.level || 'Tous niveaux',
+            imageUrl: s.image_url,
             startsAt: s.starts_at,
             durationMin: s.duration_min,
             capacity: s.capacity,

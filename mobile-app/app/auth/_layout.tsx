@@ -43,6 +43,12 @@ export default function AuthLayout() {
         name="callback"
         options={{ headerShown: false }}
       />
+
+      {/* Password-reset landing — deep link: ma.carelink.app://auth/reset-password?code=xxxx */}
+      <Stack.Screen
+        name="reset-password"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

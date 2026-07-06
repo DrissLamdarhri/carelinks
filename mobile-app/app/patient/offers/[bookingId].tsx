@@ -175,8 +175,8 @@ export default function NurseOffersScreen() {
         router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
         return;
       }
-      await db.bids.accept(offer);
-      await db.bookings.acceptBid(bookingId, offer.professional_id, offer.price_mad);
+      // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
+      await db.bids.acceptAndMatch(offer.id);
       router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
     } catch (acceptError) {
       setActionError(acceptError instanceof Error ? acceptError.message : "Erreur lors de l'acceptation.");

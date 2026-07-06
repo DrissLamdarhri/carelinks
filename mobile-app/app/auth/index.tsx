@@ -128,7 +128,13 @@ export default function OnboardingScreen() {
                 <Text style={styles.secondaryBtnText}>Je suis professionnel</Text>
               </TouchableOpacity>
 
+<<<<<<< HEAD
               {/* Admin Panel link removed from onboarding for security */}
+=======
+              {/* <TouchableOpacity onPress={() => router.push("/admin")}>
+                <Text style={styles.adminLink}>Admin Panel</Text>
+              </TouchableOpacity> */}
+>>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
             </View>
           )}
         </View>

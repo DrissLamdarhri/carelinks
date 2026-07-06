@@ -116,20 +116,20 @@ export const mockPatientProfile = {
 };
 
 export const mockProfessionals = [
-  {
-    id: "n1",
-    firstName: "Amina",
-    lastName: "Hassan",
-    specialty: "infirmier",
-    city: "Fès",
-    rating: 4.9,
-    reviewCount: 124,
-    minPrice: 80,
-    phone: "+212612345678",
-    isOnline: true,
-    avatar:
-      "https://images.unsplash.com/photo-1594824475317-d131f6cbf0d8?w=200&q=80",
-  },
+  // {
+  //   id: "n1",
+  //   firstName: "Amina",
+  //   lastName: "Hassan",
+  //   specialty: "infirmier",
+  //   city: "Fès",
+  //   rating: 4.9,
+  //   reviewCount: 124,
+  //   minPrice: 80,
+  //   phone: "+212612345678",
+  //   isOnline: true,
+  //   avatar:
+  //     "https://images.unsplash.com/photo-1594824475317-d131f6cbf0d8?w=200&q=80",
+  // },
   {
     id: "n2",
     firstName: "Yassine",

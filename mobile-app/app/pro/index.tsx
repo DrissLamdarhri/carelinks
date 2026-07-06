@@ -1,248 +1,293 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  Image,
   ScrollView,
   StyleSheet,
-  Image,
-  TextInput,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+  Activity,
+  Banknote,
+  Bell,
+  ChevronRight,
+  FileText,
+  MapPin,
+  Navigation,
+  Star,
   Wifi,
   WifiOff,
-  TrendingUp,
-  Star,
-  Activity,
-  Calendar,
-  Check,
-  X,
-  Banknote,
-  MapPin,
-  FileText,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
-import {
-  mockProProfile,
-  mockPendingRequests,
-  mockProAppointments,
-  mockCompletedStats,
-} from "@/lib/mock-data";
-import { NotificationBell } from "@/components/NotificationBell";
+import { showToast } from "@/lib/toast";
+import { mockProProfile } from "@/lib/mock-data";
+import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db/dal";
+import { geo } from "@/lib/db/geo";
+import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
+import type { Booking, ProSpecialty } from "@/lib/db/types";
+
+const NAVY = "#0D0870";
 
 export default function ProHomeScreen() {
   const router = useRouter();
+  const { user, profile, refreshProfile } = useAuth();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
-  const [counterFor, setCounterFor] = useState<string | null>(null);
-  const [counterPrice, setCounterPrice] = useState(0);
-  const { profile, refreshProfile } = useAuth();
-  
-  // Refresh profile when screen comes into focus
+  const [specialty, setSpecialty] = useState<ProSpecialty | null>(null);
+  const [appointments, setAppointments] = useState<Booking[]>([]);
+  const [rating, setRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 });
+  const [unread, setUnread] = useState(0);
+  const [busy, setBusy] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       void refreshProfile();
-    }, [refreshProfile])
+      let cancelled = false;
+      void (async () => {
+        if (!user?.id) return;
+        try {
+          const pro = await db.pros.get(user.id);
+          if (!cancelled) {
+            setSpecialty(pro?.specialty ?? null);
+            setIsOnline(!!pro?.is_available);
+            setRating({ avg: Number(pro?.rating_avg ?? 0), count: Number(pro?.rating_count ?? 0) });
+          }
+          const list = await db.bookings.listForPro(user.id);
+          if (!cancelled) setAppointments(list.filter((b) => b.status !== "open"));
+          const un = await supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .is("read_at", null);
+          if (!cancelled) setUnread(un.count ?? 0);
+        } catch {
+          /* pro may not be set up yet */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id, refreshProfile])
   );
-  
+
+  const { bookings: openReqs } = useOpenBookingsBySpecialty(specialty);
+
   const displayName =
     profile?.firstName || profile?.lastName
       ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
       : mockProProfile.name;
   const avatar = profile?.avatar || DEFAULT_AVATAR;
+  const activeMission =
+    appointments.find((b) => b.status === "matched" || b.status === "in_progress") ?? null;
+
+  // ── Real stats ──────────────────────────────────────────────────────────────
+  const now = new Date();
+  const completed = appointments.filter((b) => b.status === "completed");
+  const todayEarnings = completed
+    .filter((b) => b.completed_at && new Date(b.completed_at).toDateString() === now.toDateString())
+    .reduce((sum, b) => sum + Number(b.final_price_mad ?? 0), 0);
+  const monthMissions = completed.filter((b) => {
+    const d = b.completed_at ? new Date(b.completed_at) : null;
+    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  const toggleOnline = async () => {
+    if (!user?.id || busy) return;
+    if (!specialty) {
+      showToast("Choisissez d'abord votre spécialité");
+      router.push("/pro/bids");
+      return;
+    }
+    const next = !isOnline;
+    setBusy(true);
+    try {
+      if (next) {
+        const coords = await geo.getCurrentPosition();
+        await db.pros.upsert({ id: user.id, specialty, is_available: true });
+        await geo.setProLocation(user.id, coords.lat, coords.lng);
+        showToast("Vous êtes en ligne — visible par les patients");
+      } else {
+        await db.pros.upsert({ id: user.id, specialty, is_available: false });
+      }
+      setIsOnline(next);
+    } catch {
+      showToast("Action impossible");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={Gradients.nurse} style={styles.header}>
+      {/* ── Header ── */}
+      <LinearGradient colors={Gradients.nurse} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.userWrap}>
-            <Image 
-              key={avatar}
-              source={typeof avatar === 'string' ? { uri: avatar } : avatar}
-              style={styles.avatar}
-            />
-            <View>
+            <Image key={avatar} source={typeof avatar === "string" ? { uri: avatar } : avatar} style={styles.avatar} />
+            <View style={{ flex: 1 }}>
               <Text style={styles.greeting}>Bonjour 👋</Text>
-              <Text style={styles.userName}>{displayName}</Text>
+              <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
           </View>
-          <View style={styles.rightTop}>
-            <TouchableOpacity
-              onPress={() => setIsOnline((v) => !v)}
-              style={[
-                styles.onlineToggle,
-                isOnline ? styles.onlineToggleOn : undefined,
-              ]}
-            >
-              {isOnline ? (
-                <Wifi size={14} color="#4ADE80" />
-              ) : (
-                <WifiOff size={14} color="rgba(255,255,255,0.6)" />
-              )}
-              <Text
-                style={[
-                  styles.onlineText,
-                  isOnline ? { color: "#4ADE80" } : undefined,
-                ]}
-              >
-                {isOnline ? "En ligne" : "Hors ligne"}
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.rightActions}>
-              <NotificationBell />
-            </View>
-          </View>
+          <TouchableOpacity style={styles.bell} onPress={() => router.push("/pro/notifications")}>
+            <Bell size={20} color="#FFFFFF" />
+            {unread > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeTxt}>{unread > 9 ? "9+" : unread}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
         </View>
 
+        {/* Online switch — big + clear */}
+        <TouchableOpacity onPress={toggleOnline} disabled={busy} activeOpacity={0.9} style={[styles.onlineCard, isOnline && styles.onlineCardOn]}>
+          <View style={[styles.onlineDot, { backgroundColor: isOnline ? "#4ADE80" : "rgba(255,255,255,0.4)" }]} />
+          {isOnline ? <Wifi size={18} color="#4ADE80" /> : <WifiOff size={18} color="rgba(255,255,255,0.7)" />}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.onlineTitle}>{isOnline ? "En ligne" : "Hors ligne"}</Text>
+            <Text style={styles.onlineSub}>
+              {isOnline ? "Vous recevez des demandes près de vous" : "Activez pour recevoir des demandes"}
+            </Text>
+          </View>
+          <View style={[styles.switchTrack, isOnline && styles.switchTrackOn]}>
+            <View style={[styles.switchThumb, isOnline && styles.switchThumbOn]} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Real stats */}
         <View style={styles.statsRow}>
-          <StatCard icon={TrendingUp} label="Aujourd'hui" value={`${mockCompletedStats.todayEarnings} MAD`} />
-          <StatCard icon={Star} label="Note" value={mockCompletedStats.rating.toFixed(1)} />
-          <StatCard icon={Activity} label="Ce mois" value={`${mockCompletedStats.monthMissions} missions`} />
+          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label="Aujourd'hui" />
+          <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
+          <Stat icon={Activity} value={`${monthMissions}`} label="Ce mois" />
         </View>
       </LinearGradient>
 
-      <View style={styles.tabs}>
+      {/* ── Active mission — always visible when present ── */}
+      {activeMission ? (
         <TouchableOpacity
-          style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]}
-          onPress={() => setTab("requests")}
+          activeOpacity={0.92}
+          onPress={() => router.push(`/pro/tracking/${activeMission.id}`)}
+          style={styles.missionShadow}
         >
-          <Text style={[styles.tabText, tab === "requests" && styles.tabTextActive]}>
-            Demandes ({mockPendingRequests.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]}
-          onPress={() => setTab("schedule")}
-        >
-          <Text style={[styles.tabText, tab === "schedule" && styles.tabTextActive]}>
-            Mon planning
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/bids")}>
-          <Banknote size={16} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Demandes proches</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickActionBtn} onPress={() => router.push("/pro/kyc")}>
-          <FileText size={16} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Documents KYC</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 26 }}>
-        {tab === "requests" ? (
-          <View style={{ gap: 10 }}>
-            {mockPendingRequests.map((r) => (
-              <View key={r.id} style={styles.requestCard}>
-                <View style={styles.newBar}>
-                  <Text style={styles.newBarText}>Nouvelle demande</Text>
-                  <Text style={styles.newBarSub}>à l’instant</Text>
-                </View>
-
-                <View style={styles.requestBody}>
-                  <View style={styles.reqHeader}>
-                    <View style={styles.reqPatientBadge}>
-                      <Text style={styles.reqPatientInitials}>
-                        {r.patientName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.reqPatient}>{r.patientName}</Text>
-                      <Text style={styles.reqCare}>{r.careType}</Text>
-                    </View>
-                    <Text style={styles.reqPrice}>{r.proposedPrice} MAD</Text>
-                  </View>
-
-                  <View style={styles.reqInfoRow}>
-                    <Calendar size={12} color={Colors.textMuted} />
-                    <Text style={styles.reqInfoText}>
-                      {r.dateStr} · {r.timeStr}
-                    </Text>
-                  </View>
-                  <View style={styles.reqInfoRow}>
-                    <MapPin size={12} color={Colors.textMuted} />
-                    <Text style={styles.reqInfoText}>{r.address}</Text>
-                  </View>
-
-                  {counterFor === r.id ? (
-                    <View style={styles.counterRow}>
-                      <TextInput
-                        style={styles.counterInput}
-                        keyboardType="numeric"
-                        value={String(counterPrice)}
-                        onChangeText={(v) => setCounterPrice(Number(v || 0))}
-                      />
-                      <Text style={{ color: Colors.textMuted, fontSize: 13 }}>MAD</Text>
-                      <TouchableOpacity
-                        style={styles.sendCounter}
-                        onPress={() => setCounterFor(null)}
-                      >
-                        <Text style={styles.sendCounterText}>Envoyer</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.reqActions}>
-                    <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]}>
-                      <Check size={16} color="white" />
-                      <Text style={styles.acceptText}>Accepter</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.counterBtn]}
-                      onPress={() => {
-                        setCounterFor(r.id);
-                        setCounterPrice(r.proposedPrice + 20);
-                      }}
-                    >
-                      <Banknote size={16} color={Colors.primary} />
-                      <Text style={styles.counterText}>Contre-offre</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.rejectBtn}>
-                      <X size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+          <LinearGradient colors={["#0D0870", "#241C9E"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.missionCard}>
+            <View style={styles.missionTop}>
+              <View style={styles.missionBadge}>
+                <Navigation size={12} color="#FFFFFF" strokeWidth={2.6} />
+                <Text style={styles.missionBadgeTxt}>
+                  {activeMission.status === "in_progress" ? "Mission en cours" : "Mission acceptée"}
+                </Text>
               </View>
-            ))}
+              <View style={styles.missionGo}>
+                <Text style={styles.missionGoTxt}>Voir la carte</Text>
+                <ChevronRight size={16} color="#FFFFFF" />
+              </View>
+            </View>
+            <Text style={styles.missionPatient}>Patient · {(activeMission.specialty ?? "").replaceAll("_", " ")}</Text>
+            {activeMission.address ? (
+              <View style={styles.missionAddrRow}>
+                <MapPin size={13} color="rgba(255,255,255,0.85)" />
+                <Text style={styles.missionAddr} numberOfLines={1}>{activeMission.address}</Text>
+              </View>
+            ) : null}
+            <View style={styles.missionActions}>
+              <View style={styles.missionBtn}>
+                <Navigation size={14} color={NAVY} strokeWidth={2.4} />
+                <Text style={styles.missionBtnTxt}>Itinéraire</Text>
+              </View>
+              <Text style={styles.missionPrice}>{activeMission.final_price_mad ?? activeMission.budget_max_mad ?? "—"} MAD</Text>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Quick actions */}
+      <View style={styles.quickActions}>
+        <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/bids")}>
+          <Banknote size={16} color={Colors.primary} />
+          <Text style={styles.quickTxt}>Demandes proches</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
+          <FileText size={16} color={Colors.primary} />
+          <Text style={styles.quickTxt}>Documents KYC</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabs}>
+        <TouchableOpacity style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]} onPress={() => setTab("requests")}>
+          <Text style={[styles.tabTxt, tab === "requests" && styles.tabTxtActive]}>Demandes ({openReqs.length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]} onPress={() => setTab("schedule")}>
+          <Text style={[styles.tabTxt, tab === "schedule" && styles.tabTxtActive]}>Mon planning ({appointments.length})</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+        {tab === "requests" ? (
+          specialty ? (
+            <LiveBookingsFeed specialty={specialty} />
+          ) : (
+            <View style={styles.setupCard}>
+              <Text style={styles.setupText}>Choisissez votre spécialité et votre position pour recevoir les demandes.</Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
+                <Text style={styles.setupBtnTxt}>Configurer</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        ) : appointments.length === 0 ? (
+          <View style={styles.setupCard}>
+            <Text style={styles.setupText}>Aucun rendez-vous pour le moment.</Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
-            {mockProAppointments.map((b) => (
-              <View key={b.id} style={styles.bookingCard}>
-                <View style={styles.bookingTimeCol}>
-                  <Text style={styles.bookingTime}>{b.timeStr}</Text>
-                  <Text style={styles.bookingDate}>{b.dateStr}</Text>
-                </View>
-                <View style={styles.sep} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bookingPatient}>{b.patientName}</Text>
-                  <Text style={styles.bookingCare}>{b.careType}</Text>
-                  <Text style={styles.bookingAddr}>{b.address}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text
-                    style={[
-                      styles.statusPill,
-                      b.status === "completed"
-                        ? styles.statusCompleted
-                        : styles.statusComing,
-                    ]}
-                  >
-                    {b.status === "completed" ? "Terminé" : "À venir"}
-                  </Text>
-                  <Text style={styles.bookingPrice}>{b.price} MAD</Text>
-                </View>
-              </View>
-            ))}
+            {appointments.map((b) => {
+              const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
+              const done = b.status === "completed";
+              return (
+                <TouchableOpacity
+                  key={b.id}
+                  activeOpacity={0.9}
+                  onPress={() => router.push(`/pro/tracking/${b.id}`)}
+                  style={styles.jobCard}
+                >
+                  <View style={styles.jobRow}>
+                    <View style={styles.jobTime}>
+                      <Text style={styles.jobHour}>{d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : "--:--"}</Text>
+                      <Text style={styles.jobDate}>{d ? d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" }) : ""}</Text>
+                    </View>
+                    <View style={styles.jobSep} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.jobPatient}>Patient</Text>
+                      <Text style={styles.jobCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
+                      {b.address ? (
+                        <View style={styles.jobAddrRow}>
+                          <MapPin size={11} color={Colors.textMuted} />
+                          <Text style={styles.jobAddr} numberOfLines={1}>{b.address}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={[styles.pill, done ? styles.pillDone : styles.pillLive]}>
+                        {done ? "Terminé" : b.status === "in_progress" ? "En cours" : "À venir"}
+                      </Text>
+                      <Text style={styles.jobPrice}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
+                    </View>
+                  </View>
+                  {!done ? (
+                    <TouchableOpacity style={styles.navBtn} onPress={() => router.push(`/pro/tracking/${b.id}`)}>
+                      <Navigation size={15} color="#FFFFFF" strokeWidth={2.2} />
+                      <Text style={styles.navBtnTxt}>Naviguer vers le patient</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -250,19 +295,24 @@ export default function ProHomeScreen() {
   );
 }
 
-function StatCard({
+function Stat({
   icon: Icon,
-  label,
   value,
+  unit,
+  label,
 }: {
   icon: React.ComponentType<{ size?: number; color?: string }>;
-  label: string;
   value: string;
+  unit?: string;
+  label: string;
 }) {
   return (
     <View style={styles.statCard}>
-      <Icon size={14} color="rgba(255,255,255,0.65)" />
-      <Text style={styles.statValue}>{value}</Text>
+      <Icon size={15} color="rgba(255,255,255,0.7)" />
+      <View style={styles.statValRow}>
+        <Text style={styles.statVal}>{value}</Text>
+        {unit ? <Text style={styles.statUnit}>{unit}</Text> : null}
+      </View>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -270,163 +320,86 @@ function StatCard({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  header: { paddingHorizontal: 20, paddingTop: 42, paddingBottom: 16 },
-  headerTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  userWrap: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: "rgba(255,255,255,0.35)" },
-  greeting: { color: "rgba(255,255,255,0.62)", fontSize: 12 },
-  userName: { color: "white", fontSize: 17, fontWeight: "600" },
-  rightTop: { alignItems: "flex-end", gap: 6 },
-  rightActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+
+  header: { paddingHorizontal: 20, paddingTop: 44, paddingBottom: 18, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
+  headerTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  userWrap: { flexDirection: "row", alignItems: "center", gap: 11, flex: 1 },
+  avatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)" },
+  greeting: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
+  userName: { color: "white", fontSize: 18, fontWeight: "700" },
+  bell: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+  bellBadge: { position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#E24B4A", alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  bellBadgeTxt: { color: "white", fontSize: 9, fontWeight: "800" },
+
+  onlineCard: {
+    flexDirection: "row", alignItems: "center", gap: 11,
+    backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 16, padding: 13, marginBottom: 14,
   },
-  onlineToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.12)",
+  onlineCardOn: { backgroundColor: "rgba(74,222,128,0.16)" },
+  onlineDot: { width: 9, height: 9, borderRadius: 5 },
+  onlineTitle: { color: "white", fontSize: 15, fontWeight: "700" },
+  onlineSub: { color: "rgba(255,255,255,0.65)", fontSize: 11, marginTop: 1 },
+  switchTrack: { width: 42, height: 24, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.25)", padding: 3, justifyContent: "center" },
+  switchTrackOn: { backgroundColor: "#4ADE80" },
+  switchThumb: { width: 18, height: 18, borderRadius: 9, backgroundColor: "white" },
+  switchThumbOn: { alignSelf: "flex-end" },
+
+  statsRow: { flexDirection: "row", gap: 10 },
+  statCard: { flex: 1, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 14, padding: 11 },
+  statValRow: { flexDirection: "row", alignItems: "baseline", gap: 3, marginTop: 5 },
+  statVal: { color: "white", fontSize: 17, fontWeight: "800" },
+  statUnit: { color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: "700" },
+  statLabel: { color: "rgba(255,255,255,0.6)", fontSize: 10, marginTop: 2 },
+
+  missionShadow: {
+    marginHorizontal: 16, marginTop: 14, borderRadius: 20,
+    shadowColor: NAVY, shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 10,
   },
-  onlineToggleOn: { backgroundColor: "rgba(34,197,94,0.16)" },
-  onlineText: { color: "rgba(255,255,255,0.62)", fontSize: 11, fontWeight: "500" },
-  statsRow: { flexDirection: "row", gap: 8 },
-  statCard: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 12,
-    padding: 10,
-  },
-  statValue: { color: "white", fontSize: 14, fontWeight: "700", marginTop: 4 },
-  statLabel: { color: "rgba(255,255,255,0.54)", fontSize: 10, marginTop: 2 },
-  tabs: { flexDirection: "row", backgroundColor: "white", borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
-  tabBtn: { flex: 1, height: 46, justifyContent: "center", alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabBtnActive: { borderBottomColor: Colors.primary },
-  tabText: { color: Colors.textMuted, fontSize: 14 },
-  tabTextActive: { color: Colors.primary, fontWeight: "600" },
-  quickActions: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: Colors.surfaceWarm,
-  },
-  quickActionBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "white",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  quickActionText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  body: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
-  requestCard: {
-    borderRadius: 16,
-    backgroundColor: "white",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  newBar: {
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  newBarText: { color: "white", fontSize: 11, fontWeight: "600" },
-  newBarSub: { color: "rgba(255,255,255,0.75)", fontSize: 10 },
-  requestBody: { padding: 12 },
-  reqHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 10 },
-  reqPatientBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.surfaceWarm,
-  },
-  reqPatientInitials: { color: Colors.primary, fontSize: 14, fontWeight: "700" },
-  reqPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  reqCare: { color: Colors.textMuted, fontSize: 12 },
-  reqPrice: { color: Colors.primary, fontSize: 14, fontWeight: "700" },
-  reqInfoRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 5 },
-  reqInfoText: { color: Colors.textMuted, fontSize: 12 },
-  counterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8 },
-  counterInput: {
-    flex: 1,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: Colors.input,
-    paddingHorizontal: 12,
-    color: Colors.primary,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  sendCounter: {
-    height: 42,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendCounterText: { color: "white", fontSize: 12, fontWeight: "600" },
-  reqActions: { flexDirection: "row", gap: 8, marginTop: 8 },
-  actionBtn: {
-    height: 42,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  acceptBtn: { flex: 1, backgroundColor: Colors.primary },
-  acceptText: { color: "white", fontSize: 12, fontWeight: "600" },
-  counterBtn: { flex: 1, borderWidth: 2, borderColor: Colors.primary, backgroundColor: "white" },
-  counterText: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
-  rejectBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bookingCard: {
-    borderRadius: 16,
-    backgroundColor: "white",
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  bookingTimeCol: { minWidth: 58, alignItems: "center" },
-  bookingTime: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
-  bookingDate: { color: Colors.textMuted, fontSize: 10 },
-  sep: { width: 1, height: 40, backgroundColor: Colors.border },
-  bookingPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  bookingCare: { color: Colors.textMuted, fontSize: 12 },
-  bookingAddr: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
-  statusPill: {
-    fontSize: 11,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden",
-    marginBottom: 6,
-  },
-  statusCompleted: { backgroundColor: "#F3F3F5", color: Colors.textMuted },
-  statusComing: { backgroundColor: Colors.surfaceWarm, color: Colors.primary },
-  bookingPrice: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
+  missionCard: { borderRadius: 20, padding: 16 },
+  missionTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  missionBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  missionBadgeTxt: { color: "white", fontSize: 11, fontWeight: "800" },
+  missionGo: { flexDirection: "row", alignItems: "center", gap: 2 },
+  missionGoTxt: { color: "white", fontSize: 12, fontWeight: "700" },
+  missionPatient: { color: "white", fontSize: 17, fontWeight: "800", textTransform: "capitalize" },
+  missionAddrRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  missionAddr: { flex: 1, color: "rgba(255,255,255,0.9)", fontSize: 12 },
+  missionActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14 },
+  missionBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "white", paddingHorizontal: 14, height: 38, borderRadius: 12, justifyContent: "center" },
+  missionBtnTxt: { color: NAVY, fontSize: 13, fontWeight: "800" },
+  missionPrice: { color: "white", fontSize: 20, fontWeight: "800" },
+
+  quickActions: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 14 },
+  quickBtn: { flex: 1, height: 44, borderRadius: 13, backgroundColor: "white", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  quickTxt: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
+
+  tabs: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  tabBtn: { flex: 1, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "white" },
+  tabBtnActive: { backgroundColor: NAVY },
+  tabTxt: { color: Colors.textMuted, fontSize: 13, fontWeight: "700" },
+  tabTxtActive: { color: "white" },
+
+  body: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+
+  setupCard: { backgroundColor: "white", borderRadius: 16, padding: 18, alignItems: "center", gap: 12 },
+  setupText: { color: Colors.textMuted, fontSize: 13, textAlign: "center", lineHeight: 19 },
+  setupBtn: { backgroundColor: Colors.primary, borderRadius: 12, paddingHorizontal: 20, height: 42, alignItems: "center", justifyContent: "center" },
+  setupBtnTxt: { color: "white", fontSize: 13, fontWeight: "700" },
+
+  jobCard: { backgroundColor: "white", borderRadius: 16, padding: 12, gap: 10, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  jobRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  jobTime: { minWidth: 56, alignItems: "center" },
+  jobHour: { color: Colors.primary, fontSize: 15, fontWeight: "800" },
+  jobDate: { color: Colors.textMuted, fontSize: 10 },
+  jobSep: { width: 1, height: 40, backgroundColor: Colors.border },
+  jobPatient: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
+  jobCare: { color: Colors.textMuted, fontSize: 12, textTransform: "capitalize" },
+  jobAddrRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  jobAddr: { flex: 1, color: Colors.textMuted, fontSize: 11 },
+  pill: { fontSize: 11, fontWeight: "700", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, overflow: "hidden", marginBottom: 6 },
+  pillDone: { backgroundColor: "#F3F3F5", color: Colors.textMuted },
+  pillLive: { backgroundColor: Colors.surfaceWarm, color: Colors.primary },
+  jobPrice: { color: Colors.primary, fontSize: 14, fontWeight: "800" },
+  navBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 42, borderRadius: 12, backgroundColor: Colors.primary },
+  navBtnTxt: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 });

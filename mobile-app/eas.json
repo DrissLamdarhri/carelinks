@@ -1,18 +1,50 @@
 {
-  "cli": {
-    "version": ">= 5.0.0"
-  },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5"
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5"
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
-    "production": {}
+    "preview2": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview3": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "cli": {
+    "version": ">= 5.0.0",
+    "appVersionSource": "local"
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "~/.android/fastlane/keyfile.json",
+        "track": "internal"
+      }
+    }
   }
 }

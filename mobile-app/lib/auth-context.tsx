@@ -19,7 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import { getOAuthRedirectUrl } from "@/lib/auth-redirect";
+import { getOAuthRedirectUrl, getPasswordResetRedirectUrl } from "@/lib/auth-redirect";
 import {
   enrollTotp,
   getAssuranceLevel,
@@ -90,6 +90,8 @@ interface AuthContextValue {
     role: "patient" | "pro",
     options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
   verifyMfaTotp: (code: string, factorId?: string) => Promise<void>;
   challengeMfaSms: (phone: string) => Promise<void>;
@@ -109,6 +111,8 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithApple: async () => ({ role: null, mfaRequired: false }),
   signInWithEmail: async () => ({ role: null, mfaRequired: false }),
   signUpWithEmail: async () => {},
+  sendPasswordReset: async () => {},
+  updatePassword: async () => {},
   enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
   verifyMfaTotp: async () => {},
   challengeMfaSms: async () => {},
@@ -272,12 +276,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const resolveMfaRequirement = async (p: UserProfile | null): Promise<boolean> => {
-    const level = await getAssuranceLevel();
-    if (p?.mfaMethod === "sms") {
-      return level.currentLevel !== "aal2";
-    }
-    return level.currentLevel !== "aal2" && level.nextLevel === "aal2";
+  // MFA removed (client did not want it): sign-in never requires an MFA step.
+  const resolveMfaRequirement = async (_p: UserProfile | null): Promise<boolean> => {
+    return false;
   };
 
   useEffect(() => {
@@ -396,6 +397,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { role: p?.role ?? intendedRole, mfaRequired };
   };
 
+<<<<<<< HEAD
+=======
+  // ── Password reset (email link → app/auth/reset-password) ───────────────────
+  const sendPasswordReset = async (email: string): Promise<void> => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (newPassword: string): Promise<void> => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  };
+
+  // ── Email/password sign-up ──────────────────────────────────────────────────
+>>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
   const signUpWithEmail = async (
     email: string,
     password: string,
@@ -563,6 +581,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         signInWithApple,
         signInWithEmail,
+        sendPasswordReset,
+        updatePassword,
         signUpWithEmail,
         enrollMfaTotp,
         verifyMfaTotp,

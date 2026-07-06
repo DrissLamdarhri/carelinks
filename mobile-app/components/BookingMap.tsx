@@ -22,8 +22,14 @@ import {
   View,
 } from "react-native";
 import { LocateFixed } from "lucide-react-native";
+import {
+  PinchGestureHandler,
+  State,
+  type PinchGestureHandlerStateChangeEvent,
+} from "react-native-gesture-handler";
 import { Colors } from "@/lib/colors";
 import { geo } from "@/lib/db/geo";
+import { haptics } from "@/lib/haptics";
 import {
   MAP_CENTER,
   NAVY,
@@ -36,6 +42,8 @@ import { PatientPin, ProPin, type ProPinData } from "./map/Pins";
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ZOOM     = 7500;
 const BOUND    = 130; // max pan distance in px before rubber-banding
+const MIN_SCALE = 0.7; // pinch-zoom out limit
+const MAX_SCALE = 2.6; // pinch-zoom in limit
 const SCREEN_W = Dimensions.get("window").width;
 const MAP_H    = 320;
 
@@ -81,10 +89,20 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
             </View>
           </View>
           <View style={list.cardActions}>
-            <TouchableOpacity style={[list.reserveBtn, { backgroundColor: color }]}>
+            <TouchableOpacity
+              style={[list.reserveBtn, { backgroundColor: color }]}
+              onPress={() => {
+                try { 
+                  // notify parent that user wants to reserve this demo pro
+                  // (parent handles booking creation / navigation)
+                  // @ts-ignore
+                  typeof propsOnReserve !== 'undefined' && propsOnReserve(pro.id);
+                } catch (e) {}
+              }}
+            >
               <Text style={list.reserveBtnText}>Réserver</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[list.profileBtn, { borderColor: color + "44" }]}>
+            <TouchableOpacity style={[list.profileBtn, { borderColor: color + "44" }]}> 
               <Text style={[list.profileBtnText, { color }]}>Profil</Text>
             </TouchableOpacity>
           </View>
@@ -122,7 +140,18 @@ export type BookingMapProps = {
   pros?: ProPinData[];
   height?: number;
   showProList?: boolean;
+  // called when user taps "Réserver" on a listed pro (demo/demo-mode)
+  onReserve?: (proId: string) => void;
+  // When true (default), fall back to sample pros if none are provided.
+  // Set false in production so real users never see fake professionals.
+  demo?: boolean;
+  // Message shown over the map when there are no pros to display.
+  emptyText?: string;
+  // When false, hides the internal search bar + GPS button (use when the parent
+  // screen provides its own address/GPS chrome, to avoid duplicated controls).
+  showChrome?: boolean;
 };
+
 
 export function BookingMap({
   initialLat = MAP_CENTER.lat,
@@ -133,10 +162,15 @@ export function BookingMap({
   pros,
   height = MAP_H,
   showProList = true,
+  onReserve: propsOnReserve,
+  demo = true,
+  emptyText = "Aucun professionnel à proximité pour le moment.",
+  showChrome = true,
 }: BookingMapProps) {
   const vw = SCREEN_W;
   const vh = height;
-  const displayPros = pros && pros.length > 0 ? pros : DEMO_PROS;
+  const displayPros = pros && pros.length > 0 ? pros : demo ? DEMO_PROS : [];
+  const isEmpty = displayPros.length === 0;
 
   // ── Native pan value — this is the performance core ───────────────────────
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -162,8 +196,10 @@ export function BookingMap({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+        // One finger = pan; two fingers = let PinchGestureHandler zoom.
+        onStartShouldSetPanResponder: (_, g) => g.numberActiveTouches < 2,
+        onMoveShouldSetPanResponder: (_, g) =>
+          g.numberActiveTouches < 2 && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
         onPanResponderGrant: () => {
           pan.setOffset(panOffset.current);
           pan.setValue({ x: 0, y: 0 });
@@ -205,6 +241,7 @@ export function BookingMap({
     try {
       const pos = await geo.getCurrentPosition();
       onChange?.(pos.lat, pos.lng);
+      haptics.light();
     } catch { /* permission denied — silent */ } finally {
       setLocating(false);
     }
@@ -213,24 +250,62 @@ export function BookingMap({
   // ── Static screen position for pins (computed once — pins live INSIDE the
   //    same transform as the map via a wrapping Animated.View, so they pan
   //    together with zero extra math) ─────────────────────────────────────────
-  const cx = MAP_CENTER;
+  // Center the pin projection on the PATIENT's real location so the patient pin
+  // is always screen-centered and pros are plotted at their true relative
+  // position/distance. (The StaticMapLayer backdrop stays decorative.)
+  const cx = useMemo(() => ({ lat: initialLat, lng: initialLng }), [initialLat, initialLng]);
   const proScreenPositions = useMemo(
     () => displayPros.map((pro) => project({ lat: pro.lat, lng: pro.lng }, cx, ZOOM, vw, vh)),
-    [displayPros, vw, vh]
+    [displayPros, cx, vw, vh]
   );
   const patientPt = useMemo(
     () => project({ lat: initialLat, lng: initialLng }, cx, ZOOM, vw, vh),
-    [initialLat, initialLng, vw, vh]
+    [initialLat, initialLng, cx, vw, vh]
   );
 
-  const handleSelect = useCallback((id: string) => setSelPro((s) => (s === id ? null : id)), []);
+  const handleSelect = useCallback((id: string) => {
+    haptics.select();
+    setSelPro((s) => (s === id ? null : id));
+  }, []);
+
+  // ── Pinch-to-zoom — native-driven scale on the shared map+pins layer ────────
+  const baseScale  = useRef(new Animated.Value(1)).current;
+  const pinchScale = useRef(new Animated.Value(1)).current;
+  const lastScale  = useRef(1);
+  const mapScale = useMemo(() => Animated.multiply(baseScale, pinchScale), [baseScale, pinchScale]);
+  const clampedScale = useMemo(
+    () => mapScale.interpolate({ inputRange: [MIN_SCALE, MAX_SCALE], outputRange: [MIN_SCALE, MAX_SCALE], extrapolate: "clamp" }),
+    [mapScale]
+  );
+  const onPinchEvent = useMemo(
+    () => Animated.event([{ nativeEvent: { scale: pinchScale } }], { useNativeDriver: true }),
+    [pinchScale]
+  );
+  const onPinchStateChange = useCallback(
+    (e: PinchGestureHandlerStateChangeEvent) => {
+      if (e.nativeEvent.oldState === State.ACTIVE) {
+        const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, lastScale.current * e.nativeEvent.scale));
+        lastScale.current = next;
+        baseScale.setValue(next);
+        pinchScale.setValue(1);
+      }
+    },
+    [baseScale, pinchScale]
+  );
 
   return (
     <View style={styles.wrap}>
       {/* ── Tabs ── */}
       <View style={styles.tabBar}>
         {["Carte", "Liste"].map((label, i) => (
-          <TouchableOpacity key={label} style={[styles.tab, activeTab === i && styles.tabActive]} onPress={() => setActiveTab(i)}>
+          <TouchableOpacity
+            key={label}
+            style={[styles.tab, activeTab === i && styles.tabActive]}
+            onPress={() => setActiveTab(i)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === i }}
+            accessibilityLabel={label}
+          >
             <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
@@ -238,18 +313,22 @@ export function BookingMap({
 
       {/* ── Map area ── */}
       <View style={[styles.mapArea, { height: vh }]} {...panResponder.panHandlers}>
-        {/* Static map — pans via native transform, never re-renders SVG */}
-        <StaticMapLayer vw={vw} vh={vh} zoom={ZOOM} pan={pan} />
+        {/* Pinch-to-zoom: scales the whole map + pins layer together (GPU-only,
+            no re-projection). Pan (PanResponder) still works with one finger. */}
+        <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchStateChange}>
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: clampedScale }] }]}>
+            {/* Static map — pans via native transform, never re-renders SVG */}
+            <StaticMapLayer vw={vw} vh={vh} zoom={ZOOM} pan={pan} />
 
-        {/* Pins layer — moves WITH the map via the same Animated transform,
-            so dragging the map drags pins perfectly in sync at zero extra cost */}
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
-          ]}
-          pointerEvents="box-none"
-        >
+            {/* Pins layer — moves WITH the map via the same Animated transform,
+                so dragging the map drags pins perfectly in sync at zero extra cost */}
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
+              ]}
+              pointerEvents="box-none"
+            >
           {/* Radius ring — drawn as a simple themed View, not SVG, so it's cheap */}
           <View
             pointerEvents="none"
@@ -284,22 +363,49 @@ export function BookingMap({
           <View pointerEvents="none" style={[styles.patAbs, { left: patientPt.x - 18, top: patientPt.y - 50 }]}>
             <PatientPin color={primaryColor} />
           </View>
-        </Animated.View>
+            </Animated.View>
+          </Animated.View>
+        </PinchGestureHandler>
 
-        {/* ── Overlay UI (fixed — does not pan) ── */}
-        <View style={styles.searchBar} pointerEvents="box-none">
-          <View style={[styles.searchDot, { backgroundColor: primaryColor }]} />
-          <Text style={styles.searchText} numberOfLines={1}>{address}</Text>
-          <TouchableOpacity style={[styles.modBtn, { borderColor: primaryColor + "30" }]} onPress={() => {}}>
-            <Text style={[styles.modBtnText, { color: primaryColor }]}>Modifier</Text>
-          </TouchableOpacity>
-        </View>
+        {/* ── Overlay UI (fixed — does not pan). Hidden when the parent screen
+             provides its own address/GPS chrome (showChrome=false). ── */}
+        {showChrome && (
+          <>
+            <View style={styles.searchBar} pointerEvents="box-none">
+              <View style={[styles.searchDot, { backgroundColor: primaryColor }]} />
+              <Text style={styles.searchText} numberOfLines={1}>{address}</Text>
+              <TouchableOpacity
+                style={[styles.modBtn, { borderColor: primaryColor + "30" }]}
+                onPress={() => {}}
+                accessibilityRole="button"
+                accessibilityLabel="Modifier l'adresse"
+              >
+                <Text style={[styles.modBtnText, { color: primaryColor }]}>Modifier</Text>
+              </TouchableOpacity>
+            </View>
 
-        <TouchableOpacity style={styles.gpsBtn} onPress={handleGPS} disabled={locating}>
-          {locating ? <ActivityIndicator size="small" color={primaryColor} /> : <LocateFixed size={16} color={primaryColor} />}
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.gpsBtn}
+              onPress={handleGPS}
+              disabled={locating}
+              accessibilityRole="button"
+              accessibilityLabel="Utiliser ma position actuelle"
+            >
+              {locating ? <ActivityIndicator size="small" color={primaryColor} /> : <LocateFixed size={16} color={primaryColor} />}
+            </TouchableOpacity>
+          </>
+        )}
 
-        <Text style={styles.credit} pointerEvents="none">Fès · CareLink</Text>
+        <Text style={styles.credit} pointerEvents="none">CareLink</Text>
+
+        {/* Empty state — no pros to show (never fake people for real users) */}
+        {isEmpty && (
+          <View style={styles.emptyOverlay} pointerEvents="none">
+            <View style={styles.emptyPill}>
+              <Text style={styles.emptyText}>{emptyText}</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* ── Bottom sheet ── */}
@@ -360,6 +466,13 @@ const styles = StyleSheet.create({
   patAbs: { position: "absolute", zIndex: 35 },
 
   credit: { position: "absolute", bottom: 6, right: 8, fontSize: 9, color: "rgba(13,8,112,0.3)", fontWeight: "500" },
+
+  emptyOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", zIndex: 45 },
+  emptyPill: {
+    maxWidth: "80%", backgroundColor: "rgba(255,255,255,0.96)", borderRadius: 16, paddingHorizontal: 18, paddingVertical: 12,
+    shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 5,
+  },
+  emptyText: { fontSize: 12.5, fontWeight: "600", color: NAVY, textAlign: "center", lineHeight: 18 },
 
   sheet: { backgroundColor: "#FFFFFF", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E0E0E0", alignSelf: "center", marginVertical: 10 },

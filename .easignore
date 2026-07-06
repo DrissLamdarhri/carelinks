@@ -1,0 +1,34 @@
+# EAS upload filter. NOTE: when .easignore exists it REPLACES .gitignore for the
+# upload, so we must re-list the normal excludes here too.
+
+# Dependencies / build caches (EAS reinstalls these)
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+.turbo/
+.git/
+
+# Native projects — EAS regenerates via prebuild (managed workflow)
+mobile-app/android/
+mobile-app/ios/
+
+# IMPORTANT: do NOT ignore pnpm-lock.yaml — EAS needs it to install.
+
+# Large committed archives (were bloating the upload to ~340 MB)
+*.zip
+
+# Design assets / screenshots
+screenShots/
+mobile-app/adjustedInterfaces/
+
+# Stale nested copy
+mobile-app/mobile-app/
+
+# Docs / SQL / env not needed at build time
+docs/
+*.md
+supabase/
+.env
+.env.*

@@ -31,8 +31,8 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
         onAccepted?.(bid.id);
         return;
       }
-      await db.bids.accept(bid);
-      await db.bookings.acceptBid(bookingId, bid.professional_id, bid.price_mad);
+      // RLS-safe atomic accept + match (same RPC as the offers screen).
+      await db.bids.acceptAndMatch(bid.id);
       onAccepted?.(bid.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'acceptation.");

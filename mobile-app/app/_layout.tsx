@@ -14,6 +14,7 @@ import { View, ActivityIndicator } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { DMSans_400Regular, DMSans_500Medium } from "@expo-google-fonts/dm-sans";
 import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { useFonts } from "expo-font";
@@ -62,7 +63,8 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   return (
-    <AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
       <I18nProvider>
         <SafeAreaProvider>
           {fontsLoaded ? (
@@ -91,5 +93,6 @@ export default function RootLayout() {
         </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

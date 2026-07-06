@@ -196,6 +196,8 @@ create table public.yoga_sessions (
   instructor_id   uuid references public.professionals(id) on delete set null,
   title           text not null,
   description     text,
+  level           text default 'Tous niveaux', -- 'Débutant', 'Intermédiaire', 'Avancé', 'Tous niveaux'
+  image_url       text,
   starts_at       timestamptz not null,
   duration_min    int default 60,
   capacity        int default 10,

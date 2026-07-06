@@ -128,7 +128,7 @@ export const bookings = {
     );
   },
 
-  async listOpenForSpecialty(specialty: ProSpecialty): Promise<Booking[]> {
+  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50): Promise<Booking[]> {
     return unwrap(
       await supabase
         .from("bookings")
@@ -136,6 +136,7 @@ export const bookings = {
         .eq("specialty", specialty)
         .eq("status", "open")
         .order("created_at", { ascending: false })
+        .limit(limit)
     );
   },
 
@@ -219,6 +220,18 @@ export const bids = {
       .eq("status", "pending")
       .neq("id", bid.id);
     if (rejected.error) throw rejected.error;
+  },
+
+  /**
+   * Accept a bid and match the booking atomically via the accept_bid() RPC.
+   * The patient can't write the bids table under RLS (only the pro can), so
+   * this SECURITY DEFINER function does it server-side after verifying the
+   * caller is the booking's patient. Returns the now-matched booking.
+   */
+  async acceptAndMatch(bidId: UUID): Promise<Booking> {
+    const { data, error } = await supabase.rpc("accept_bid", { p_bid_id: bidId });
+    if (error) throw error;
+    return data as Booking;
   },
 };
 
