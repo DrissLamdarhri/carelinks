@@ -67,6 +67,8 @@ export type CareLinkMapViewProps = {
   recenterKey?: number;
   /** Increment to zoom-to-fit all pros (booking envelope button). */
   fitAllKey?: number;
+  /** Navigation mode — camera continuously follows `center` (tight zoom + pitch). */
+  follow?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 

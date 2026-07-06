@@ -22,7 +22,6 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
-import { openNavigation } from "@/lib/nav";
 import { showToast } from "@/lib/toast";
 import { mockProProfile } from "@/lib/mock-data";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
@@ -281,12 +280,7 @@ export default function ProHomeScreen() {
                     </View>
                   </View>
                   {!done ? (
-                    <TouchableOpacity
-                      style={styles.navBtn}
-                      onPress={() => {
-                        if (!openNavigation({ address: b.address })) showToast("Adresse indisponible");
-                      }}
-                    >
+                    <TouchableOpacity style={styles.navBtn} onPress={() => router.push(`/pro/tracking/${b.id}`)}>
                       <Navigation size={15} color="#FFFFFF" strokeWidth={2.2} />
                       <Text style={styles.navBtnTxt}>Naviguer vers le patient</Text>
                     </TouchableOpacity>

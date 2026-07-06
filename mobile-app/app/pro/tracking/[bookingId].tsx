@@ -14,12 +14,20 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2, MapPin, Navigation, Phone } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ArrowUp,
+  CheckCircle2,
+  CornerUpLeft,
+  CornerUpRight,
+  Flag,
+  MapPin,
+  Phone,
+} from "lucide-react-native";
 import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
-import { openNavigation } from "@/lib/nav";
 import { showToast } from "@/lib/toast";
 import { haptics } from "@/lib/haptics";
 import { Colors } from "@/lib/colors";
@@ -38,6 +46,27 @@ function haversineKm(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+// ── In-app turn-by-turn (OSRM maneuvers → French instructions) ───────────────
+type NavStep = { instruction: string; loc: LatLng; dir: "left" | "right" | "straight" | "arrive" };
+
+function parseManeuver(m: { type?: string; modifier?: string }, name: string): { instruction: string; dir: NavStep["dir"] } {
+  const type = m?.type ?? "";
+  const mod = m?.modifier ?? "";
+  const on = name ? ` sur ${name}` : "";
+  if (type === "arrive") return { instruction: "Vous êtes arrivé", dir: "arrive" };
+  if (type === "depart") return { instruction: name ? `Prenez ${name}` : "C'est parti", dir: "straight" };
+  if (type === "roundabout" || type === "rotary") return { instruction: `Prenez le rond-point${on}`, dir: "straight" };
+  if (mod.includes("left")) return { instruction: `Tournez à gauche${on}`, dir: "left" };
+  if (mod.includes("right")) return { instruction: `Tournez à droite${on}`, dir: "right" };
+  return { instruction: `Continuez tout droit${on}`, dir: "straight" };
+}
+
+function fmtDist(km: number): string {
+  const m = km * 1000;
+  if (m < 1000) return `${Math.max(10, Math.round(m / 10) * 10)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
 export default function ProTrackingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
@@ -48,6 +77,8 @@ export default function ProTrackingScreen() {
   const [dest, setDest] = useState<LatLng | null>(null);
   const [nurse, setNurse] = useState<LatLng | null>(null);
   const [route, setRoute] = useState<LatLng[] | null>(null);
+  const [navSteps, setNavSteps] = useState<NavStep[]>([]);
+  const [navIdx, setNavIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -96,21 +127,43 @@ export default function ProTrackingScreen() {
     routeFetched.current = true;
     void (async () => {
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${nurse.lng},${nurse.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
+        const url = `https://router.project-osrm.org/route/v1/driving/${nurse.lng},${nurse.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`;
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 5000);
         const res = await fetch(url, { signal: ctrl.signal });
         clearTimeout(t);
         const body = await res.json();
-        const coords: LatLng[] | undefined = body.routes?.[0]?.geometry?.coordinates?.map(
+        const r = body.routes?.[0];
+        const coords: LatLng[] | undefined = r?.geometry?.coordinates?.map(
           (c: number[]) => ({ lat: c[1], lng: c[0] }),
         );
         setRoute(coords && coords.length >= 2 ? coords : [nurse, dest]);
+        // Turn-by-turn steps → French instructions
+        const rawSteps: any[] = r?.legs?.[0]?.steps ?? [];
+        const parsed: NavStep[] = rawSteps
+          .filter((st) => Array.isArray(st?.maneuver?.location))
+          .map((st) => {
+            const p = parseManeuver(st.maneuver, st.name ?? "");
+            return { instruction: p.instruction, dir: p.dir, loc: { lat: st.maneuver.location[1], lng: st.maneuver.location[0] } };
+          });
+        if (parsed.length) {
+          setNavSteps(parsed);
+          setNavIdx(parsed.length > 1 && parsed[0].dir !== "arrive" ? 1 : 0); // skip "depart"
+        }
       } catch {
         setRoute([nurse, dest]);
       }
     })();
   }, [nurse, dest]);
+
+  // Advance the turn instruction as the nurse reaches each maneuver point.
+  useEffect(() => {
+    if (!nurse || navSteps.length === 0) return;
+    const cur = navSteps[Math.min(navIdx, navSteps.length - 1)];
+    if (navIdx < navSteps.length - 1 && haversineKm(nurse, cur.loc) < 0.035) {
+      setNavIdx((i) => Math.min(i + 1, navSteps.length - 1));
+    }
+  }, [nurse, navSteps, navIdx]);
 
   const advance = useCallback(
     async (status: BookingStatus, doneMsg: string) => {
@@ -137,6 +190,8 @@ export default function ProTrackingScreen() {
   const status = booking?.status;
 
   const fit = nurse && dest ? [nurse, dest] : undefined;
+  const curStep = navSteps.length ? navSteps[Math.min(navIdx, navSteps.length - 1)] : null;
+  const stepDistKm = curStep && nurse ? haversineKm(nurse, curStep.loc) : null;
 
   return (
     <View style={s.root}>
@@ -155,23 +210,31 @@ export default function ProTrackingScreen() {
             destination={dest ?? undefined}
             route={route ?? undefined}
             fitCoords={fit}
+            follow={!!nurse}
             radiusKm={0}
             nightAuto
           />
         )}
 
-        {/* Top bar */}
-        <View style={s.topBar} pointerEvents="box-none">
+        {/* Turn-by-turn banner (our own map — no external app) */}
+        <View style={s.navBar} pointerEvents="box-none">
           <TouchableOpacity style={s.iconBtn} onPress={() => router.back()} accessibilityLabel="Retour">
             <ArrowLeft size={20} color="#1F2937" strokeWidth={2.4} />
           </TouchableOpacity>
-          <View style={s.pill}>
-            <View style={s.pillDot} />
-            <Text style={s.pillTxt}>
-              {distanceKm != null ? `${distanceKm.toFixed(1)} km · ~${etaMin} min` : "Localisation…"}
-            </Text>
+          <View style={s.navCard}>
+            <View style={s.navIcon}>
+              <StepIcon dir={curStep?.dir ?? "straight"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.navInstruction} numberOfLines={2}>
+                {curStep ? curStep.instruction : nurse ? "Calcul de l'itinéraire…" : "Localisation…"}
+              </Text>
+              <Text style={s.navSub}>
+                {stepDistKm != null ? `${fmtDist(stepDistKm)} · ` : ""}
+                {distanceKm != null ? `${distanceKm.toFixed(1)} km au total · ~${etaMin} min` : ""}
+              </Text>
+            </View>
           </View>
-          <View style={{ width: 44 }} />
         </View>
       </View>
 
@@ -201,17 +264,6 @@ export default function ProTrackingScreen() {
 
         <View style={s.actions}>
           <TouchableOpacity
-            style={[s.actBtn, s.actPrimary]}
-            onPress={() => {
-              if (!openNavigation({ lat: dest?.lat, lng: dest?.lng, address: booking?.address })) {
-                showToast("Destination indisponible");
-              }
-            }}
-          >
-            <Navigation size={17} color="#FFFFFF" strokeWidth={2.2} />
-            <Text style={s.actPrimaryTxt}>Naviguer</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[s.actBtn, s.actGhost]}
             onPress={() => {
               if (patient?.phone) void Linking.openURL(`tel:${patient.phone}`);
@@ -219,7 +271,7 @@ export default function ProTrackingScreen() {
             }}
           >
             <Phone size={17} color={NAVY} strokeWidth={2.2} />
-            <Text style={s.actGhostTxt}>Appeler</Text>
+            <Text style={s.actGhostTxt}>Appeler le patient</Text>
           </TouchableOpacity>
         </View>
 
@@ -236,6 +288,14 @@ export default function ProTrackingScreen() {
       </View>
     </View>
   );
+}
+
+function StepIcon({ dir }: { dir: NavStep["dir"] }) {
+  const c = "#FFFFFF";
+  if (dir === "left") return <CornerUpLeft size={24} color={c} strokeWidth={2.6} />;
+  if (dir === "right") return <CornerUpRight size={24} color={c} strokeWidth={2.6} />;
+  if (dir === "arrive") return <Flag size={22} color={c} strokeWidth={2.6} />;
+  return <ArrowUp size={24} color={c} strokeWidth={2.6} />;
 }
 
 const s = StyleSheet.create({
@@ -259,6 +319,17 @@ const s = StyleSheet.create({
   },
   pillDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#22D3EE" },
   pillTxt: { fontSize: 14, fontWeight: "700", color: "#111827" },
+
+  navBar: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 50, paddingHorizontal: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  navCard: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: NAVY, borderRadius: 18, padding: 12, minHeight: 64,
+    shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 8,
+  },
+  navIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
+  navInstruction: { color: "#FFFFFF", fontSize: 16, fontWeight: "800", lineHeight: 20 },
+  navSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 },
+
   sheet: {
     backgroundColor: "#FFFFFF", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     marginTop: -24, paddingHorizontal: 22, paddingTop: 10, paddingBottom: 30,
