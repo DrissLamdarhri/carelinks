@@ -36,6 +36,7 @@ export default function ProLayout() {
     } as const;
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: PRIMARY,

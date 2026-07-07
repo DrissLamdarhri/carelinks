@@ -173,7 +173,7 @@ export default function WaitingOffersScreen() {
   return (
     <View style={[styles.root, { backgroundColor: isKine ? theme.surface : Colors.surfaceWarm }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace("/patient")} style={styles.closeBtn}>
+        <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace("/patient/bookings"))} style={styles.closeBtn}>
           <X size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Recherche en cours</Text>

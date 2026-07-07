@@ -37,6 +37,7 @@ function PatientTabs() {
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: PRIMARY,

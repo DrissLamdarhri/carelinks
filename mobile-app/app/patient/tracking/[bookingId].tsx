@@ -1026,7 +1026,7 @@ export default function LiveTrackingScreen() {
           {/* X button — top left */}
           <TouchableOpacity
             style={s.closeBtn}
-            onPress={() => router.replace("/patient")}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/patient/bookings"))}
             accessibilityRole="button"
             accessibilityLabel="Fermer le suivi"
           >
