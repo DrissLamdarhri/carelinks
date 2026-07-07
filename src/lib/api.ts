@@ -7,7 +7,8 @@ import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { supabase } from "./supabase";
 
 const BASE = `https://${projectId}.supabase.co/functions/v1/server/make-server-aa5d1aa6`;
-const ADMIN_KEY = "carelink-admin-2024";
+// Admin key for the Edge Function — set VITE_ADMIN_KEY at build time (no committed secret).
+const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string | undefined) ?? "";
 
 async function getToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -172,10 +173,22 @@ export async function rateBooking(bookingId: string, rating: number, comment?: s
 // ── Admin ────────────────────────────────────────────────────────────────────
 
 export async function adminLogin(email: string, password: string) {
-  // Simple credential validation for demo admin account
-  // In production, this would verify against a real admin user in the database
-  if (email !== "admin@carelink.ma" || password !== "CareLinkAdmin2024!") {
+  // Real auth: sign in with Supabase, then require role='admin' (no hardcoded creds).
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error || !data.user) {
     throw new Error("Identifiants incorrects");
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (profile?.role !== "admin") {
+    await supabase.auth.signOut();
+    throw new Error("Accès réservé aux administrateurs");
   }
   return { success: true, message: "Admin connecté" };
 }
