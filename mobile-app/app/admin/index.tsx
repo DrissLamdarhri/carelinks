@@ -1,31 +1,52 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet } from "react-native";
+import { ActivityIndicator, View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Shield, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-
-const ADMIN_CREDENTIALS = {
-  email: "admin@carelink.ma",
-  password: "CareLinkAdmin2024!",
-};
+import { supabase } from "@/lib/supabase";
 
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !submitting;
 
-  const handleLogin = () => {
-    if (email.trim() === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-      setErrorMessage(null);
-      router.replace("/admin/dashboard");
-      return;
+  // Real auth: sign in with Supabase, then require role='admin' (server-side RLS
+  // + role gate). No hardcoded credentials.
+  const handleLogin = async () => {
+    if (!canSubmit) return;
+    setErrorMessage(null);
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (error || !data.user) {
+        setErrorMessage("Identifiants incorrects.");
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (profile?.role === "admin") {
+        router.replace("/admin/dashboard");
+      } else {
+        await supabase.auth.signOut();
+        setErrorMessage("Accès réservé aux administrateurs.");
+      }
+    } catch {
+      setErrorMessage("Connexion impossible. Réessayez.");
+    } finally {
+      setSubmitting(false);
     }
-    setErrorMessage("Identifiants incorrects.");
   };
 
   return (
@@ -47,20 +68,11 @@ export default function AdminLoginScreen() {
           <Text style={styles.title}>Connexion Admin</Text>
           <Text style={styles.subtitle}>Accès réservé aux administrateurs CareLink</Text>
 
-          <View style={styles.demoBox}>
-            <Shield size={18} color={Colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.demoTitle}>Identifiants de démonstration</Text>
-              <Text style={styles.demoText}>{ADMIN_CREDENTIALS.email}</Text>
-              <Text style={styles.demoText}>{ADMIN_CREDENTIALS.password}</Text>
-            </View>
-          </View>
-
           <Text style={styles.label}>Adresse email</Text>
           <View style={styles.inputWrap}>
             <Mail size={18} color={Colors.textMuted} />
             <TextInput
-              placeholder="admin@carelink.ma"
+              placeholder="Votre email administrateur"
               value={email}
               onChangeText={setEmail}
               style={styles.input}
@@ -100,8 +112,14 @@ export default function AdminLoginScreen() {
             disabled={!canSubmit}
             style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
           >
-            <Shield size={18} color="white" />
-            <Text style={styles.submitText}>Accéder au tableau de bord</Text>
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Shield size={18} color="white" />
+                <Text style={styles.submitText}>Accéder au tableau de bord</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           <View style={styles.securityRow}>
