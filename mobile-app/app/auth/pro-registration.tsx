@@ -68,26 +68,22 @@ export default function ProRegistrationScreen() {
     let mounted = true;
     (async () => {
       try {
-        const { data, error } = await supabase.from("services").select("name,category,is_active");
+        // Try to load services from DB; if schema is incomplete, use fallback
+        const { data, error } = await supabase.from("services").select("name,is_active");
         if (error) {
-          console.warn("Failed to load services:", error);
+          console.warn("Failed to load services (using fallbacks):", error);
           return;
         }
         const map: Record<string, string[]> = {};
         (data ?? []).forEach((s: any) => {
           if (s.is_active === false) return;
-          const cat = s.category ?? "Autre";
+          const cat = "Services"; // Default category since DB doesn't provide it
           map[cat] = map[cat] || [];
           map[cat].push(s.name);
-          const eng = frenchToKey[cat];
-          if (eng) {
-            map[eng] = map[eng] || [];
-            map[eng].push(s.name);
-          }
         });
         if (mounted) setServicesMap(map);
       } catch (e) {
-        console.warn("Failed to load services:", e);
+        console.warn("Failed to load services (using fallbacks):", e);
       }
     })();
     return () => {
