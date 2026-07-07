@@ -34,7 +34,7 @@ export function KycModerationQueue() {
         {
           headers: {
             Authorization: token ? `Bearer ${token}` : "",
-            "X-Admin-Key": "carelink-admin-2024",
+            "X-Admin-Key": (import.meta.env.VITE_ADMIN_KEY as string | undefined) ?? "",
           },
         }
       );
@@ -62,7 +62,7 @@ export function KycModerationQueue() {
             {
               headers: {
                 Authorization: token ? `Bearer ${token}` : "",
-                "X-Admin-Key": "carelink-admin-2024",
+                "X-Admin-Key": (import.meta.env.VITE_ADMIN_KEY as string | undefined) ?? "",
               },
             }
           );

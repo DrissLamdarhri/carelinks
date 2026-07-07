@@ -1321,7 +1321,7 @@ export function AdminPanel() {
             {!sidebarCollapsed && (
               <div className="hidden xl:block">
                 <p className="text-xs text-[#1A1A1A]" style={{ fontWeight: 600 }}>Admin</p>
-                <p className="text-xs text-[#888780]">admin@carelink.ma</p>
+                <p className="text-xs text-[#888780]">Administration CareLink</p>
               </div>
             )}
           </div>
