@@ -1,318 +1,225 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { ArrowUpRight, Banknote, Calendar, TrendingUp } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Wallet } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { showToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
-import { db } from "@/lib/db/dal";
-import type { Booking } from "@/lib/db/types";
+import { db, type Payment, type Payout } from "@/lib/db/dal";
 
-const COMMISSION_RATE = 0.15;
+const NAVY = "#0D0870";
+const CREAM = "#EDE5CC";
+const COMMISSION_PCT = 20;
+const GREEN = "#16A34A";
+const RED = "#E24B4A";
+
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
+const payoutLabel = (s: Payout["status"]) =>
+  s === "paid" ? "Payé" : s === "processing" ? "En cours" : s === "rejected" ? "Refusé" : "Demandé";
+
+type Move = {
+  id: string;
+  kind: "prestation" | "commission" | "payout";
+  label: string;
+  sub: string;
+  amount: number;
+  date: string;
+};
 
 export default function ProEarningsScreen() {
   const { user } = useAuth();
-  const [period, setPeriod] = useState<"week" | "month">("week");
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+
+  const reload = async () => {
+    if (!user?.id) { setLoading(false); return; }
+    try {
+      const [pays, pos] = await Promise.all([
+        db.payments.listForPro(user.id).catch(() => [] as Payment[]),
+        db.payouts.listForPro(user.id).catch(() => [] as Payout[]),
+      ]);
+      setPayments(pays);
+      setPayouts(pos);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      if (!user?.id) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setErrorMessage(null);
-      try {
-        await db.pros.upsert({ id: user.id, specialty: "nurse" });
-        const rows = await db.bookings.listForPro(user.id);
-        setBookings(rows);
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Chargement des revenus impossible.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
+    setLoading(true);
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const now = new Date();
-  const periodStart = new Date(now);
-  if (period === "week") {
-    periodStart.setDate(now.getDate() - 7);
-  } else {
-    periodStart.setDate(1);
-    periodStart.setHours(0, 0, 0, 0);
-  }
+  // ── Wallet math (real captured money, net of commission, minus withdrawals) ──
+  const netOf = (p: Payment) => Number(p.amount_mad) - Number(p.commission_mad);
+  const captured = useMemo(() => payments.filter((p) => p.status === "captured"), [payments]);
+  const earned = captured.reduce((s, p) => s + netOf(p), 0);
+  const pendingNet = payments.filter((p) => p.status === "authorized").reduce((s, p) => s + netOf(p), 0);
+  const activePayouts = payouts.filter((p) => p.status !== "rejected");
+  const withdrawn = activePayouts.reduce((s, p) => s + Number(p.amount_mad), 0);
+  const available = Math.max(0, earned - withdrawn);
 
-  const filteredBookings = useMemo(
-    () =>
-      bookings.filter((booking) => {
-        if (booking.status !== "completed") return false;
-        try {
-          return new Date(booking.created_at) >= periodStart;
-        } catch {
-          return false;
-        }
-      }),
-    [bookings, periodStart]
-  );
+  const movements: Move[] = useMemo(() => {
+    const list: Move[] = [];
+    for (const p of captured) {
+      list.push({ id: `${p.id}-p`, kind: "prestation", label: "Prestation à domicile", sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
+      list.push({ id: `${p.id}-c`, kind: "commission", label: `Commission CareLink (${COMMISSION_PCT}%)`, sub: `sur ${p.amount_mad} MAD`, amount: -Number(p.commission_mad), date: p.created_at });
+    }
+    for (const po of activePayouts) {
+      list.push({ id: po.id, kind: "payout", label: "Retrait", sub: payoutLabel(po.status), amount: -Number(po.amount_mad), date: po.created_at });
+    }
+    return list.sort((a, b) => b.date.localeCompare(a.date));
+  }, [captured, activePayouts]);
 
-  const allCompleted = useMemo(
-    () => bookings.filter((booking) => booking.status === "completed"),
-    [bookings]
-  );
-
-  const gross = filteredBookings.reduce((sum, booking) => {
-    const value = booking.final_price_mad ?? booking.budget_max_mad ?? 0;
-    return sum + Number(value);
-  }, 0);
-  const commission = Math.round(gross * COMMISSION_RATE);
-  const net = gross - commission;
-
-  const chartDays = useMemo(() => {
-    const dayMap: Record<string, number> = {};
-    filteredBookings.forEach((booking) => {
-      const day = booking.created_at.slice(0, 10);
-      const value = Number(booking.final_price_mad ?? booking.budget_max_mad ?? 0);
-      dayMap[day] = (dayMap[day] || 0) + value;
-    });
-    return Object.entries(dayMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-7);
-  }, [filteredBookings]);
-
-  const maxBar = Math.max(...chartDays.map(([, value]) => value), 1);
+  const requestPayout = () => {
+    if (!user?.id || requesting) return;
+    if (available < 50) { showToast("Minimum 50 MAD pour un retrait."); return; }
+    Alert.alert("Demander un retrait", `Retirer ${available} MAD vers votre compte bancaire ?`, [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Confirmer",
+        onPress: async () => {
+          setRequesting(true);
+          try {
+            await db.payouts.request({ professional_id: user.id, amount_mad: available, method: "bank" });
+            showToast("Demande de retrait envoyée ✓");
+            await reload();
+          } catch {
+            showToast("Demande impossible");
+          } finally {
+            setRequesting(false);
+          }
+        },
+      },
+    ]);
+  };
 
   if (loading) {
-    return (
-      <View style={styles.loadingRoot}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+    return <View style={s.loadingRoot}><ActivityIndicator size="large" color={NAVY} /></View>;
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <Text style={styles.heroSub}>
-          Revenus nets ({period === "week" ? "7 derniers jours" : "ce mois"})
-        </Text>
-        <Text style={styles.heroValue}>
-          {net} <Text style={styles.heroUnit}>MAD</Text>
-        </Text>
-        <View style={styles.heroCards}>
-          <View style={styles.heroCard}>
-            <Banknote size={14} color="rgba(255,255,255,0.65)" />
-            <Text style={styles.heroCardValue}>{gross} MAD</Text>
-            <Text style={styles.heroCardLabel}>Brut</Text>
+    <ScrollView style={s.root} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <Text style={s.title}>Revenus</Text>
+
+      {/* Wallet card */}
+      <LinearGradient colors={[NAVY, "#241A9E"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.wallet}>
+        <View style={s.walletTop}>
+          <Wallet size={16} color="rgba(255,255,255,0.7)" />
+          <Text style={s.walletLbl}>Solde du portefeuille</Text>
+        </View>
+        <Text style={s.walletVal}>{available.toLocaleString("fr-MA")} <Text style={s.walletUnit}>MAD</Text></Text>
+        <View style={s.walletRow}>
+          <View style={s.walletBox}>
+            <Text style={s.walletBoxLbl}>En attente de capture</Text>
+            <Text style={s.walletBoxVal}>{pendingNet} MAD</Text>
           </View>
-          <View style={styles.heroCard}>
-            <TrendingUp size={14} color="rgba(255,255,255,0.65)" />
-            <Text style={styles.heroCardValue}>-{commission} MAD</Text>
-            <Text style={styles.heroCardLabel}>Commission (15%)</Text>
-          </View>
+          <TouchableOpacity style={[s.walletBox, s.walletAction, available < 50 && { opacity: 0.55 }]} onPress={requestPayout} disabled={available < 50 || requesting}>
+            {requesting ? (
+              <ActivityIndicator color={NAVY} />
+            ) : (
+              <>
+                <Text style={s.walletActionLbl}>Action</Text>
+                <View style={s.walletActionRow}><ArrowUpRight size={15} color={NAVY} strokeWidth={2.4} /><Text style={s.walletActionTxt}>Retirer</Text></View>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+        <View style={s.walletBlob} />
+      </LinearGradient>
+
+      {/* Stats */}
+      <View style={s.statsRow}>
+        <View style={s.statCard}>
+          <CheckCircle2 size={17} color={NAVY} />
+          <Text style={s.statVal}>{captured.length}</Text>
+          <Text style={s.statLbl}>Prestations payées</Text>
+        </View>
+        <View style={s.statCard}>
+          <ArrowUpRight size={17} color={GREEN} />
+          <Text style={s.statVal}>{earned} MAD</Text>
+          <Text style={s.statLbl}>Total gagné (net)</Text>
         </View>
       </View>
 
-      <View style={styles.periodSwitch}>
-        <TouchableOpacity
-          style={[styles.periodBtn, period === "week" && styles.periodBtnActive]}
-          onPress={() => setPeriod("week")}
-        >
-          <Text style={[styles.periodText, period === "week" && styles.periodTextActive]}>7 jours</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.periodBtn, period === "month" && styles.periodBtnActive]}
-          onPress={() => setPeriod("month")}
-        >
-          <Text style={[styles.periodText, period === "month" && styles.periodTextActive]}>Ce mois</Text>
-        </TouchableOpacity>
-      </View>
-
-      {chartDays.length > 0 ? (
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Revenus par jour</Text>
-          <View style={styles.chartBars}>
-            {chartDays.map(([day, value]) => (
-              <View key={day} style={styles.chartCol}>
-                <View style={[styles.chartBar, { height: `${Math.max((value / maxBar) * 100, 8)}%` }]} />
-                <Text style={styles.chartLabel}>
-                  {new Date(day).toLocaleDateString("fr-MA", { day: "numeric" })}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      <View style={styles.summaryGrid}>
-        <View style={styles.summaryCard}>
-          <Calendar size={18} color={Colors.primary} />
-          <Text style={styles.summaryValue}>{allCompleted.length}</Text>
-          <Text style={styles.summaryLabel}>Missions terminées</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <ArrowUpRight size={18} color={Colors.accent} />
-          <Text style={styles.summaryValue}>
-            {allCompleted
-              .reduce((sum, booking) => sum + Number(booking.final_price_mad ?? booking.budget_max_mad ?? 0), 0)
-              .toFixed(0)}{" "}
-            MAD
-          </Text>
-          <Text style={styles.summaryLabel}>Total cumulé</Text>
-        </View>
-      </View>
-
-      <Text style={styles.listTitle}>Historique des transactions</Text>
-      {filteredBookings.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucune mission terminée sur cette période</Text>
+      {/* Movements */}
+      <Text style={s.sectionTitle}>Mouvements du portefeuille</Text>
+      {movements.length === 0 ? (
+        <View style={s.emptyCard}>
+          <Text style={s.emptyTxt}>Aucun mouvement pour l'instant.</Text>
+          <Text style={s.emptySub}>Vos prestations payées apparaîtront ici.</Text>
         </View>
       ) : (
-        filteredBookings.map((booking) => {
-          const grossValue = Number(booking.final_price_mad ?? booking.budget_max_mad ?? 0);
-          const fee = Math.round(grossValue * COMMISSION_RATE);
-          const netValue = grossValue - fee;
+        movements.map((m) => {
+          const credit = m.amount >= 0;
           return (
-            <View key={booking.id} style={styles.txCard}>
-              <View style={styles.txIconWrap}>
-                <Banknote size={18} color={Colors.primary} />
+            <View key={m.id} style={s.moveRow}>
+              <View style={[s.moveIcon, m.kind === "prestation" ? s.moveIconCredit : s.moveIconDebit]}>
+                {credit ? <ArrowUpRight size={16} color={NAVY} /> : <ArrowDownLeft size={16} color={Colors.textMuted} />}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.txTitle}>Booking #{booking.id.slice(0, 8)}</Text>
-                <Text style={styles.txMeta}>
-                  {booking.specialty.replaceAll("_", " ")} ·{" "}
-                  {new Date(booking.created_at).toLocaleDateString("fr-MA", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.moveLbl}>{m.label}</Text>
+                <Text style={s.moveSub}>{m.sub}</Text>
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.txValue}>+{netValue} MAD</Text>
-                <Text style={styles.txFee}>-{fee} comm.</Text>
-              </View>
+              <Text style={[s.moveAmt, { color: credit ? GREEN : RED }]}>
+                {credit ? "+" : "−"}{Math.abs(m.amount)} MAD
+              </Text>
             </View>
           );
         })
       )}
-
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      <View style={{ height: 20 }} />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingBottom: 20 },
   loadingRoot: { flex: 1, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center" },
-  hero: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingTop: 26,
-    paddingBottom: 20,
-  },
-  heroSub: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginBottom: 2 },
-  heroValue: { color: "white", fontSize: 36, fontWeight: "800", marginBottom: 12 },
-  heroUnit: { fontSize: 16, fontWeight: "500" },
-  heroCards: { flexDirection: "row", gap: 8 },
-  heroCard: {
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: 10,
-  },
-  heroCardValue: { color: "white", fontSize: 14, fontWeight: "600", marginTop: 4 },
-  heroCardLabel: { color: "rgba(255,255,255,0.55)", fontSize: 10, marginTop: 2 },
-  periodSwitch: {
-    marginHorizontal: 20,
-    marginTop: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.input,
-    padding: 4,
-    flexDirection: "row",
-  },
-  periodBtn: {
-    flex: 1,
-    height: 36,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  periodBtnActive: { backgroundColor: "white" },
-  periodText: { color: Colors.textMuted, fontSize: 13 },
-  periodTextActive: { color: Colors.textPrimary, fontWeight: "600" },
-  chartCard: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    borderRadius: 16,
-    backgroundColor: "white",
-    padding: 14,
-  },
-  chartTitle: { color: Colors.textMuted, fontSize: 12, marginBottom: 10, fontWeight: "500" },
-  chartBars: { height: 72, flexDirection: "row", alignItems: "flex-end", gap: 6 },
-  chartCol: { flex: 1, alignItems: "center", gap: 4 },
-  chartBar: { width: "100%", borderTopLeftRadius: 6, borderTopRightRadius: 6, backgroundColor: Colors.primary },
-  chartLabel: { color: Colors.textSubtle, fontSize: 9 },
-  summaryGrid: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 10,
-  },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: "white",
-    padding: 12,
-  },
-  summaryValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700", marginTop: 6 },
-  summaryLabel: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
-  listTitle: {
-    marginHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 8,
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  emptyCard: {
-    marginHorizontal: 20,
-    borderRadius: 14,
-    backgroundColor: "white",
-    padding: 16,
-    alignItems: "center",
-  },
-  emptyText: { color: Colors.textMuted, fontSize: 13 },
-  txCard: {
-    marginHorizontal: 20,
-    marginBottom: 8,
-    borderRadius: 14,
-    backgroundColor: "white",
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  txIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceWarm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  txTitle: { color: Colors.textPrimary, fontSize: 13, fontWeight: "500" },
-  txMeta: { color: Colors.textMuted, fontSize: 11, textTransform: "capitalize" },
-  txValue: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
-  txFee: { color: Colors.textSubtle, fontSize: 10 },
-  errorText: { marginHorizontal: 20, marginTop: 6, color: Colors.danger, fontSize: 12 },
+  content: { padding: 20, paddingTop: 52 },
+  title: { fontSize: 26, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular", marginBottom: 14 },
+
+  wallet: { borderRadius: 22, padding: 20, overflow: "hidden" },
+  walletBlob: { position: "absolute", top: -30, right: -25, width: 140, height: 140, borderRadius: 70, backgroundColor: "rgba(255,255,255,0.07)" },
+  walletTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  walletLbl: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "600" },
+  walletVal: { color: "#FFF", fontSize: 38, fontWeight: "800", marginTop: 6, marginBottom: 16 },
+  walletUnit: { fontSize: 16, fontWeight: "600", color: "rgba(255,255,255,0.7)" },
+  walletRow: { flexDirection: "row", gap: 10 },
+  walletBox: { flex: 1, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.1)", padding: 12, justifyContent: "center", minHeight: 62 },
+  walletBoxLbl: { color: "rgba(255,255,255,0.6)", fontSize: 11 },
+  walletBoxVal: { color: "#FFF", fontSize: 16, fontWeight: "800", marginTop: 3 },
+  walletAction: { backgroundColor: "#FFF" },
+  walletActionLbl: { color: Colors.textMuted, fontSize: 11 },
+  walletActionRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 3 },
+  walletActionTxt: { color: NAVY, fontSize: 16, fontWeight: "800" },
+
+  statsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  statCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, padding: 13 },
+  statVal: { color: Colors.textPrimary, fontSize: 18, fontWeight: "800", marginTop: 6 },
+  statLbl: { color: Colors.textMuted, fontSize: 11.5, marginTop: 2 },
+
+  sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "800", marginTop: 20, marginBottom: 10 },
+  emptyCard: { backgroundColor: "#FFF", borderRadius: 16, padding: 20, alignItems: "center", gap: 4 },
+  emptyTxt: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
+  emptySub: { color: Colors.textMuted, fontSize: 12.5 },
+
+  moveRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FFF", borderRadius: 16, padding: 13, marginBottom: 8 },
+  moveIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  moveIconCredit: { backgroundColor: CREAM },
+  moveIconDebit: { backgroundColor: "#F1F1F4" },
+  moveLbl: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
+  moveSub: { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
+  moveAmt: { fontSize: 14.5, fontWeight: "800" },
 });

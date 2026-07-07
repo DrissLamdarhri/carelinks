@@ -29,6 +29,8 @@ export interface Profile {
   policy_version?: string | null;
   policy_accepted_at?: ISODate | null;
   consent_share_data?: boolean | null;
+  cancel_warnings?: number | null;
+  is_suspended?: boolean | null;
   consent_reminders?: boolean | null;
   consent_analytics?: boolean | null;
   created_at: ISODate;

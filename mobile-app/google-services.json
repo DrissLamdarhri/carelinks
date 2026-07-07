@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "394139233167",
+    "project_id": "carelink-647f9",
+    "storage_bucket": "carelink-647f9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:394139233167:android:294f28a01baf579af9f9fa",
+        "android_client_info": {
+          "package_name": "ma.carelink.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2EnIQOFUxdbYwHE8zpgToDJCFmVMthjs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

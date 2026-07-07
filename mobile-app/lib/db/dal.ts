@@ -166,6 +166,12 @@ export const bookings = {
     if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
     return unwrap(await supabase.from("bookings").update(patch).eq("id", id).select("*").single());
   },
+  // Late cancellation (pro en route): 5 MAD penalty + a warning; 2 → suspension.
+  async cancelWithPenalty(id: UUID): Promise<{ warnings: number; suspended: boolean; penalty_mad: number }> {
+    const { data, error } = await supabase.rpc("cancel_with_penalty", { p_booking: id });
+    if (error) throw error;
+    return data as { warnings: number; suspended: boolean; penalty_mad: number };
+  },
 };
 
 export const bids = {
@@ -332,6 +338,69 @@ export const notificationSettings = {
   },
 };
 
+// ── Payments & payouts ──────────────────────────────────────────────────────
+export type PaymentProvider = "cmi" | "stripe" | "cash";
+export type PaymentStatus = "pending" | "authorized" | "captured" | "refunded" | "failed";
+export type Payment = {
+  id: UUID;
+  booking_id: UUID;
+  patient_id: UUID;
+  professional_id: UUID | null;
+  amount_mad: number;
+  commission_mad: number;
+  provider: PaymentProvider;
+  provider_ref: string | null;
+  status: PaymentStatus;
+  created_at: string;
+  updated_at: string;
+};
+export type PayoutStatus = "requested" | "processing" | "paid" | "rejected";
+export type Payout = {
+  id: UUID;
+  professional_id: UUID;
+  amount_mad: number;
+  status: PayoutStatus;
+  method: string | null;
+  note: string | null;
+  created_at: string;
+  processed_at: string | null;
+};
+
+export const payments = {
+  async create(
+    input: Pick<Payment, "booking_id" | "patient_id" | "amount_mad" | "provider"> & {
+      professional_id?: UUID | null;
+    }
+  ): Promise<Payment> {
+    return unwrap(
+      await supabase.from("payments").insert({ status: "authorized", ...input }).select("*").single()
+    );
+  },
+  async listForPatient(patientId: UUID): Promise<Payment[]> {
+    return unwrap(
+      await supabase.from("payments").select("*").eq("patient_id", patientId).order("created_at", { ascending: false })
+    );
+  },
+  async listForPro(proId: UUID): Promise<Payment[]> {
+    return unwrap(
+      await supabase.from("payments").select("*").eq("professional_id", proId).order("created_at", { ascending: false })
+    );
+  },
+};
+
+export const payouts = {
+  async listForPro(proId: UUID): Promise<Payout[]> {
+    return unwrap(
+      await supabase.from("payouts").select("*").eq("professional_id", proId).order("created_at", { ascending: false })
+    );
+  },
+  async request(input: { professional_id: UUID; amount_mad: number; method?: string; note?: string }): Promise<Payout> {
+    return unwrap(
+      await supabase.from("payouts").insert({ status: "requested", ...input }).select("*").single()
+    );
+  },
+};
+
 export const db = {
   profiles,
   patients,
@@ -342,4 +411,6 @@ export const db = {
   messages,
   addresses,
   notificationSettings,
+  payments,
+  payouts,
 };

@@ -124,8 +124,8 @@ Successfully ported the CareLink web design to a fully functional React Native m
   - Shield icon branding
   - Admin-specific styling
   - Demo credentials display
-    - Email: admin@carelink.ma
-    - Password: CareLinkAdmin2024!
+    - Email: <your-admin-email>
+    - Password: <set via a real admin account — see security notes>
   - Email input with icon
   - Password input with visibility toggle
   - Forgot password link

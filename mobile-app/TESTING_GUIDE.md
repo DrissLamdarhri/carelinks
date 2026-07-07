@@ -100,8 +100,8 @@ npm start
 **Direct access**: Navigate manually
 - **Header**: Shield icon + "CareLink" + "Tableau de bord admin"
 - **Demo Credentials Box** (beige background):
-  - Email: admin@carelink.ma
-  - Password: CareLinkAdmin2024!
+  - Email: <your-admin-email>
+  - Password: <set via a real admin account — see security notes>
 - **Form Fields**:
   - Email input with envelope icon
   - Password input with visibility toggle

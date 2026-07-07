@@ -37,65 +37,14 @@ export function useYogaSessions() {
         setLoading(true);
         setError(null);
 
-        // Fetch yoga sessions (without requiring instructor to exist)
-        let sessionsData: any[] | null = null;
-        try {
-          const res = await supabase
-            .from('yoga_sessions')
-            .select(`
-              id,
-              title,
-              description,
-              level,
-              image_url,
-              starts_at,
-              duration_min,
-              capacity,
-              price_mad,
-              address,
-              is_online,
-              meeting_url
-            `)
-            .gt('starts_at', new Date().toISOString()) // Only future sessions
-            .order('starts_at', { ascending: true })
-            .limit(50);
-          if (res.error) throw res.error;
-          sessionsData = res.data;
-        } catch (err: any) {
-          // Detect missing column errors (e.g. "column yoga_sessions.image_url does not exist")
-          const errText = String(err?.message || err || '');
-          const missingCols = [...errText.matchAll(/yoga_sessions\.([a-zA-Z0-9_]+)/g)].map((m: any) => m[1]);
-
-          const baseFields = [
-            'id','title','description','level','image_url','starts_at','duration_min','capacity','price_mad','address','is_online','meeting_url'
-          ];
-
-          let fieldsToSelect = baseFields.slice();
-
-          if (missingCols.length > 0) {
-            // Remove any reported missing columns and retry
-            fieldsToSelect = fieldsToSelect.filter(f => !missingCols.includes(f));
-          } else if (err && err.code === '42703') {
-            // Unknown missing column: conservative fallback—drop commonly-optional fields
-            fieldsToSelect = fieldsToSelect.filter(f => !['level','image_url','duration_min'].includes(f));
-          } else {
-            throw err;
-          }
-
-          if (fieldsToSelect.length === 0) {
-            throw new Error('Schema incompatibility: no selectable yoga_sessions columns');
-          }
-
-          const selectStr = fieldsToSelect.join(',');
-          const res2 = await supabase
-            .from('yoga_sessions')
-            .select(selectStr)
-            .gt('starts_at', new Date().toISOString())
-            .order('starts_at', { ascending: true })
-            .limit(50);
-          if (res2.error) throw res2.error;
-          sessionsData = res2.data;
-        }
+        // Fetch yoga sessions (use a safe wildcard select so missing optional columns don't break queries)
+        const { data: sessionsData, error: sessionsError } = await supabase
+          .from('yoga_sessions')
+          .select('*')
+          .gt('starts_at', new Date().toISOString()) // Only future sessions
+          .order('starts_at', { ascending: true })
+          .limit(50);
+        if (sessionsError) throw sessionsError;
 
         if (!mounted) return;
 

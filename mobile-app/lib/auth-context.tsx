@@ -19,6 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { registerExpoPushToken } from "./push-native";
 import { getOAuthRedirectUrl, getPasswordResetRedirectUrl } from "@/lib/auth-redirect";
 import {
   enrollTotp,
@@ -288,6 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(data.session);
         setUser(data.session?.user ?? null);
         if (data.session?.user) {
+          void registerExpoPushToken(data.session.user.id);
           fetchProfile(data.session.user).finally(() => setLoading(false));
         } else {
           setLoading(false);
@@ -304,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
+        void registerExpoPushToken(newSession.user.id);
         await fetchProfile(newSession.user);
       } else {
         setProfile(null);

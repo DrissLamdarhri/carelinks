@@ -34,13 +34,10 @@ async function loadNotificationsModules() {
 
 export async function registerExpoPushToken(userId: string): Promise<void> {
   const modules = await loadNotificationsModules();
-  if (!modules) return;
+  if (!modules) return; // Expo Go / module unavailable
 
   const { Notifications, Device } = modules;
-  if (!Device.isDevice) {
-    console.log("Push notifications only work on physical devices.");
-    return;
-  }
+  if (!Device.isDevice) return; // emulator — no push
 
   try {
     const { status: existingStatus } =
@@ -57,16 +54,41 @@ export async function registerExpoPushToken(userId: string): Promise<void> {
       return;
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    // EAS builds require the projectId to mint a push token.
+    const projectId =
+      (Constants.expoConfig?.extra as any)?.eas?.projectId ??
+      (Constants as any)?.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     const token = tokenData.data;
 
-    await supabase.from("push_subscriptions").upsert({
+    const { error } = await supabase.from("push_subscriptions").upsert({
       user_id: userId,
       expo_push_token: token,
       platform: Platform.OS,
+      updated_at: new Date().toISOString(),
     } as any);
+    if (error) console.warn("[push] token upsert failed:", error.message);
+    else console.log("[push] notifications registered ✓");
   } catch (error) {
-    console.warn("Failed to register push token:", error);
+    console.warn("[push] register FAILED:", error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** Fires when the user taps a push notification. Returns the notification's data payload. */
+export function addNotificationTapListener(
+  handler: (data: Record<string, unknown>) => void
+): { remove: () => void } {
+  if (isExpoGo) return { remove: () => {} };
+  try {
+    const Notifications = require("expo-notifications") as NotificationsModule;
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handler((response?.notification?.request?.content?.data ?? {}) as Record<string, unknown>);
+    });
+    return sub;
+  } catch {
+    return { remove: () => {} };
   }
 }
 
