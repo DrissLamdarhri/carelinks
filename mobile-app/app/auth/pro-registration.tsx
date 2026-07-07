@@ -164,8 +164,8 @@ export default function ProRegistrationScreen() {
       if (type === "selfie") {
         const photo = await useTakePhoto();
         if (!photo) { setUploading(null); return; }
-        const fileName = photo.name ?? `selfie-${Date.now()}.jpg`;
-        setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: photo.type ?? "image/jpeg" }]);
+        const fileName = `selfie-${Date.now()}.jpg`;
+        setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: "image/jpeg" }]);
         setSelfie(true);
         setSelfieUrl(photo.uri);
         showToast("Selfie ajouté (upload après inscription)");
