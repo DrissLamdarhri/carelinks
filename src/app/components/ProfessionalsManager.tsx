@@ -964,7 +964,7 @@ export function ProfessionalsManager() {
                               // Bucket is public - use direct URL
                               const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
                               const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
-                              window.open(directUrl, "_self");
+                              window.open(directUrl, "_blank");
                             } catch (e) {
                               console.error("Error opening doc:", e);
                               toast.error("Erreur lors de l'ouverture du document");

@@ -105,9 +105,9 @@ export function KycModerationQueue() {
       // Bucket is public, use direct REST API URL
       const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
       const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${path}`;
-      console.log("[KycModerationQueue] Opening URL in same page:", directUrl);
+      console.log("[KycModerationQueue] Opening URL in new page:", directUrl);
       
-      window.open(directUrl, "_self");
+      window.open(directUrl, "_blank");
       console.log("[KycModerationQueue] Window opened");
     } catch (e) {
       console.error('[KycModerationQueue] Error opening document:', e);
