@@ -1002,16 +1002,20 @@ export function AdminPanel() {
       const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
       
       const insertData: any = {
-        instructor_id: null,
         title: newSession.title,
-        level: newSession.level,
         starts_at,
-        duration_min: 60,
-        capacity: newSession.maxSpots,
         price_mad: newSession.price,
-        description: `Instructeur: ${newSession.instructor}`,
-        address: `data:image/jpeg;base64,${imageBase64.substring(imageBase64.indexOf(',') + 1)}`, // Store image as base64 in address field
       };
+      
+      // Add optional columns carefully
+      if (newSession.instructor) {
+        insertData.description = `Instructeur: ${newSession.instructor}`;
+      }
+      
+      // Store image in address as base64 (workaround)
+      if (imageBase64) {
+        insertData.address = `data:image/jpeg;base64,${imageBase64.substring(imageBase64.indexOf(',') + 1)}`;
+      }
       
       const { data, error } = await supabase
         .from("yoga_sessions")
@@ -1079,11 +1083,37 @@ export function AdminPanel() {
       const session = sessions.find((s) => s.id === id);
       if (!session) return;
       
-      // For yoga, we'll update starts_at to past/future to toggle visibility
-      const isPast = new Date(session.date) < new Date();
+      // Update the session (Realtime will handle refresh)
+      const newStartsAt = new Date(session.date).getTime() < new Date().getTime() 
+        ? new Date(Date.now() + 86400000).toISOString() // Move to tomorrow if past
+        : new Date(Date.now() - 86400000).toISOString(); // Move to yesterday if future
+      
+      const { error } = await supabase
+        .from("yoga_sessions")
+        .update({ starts_at: newStartsAt })
+        .eq("id", id);
+      
+      if (error) throw error;
       toast.info("Statut mis à jour");
+      // Realtime will handle the refresh automatically
     } catch (err: any) {
-      toast.error("Erreur");
+      toast.error("Erreur: " + (err.message || "Impossible de mettre à jour"));
+    }
+  };
+  
+  // Edit yoga session
+  const editSession = async (id: string, updates: any) => {
+    try {
+      const { error } = await supabase
+        .from("yoga_sessions")
+        .update(updates)
+        .eq("id", id);
+      
+      if (error) throw error;
+      toast.success("Séance mise à jour");
+      // Realtime will handle the refresh automatically
+    } catch (err: any) {
+      toast.error("Erreur: " + (err.message || "Impossible de mettre à jour"));
     }
   };
 
