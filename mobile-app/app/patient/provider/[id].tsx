@@ -21,6 +21,7 @@ import {
   Star,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { ReviewsList } from "@/components/ReviewsList";
 import { db } from "@/lib/db/dal";
 import type { Professional, Profile } from "@/lib/db/types";
 import { mockProfessionals } from "@/lib/mock-data";
@@ -180,6 +181,8 @@ export default function ProviderProfileScreen() {
             ponctuelle.
           </Text>
         </View>
+
+        {providerId ? <ReviewsList professionalId={providerId} /> : null}
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </ScrollView>
