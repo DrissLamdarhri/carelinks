@@ -14,7 +14,6 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
-import { supabase } from "@/lib/supabase";
 
 type PaymentProvider = "cmi" | "stripe" | "cash";
 
@@ -90,17 +89,20 @@ export default function PaymentSheetScreen() {
         return;
       }
 
-      const { error } = await supabase.from("payments").insert({
+      await db.payments.create({
         booking_id: bookingId,
         patient_id: user.id,
         professional_id: professionalId,
         amount_mad: amountMad,
         provider: selected,
-        status: "authorized",
       });
-      if (error) throw error;
 
-      Alert.alert("Paiement validé", "Votre paiement a bien été autorisé.");
+      Alert.alert(
+        "Paiement validé",
+        selected === "cash"
+          ? "Paiement en espèces enregistré — réglez le professionnel sur place."
+          : "Votre paiement a bien été autorisé. Il sera capturé à la fin de la mission.",
+      );
       router.replace("/patient/bookings");
     } catch (error) {
       const message =

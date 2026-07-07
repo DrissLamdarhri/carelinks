@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,10 +9,11 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowUpRight, Banknote, Calendar, TrendingUp } from "lucide-react-native";
+import { ArrowUpRight, Banknote, Calendar, TrendingUp, Wallet } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
+import { showToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
-import { db } from "@/lib/db/dal";
+import { db, type Payment, type Payout } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
 const COMMISSION_RATE = 0.15;
@@ -26,29 +28,73 @@ export default function ProEarningsScreen() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [requesting, setRequesting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const reload = async () => {
+    if (!user?.id) { setLoading(false); return; }
+    try {
+      const [rows, pays, pos] = await Promise.all([
+        db.bookings.listForPro(user.id),
+        db.payments.listForPro(user.id).catch(() => [] as Payment[]),
+        db.payouts.listForPro(user.id).catch(() => [] as Payout[]),
+      ]);
+      setBookings(rows);
+      setPayments(pays);
+      setPayouts(pos);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Chargement des revenus impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      if (!user?.id) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setErrorMessage(null);
-      try {
-        await db.pros.upsert({ id: user.id, specialty: "nurse" });
-        const rows = await db.bookings.listForPro(user.id);
-        setBookings(rows);
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Chargement des revenus impossible.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
+    setLoading(true);
+    setErrorMessage(null);
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // ── Wallet (real money from captured payments, net of 15% commission) ──────
+  const netOf = (p: Payment) => Number(p.amount_mad) - Number(p.commission_mad);
+  const earned = payments.filter((p) => p.status === "captured").reduce((s, p) => s + netOf(p), 0);
+  const pendingNet = payments.filter((p) => p.status === "authorized").reduce((s, p) => s + netOf(p), 0);
+  const withdrawn = payouts.filter((p) => p.status !== "rejected").reduce((s, p) => s + Number(p.amount_mad), 0);
+  const available = Math.max(0, earned - withdrawn);
+
+  const requestPayout = () => {
+    if (!user?.id || requesting) return;
+    if (available < 50) {
+      showToast("Minimum 50 MAD pour un retrait.");
+      return;
+    }
+    Alert.alert(
+      "Demander un retrait",
+      `Retirer ${available} MAD vers votre compte bancaire ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Confirmer",
+          onPress: async () => {
+            setRequesting(true);
+            try {
+              await db.payouts.request({ professional_id: user.id, amount_mad: available, method: "bank" });
+              showToast("Demande de retrait envoyée ✓");
+              await reload();
+            } catch {
+              showToast("Demande impossible");
+            } finally {
+              setRequesting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const now = new Date();
   const periodStart = new Date(now);
@@ -128,6 +174,53 @@ export default function ProEarningsScreen() {
           </View>
         </View>
       </LinearGradient>
+
+      {/* Wallet */}
+      <View style={styles.walletCard}>
+        <View style={styles.walletTop}>
+          <View style={styles.walletIcon}><Wallet size={20} color={Colors.primary} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.walletLabel}>Solde disponible</Text>
+            <Text style={styles.walletValue}>{available} <Text style={styles.walletUnit}>MAD</Text></Text>
+          </View>
+        </View>
+        {pendingNet > 0 ? (
+          <View style={styles.walletRow}>
+            <Text style={styles.walletMeta}>En attente (missions non terminées)</Text>
+            <Text style={styles.walletMetaVal}>{pendingNet} MAD</Text>
+          </View>
+        ) : null}
+        <TouchableOpacity
+          style={[styles.payoutBtn, (available < 50 || requesting) && { opacity: 0.5 }]}
+          onPress={requestPayout}
+          disabled={available < 50 || requesting}
+        >
+          {requesting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <ArrowUpRight size={17} color="#FFFFFF" strokeWidth={2.4} />
+              <Text style={styles.payoutTxt}>Demander un retrait</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        {payouts.slice(0, 3).map((p) => (
+          <View key={p.id} style={styles.payoutRow}>
+            <Text style={styles.payoutRowTxt}>
+              Retrait · {new Date(p.created_at).toLocaleDateString("fr-MA", { day: "numeric", month: "short" })}
+            </Text>
+            <Text style={styles.payoutRowVal}>{p.amount_mad} MAD</Text>
+            <Text
+              style={[
+                styles.payoutStatus,
+                p.status === "paid" ? styles.psPaid : p.status === "rejected" ? styles.psRej : styles.psPend,
+              ]}
+            >
+              {p.status === "paid" ? "Payé" : p.status === "rejected" ? "Refusé" : p.status === "processing" ? "En cours" : "Demandé"}
+            </Text>
+          </View>
+        ))}
+      </View>
 
       <View style={styles.periodSwitch}>
         <TouchableOpacity
@@ -239,6 +332,27 @@ const styles = StyleSheet.create({
   },
   heroCardValue: { color: "white", fontSize: 14, fontWeight: "600", marginTop: 4 },
   heroCardLabel: { color: "rgba(255,255,255,0.55)", fontSize: 10, marginTop: 2 },
+  walletCard: {
+    marginHorizontal: 20, marginTop: -16, backgroundColor: "white", borderRadius: 20, padding: 16,
+    shadowColor: "#0D0870", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6,
+  },
+  walletTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  walletIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center" },
+  walletLabel: { color: Colors.textMuted, fontSize: 12.5 },
+  walletValue: { color: Colors.primary, fontSize: 26, fontWeight: "800", marginTop: 1 },
+  walletUnit: { fontSize: 13, fontWeight: "700", color: Colors.textMuted },
+  walletRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
+  walletMeta: { color: Colors.textMuted, fontSize: 12.5 },
+  walletMetaVal: { color: Colors.textPrimary, fontSize: 13, fontWeight: "700" },
+  payoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: 14, backgroundColor: Colors.primary, marginTop: 14 },
+  payoutTxt: { color: "#FFFFFF", fontSize: 14.5, fontWeight: "700" },
+  payoutRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#F0F0F0" },
+  payoutRowTxt: { flex: 1, color: Colors.textMuted, fontSize: 12 },
+  payoutRowVal: { color: Colors.textPrimary, fontSize: 13, fontWeight: "700" },
+  payoutStatus: { fontSize: 10.5, fontWeight: "800", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
+  psPaid: { backgroundColor: "#E7F6EC", color: "#16A34A" },
+  psRej: { backgroundColor: "#FDECEC", color: "#E24B4A" },
+  psPend: { backgroundColor: Colors.surfaceWarm, color: Colors.primary },
   periodSwitch: {
     marginHorizontal: 20,
     marginTop: 14,

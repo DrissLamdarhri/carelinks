@@ -79,8 +79,11 @@ export default function RatingScreen() {
         <Text style={styles.successSubtitle}>
           Votre évaluation aide à améliorer la qualité des soins sur CareLink.
         </Text>
-        <TouchableOpacity style={styles.successBtn} onPress={() => router.replace("/patient")}>
-          <Text style={styles.successBtnText}>Retour à l'accueil</Text>
+        <TouchableOpacity
+          style={styles.successBtn}
+          onPress={() => router.replace(bookingId ? `/patient/payment/${bookingId}` : "/patient")}
+        >
+          <Text style={styles.successBtnText}>Procéder au paiement</Text>
         </TouchableOpacity>
       </View>
     );
@@ -117,7 +120,10 @@ export default function RatingScreen() {
 
       {!submitted ? (
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.skipBtn} onPress={() => router.replace("/patient")}>
+          <TouchableOpacity
+            style={styles.skipBtn}
+            onPress={() => router.replace(bookingId ? `/patient/payment/${bookingId}` : "/patient")}
+          >
             <Text style={styles.skipBtnText}>Passer</Text>
           </TouchableOpacity>
         </View>
