@@ -33,18 +33,11 @@ async function loadNotificationsModules() {
 }
 
 export async function registerExpoPushToken(userId: string): Promise<void> {
-  console.log("[push] registerExpoPushToken start | isExpoGo:", isExpoGo);
   const modules = await loadNotificationsModules();
-  if (!modules) {
-    console.log("[push] notifications module unavailable (Expo Go?) — no token");
-    return;
-  }
+  if (!modules) return; // Expo Go / module unavailable
 
   const { Notifications, Device } = modules;
-  if (!Device.isDevice) {
-    console.log("[push] not a physical device — skipping");
-    return;
-  }
+  if (!Device.isDevice) return; // emulator — no push
 
   try {
     const { status: existingStatus } =
@@ -65,12 +58,10 @@ export async function registerExpoPushToken(userId: string): Promise<void> {
     const projectId =
       (Constants.expoConfig?.extra as any)?.eas?.projectId ??
       (Constants as any)?.easConfig?.projectId;
-    console.log("[push] requesting Expo token, projectId:", projectId ?? "(none)");
     const tokenData = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined
     );
     const token = tokenData.data;
-    console.log("[push] got token:", token);
 
     const { error } = await supabase.from("push_subscriptions").upsert({
       user_id: userId,
@@ -78,8 +69,8 @@ export async function registerExpoPushToken(userId: string): Promise<void> {
       platform: Platform.OS,
       updated_at: new Date().toISOString(),
     } as any);
-    if (error) console.warn("[push] upsert FAILED:", error.message);
-    else console.log("[push] token stored ✓ for", userId);
+    if (error) console.warn("[push] token upsert failed:", error.message);
+    else console.log("[push] notifications registered ✓");
   } catch (error) {
     console.warn("[push] register FAILED:", error instanceof Error ? error.message : String(error));
   }
