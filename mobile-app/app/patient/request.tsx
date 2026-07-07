@@ -288,6 +288,14 @@ export default function PatientRequestScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
+      // Block suspended patients (too many late cancellations).
+      const profile = await db.profiles.get(user.id).catch(() => null);
+      if (profile?.is_suspended) {
+        setErrorMessage("Votre compte est suspendu suite à des annulations tardives. Contactez le support.");
+        setSubmitting(false);
+        return;
+      }
+
       // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
       await db.patients.upsert({ id: user.id });
 

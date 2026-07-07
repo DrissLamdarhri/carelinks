@@ -166,6 +166,12 @@ export const bookings = {
     if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
     return unwrap(await supabase.from("bookings").update(patch).eq("id", id).select("*").single());
   },
+  // Late cancellation (pro en route): 5 MAD penalty + a warning; 2 → suspension.
+  async cancelWithPenalty(id: UUID): Promise<{ warnings: number; suspended: boolean; penalty_mad: number }> {
+    const { data, error } = await supabase.rpc("cancel_with_penalty", { p_booking: id });
+    if (error) throw error;
+    return data as { warnings: number; suspended: boolean; penalty_mad: number };
+  },
 };
 
 export const bids = {

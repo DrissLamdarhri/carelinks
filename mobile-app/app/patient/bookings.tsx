@@ -353,6 +353,7 @@ export default function PatientBookingsScreen() {
           visible
           bookingId={cancelTarget.id}
           scheduledAt={cancelTarget.scheduled_at}
+          status={cancelTarget.status}
           onClose={() => setCancelTarget(null)}
           onCancelled={refresh}
         />
