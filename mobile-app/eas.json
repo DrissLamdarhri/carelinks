@@ -4,7 +4,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5"
+        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5",
+        "EXPO_PUBLIC_DEMO": "true"
       },
       "android": {
         "buildType": "apk"
@@ -13,7 +14,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5"
+        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5",
+        "EXPO_PUBLIC_DEMO": "true"
       },
       "android": {
         "buildType": "apk"
@@ -30,6 +32,9 @@
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_MAPTILER_KEY": "0tmb7dhNF9b6Dc6cTMB5"
+      },
       "android": {
         "buildType": "app-bundle"
       }

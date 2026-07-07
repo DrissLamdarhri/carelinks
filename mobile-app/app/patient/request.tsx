@@ -47,6 +47,11 @@ import { useServiceTypes } from "@/lib/service-types";
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
 
+// Demo mode is OFF in production. Set EXPO_PUBLIC_DEMO=true only for demo builds
+// (shows fallback photo-pros + a wide search radius so the map is never empty).
+const DEMO = process.env.EXPO_PUBLIC_DEMO === "true";
+const SEARCH_RADIUS_KM = DEMO ? 80 : 15;
+
 // Demo professionals positioned AROUND the map center so the map is never empty
 // during the demo (no real approved pros are seeded yet). Once real pros exist,
 // `mapPros` from findNearbyProsForMap takes over automatically.
@@ -172,7 +177,7 @@ export default function PatientRequestScreen() {
     }
     return Array.from(map.values());
   }, [dates]);
-  const demoMode = true;
+  const demoMode = DEMO;
 
   const canSubmit = useMemo(
     () => address.trim().length > 3 || coords !== null,
@@ -195,7 +200,7 @@ export default function PatientRequestScreen() {
       try {
         const rows = await geo.findNearbyProsForMap(c.lat, c.lng, {
           specialty: toDbSpecialty(serviceKey),
-          radiusKm: 80, // generous demo radius (covers Fès↔Meknès); tighten to 15 for prod
+          radiusKm: SEARCH_RADIUS_KM, // 15 km in prod; wide only in demo builds
         });
         if (cancelled) return;
         setMapPros(
