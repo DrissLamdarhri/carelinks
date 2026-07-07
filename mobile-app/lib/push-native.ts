@@ -33,6 +33,14 @@ async function loadNotificationsModules() {
 }
 
 export async function registerExpoPushToken(userId: string): Promise<void> {
+  // Avoid initializing native Firebase on Android dev clients — this causes the native warning
+  // "Default FirebaseApp is not initialized" when Firebase isn't configured. In dev, skip
+  // registration. Rebuild a dev/prod client with FCM credentials to enable pushes.
+  if (Platform.OS === 'android' && typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.log('[push-native] Skipping push registration on Android in dev mode. Rebuild dev client with FCM credentials to enable pushes: https://docs.expo.dev/push-notifications/fcm-credentials/');
+    return;
+  }
+
   const modules = await loadNotificationsModules();
   if (!modules) return; // Expo Go / module unavailable
 
