@@ -35,6 +35,7 @@ import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
@@ -332,9 +333,11 @@ export default function PatientRequestScreen() {
         console.error("notifyAdminNewBooking failed:", err);
       }
 
+      toastSuccess("Demande envoyée — recherche de professionnels…");
       router.push(`/patient/waiting/${booking.id}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "La demande n'a pas pu être créée.");
+      toastError("La demande n'a pas pu être créée");
     } finally {
       setSubmitting(false);
     }

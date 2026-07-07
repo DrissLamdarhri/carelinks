@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { Check, Loader2, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { isDemoBookingId } from "@/lib/demo-booking";
 import { useBookingBids } from "@/lib/db/realtime";
 import type { Bid } from "@/lib/db/types";
@@ -33,9 +34,11 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
       }
       // RLS-safe atomic accept + match (same RPC as the offers screen).
       await db.bids.acceptAndMatch(bid.id);
+      toastSuccess("Offre acceptée ✓");
       onAccepted?.(bid.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'acceptation.");
+      toastError("Impossible d'accepter l'offre");
     } finally {
       setAccepting(null);
     }

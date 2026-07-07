@@ -5,6 +5,7 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { ProSpecialty, VerificationStatus } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -55,8 +56,10 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
       await db.bids.create({ booking_id: bookingId, professional_id: user.id, price_mad: n });
       setBidFor(null);
       setAmount("");
+      toastSuccess(`Offre de ${n} MAD envoyée ✓`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Envoi impossible.");
+      toastError("Offre non envoyée");
     } finally {
       setSubmitting(false);
     }

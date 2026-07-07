@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { isDemoBookingId } from "@/lib/demo-booking";
@@ -57,7 +58,7 @@ export function RatingForm({
     setSubmitting(true);
     try {
       if (isDemoBooking) {
-        Alert.alert("Merci", "Votre avis démo a bien été enregistré.");
+        toastSuccess("Merci pour votre avis ✓");
         onSubmitted();
         return;
       }
@@ -78,11 +79,11 @@ export function RatingForm({
       });
       if (error) throw error;
 
-      Alert.alert("Merci", "Votre avis a bien été envoyé.");
+      toastSuccess("Merci pour votre avis ✓");
       onSubmitted();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Impossible d'envoyer votre avis.";
-      Alert.alert("Erreur", message);
+      toastError(message);
     } finally {
       setSubmitting(false);
     }

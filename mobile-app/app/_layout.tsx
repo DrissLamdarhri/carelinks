@@ -23,6 +23,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { AuthProvider } from "@/lib/auth-context";
 import { I18nProvider } from "@/lib/i18n";
 import { addNotificationTapListener, configureNotifications } from "@/lib/push-native";
+import { ToastHost } from "@/components/ToastHost";
 import { useAuth } from "@/lib/auth-context";
 
 SplashScreen.preventAutoHideAsync();
@@ -111,6 +112,8 @@ export default function RootLayout() {
           <DeepLinkHandler />
           {/* Routes push-notification taps to the right booking */}
           <PushTapHandler />
+          {/* Branded toast notifications (overlays everything) */}
+          <ToastHost />
         </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>

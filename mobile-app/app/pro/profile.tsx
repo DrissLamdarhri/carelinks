@@ -21,6 +21,7 @@ import { geo } from "@/lib/db/geo";
 import type { Professional } from "@/lib/db/types";
 import { RadiusSlider } from "@/components/RadiusSlider";
 import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { toastSuccess } from "@/lib/toast";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuItems = [
@@ -52,6 +53,7 @@ export default function ProProfileScreen() {
       const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
       if (avatarUrl && (await updateProfileAvatar(user.id, avatarUrl))) {
         await refreshProfile();
+        toastSuccess("Photo de profil mise à jour ✓");
       }
     } finally {
       setUploadingAvatar(false);

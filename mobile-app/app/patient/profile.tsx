@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { toastSuccess } from "@/lib/toast";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuSections: Array<{
@@ -96,6 +97,7 @@ export default function PatientProfileScreen() {
       const success = await updateProfileAvatar(user.id, avatarUrl);
       if (success) {
         await refreshProfile();
+        toastSuccess("Photo de profil mise à jour ✓");
       }
     } finally {
       setUploadingAvatar(false);

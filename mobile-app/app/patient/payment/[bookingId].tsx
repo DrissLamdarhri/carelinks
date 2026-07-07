@@ -18,6 +18,7 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
@@ -123,8 +124,9 @@ export default function PaymentScreen() {
       }
       setTxId(String(Math.floor(100000 + Math.random() * 900000)));
       setStep(3);
+      toastSuccess("Paiement confirmé ✓");
     } catch (error) {
-      Alert.alert("Paiement", error instanceof Error ? error.message : "Le paiement n'a pas pu être confirmé.");
+      toastError(error instanceof Error ? error.message : "Le paiement n'a pas pu être confirmé.");
     } finally {
       setSubmitting(false);
     }

@@ -20,6 +20,7 @@ import {
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { db } from "@/lib/db/dal";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { Booking, Bid, Professional, Profile } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
 import {
@@ -177,9 +178,11 @@ export default function NurseOffersScreen() {
       }
       // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
       await db.bids.acceptAndMatch(offer.id);
+      toastSuccess("Offre acceptée — le professionnel est notifié ✓");
       router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
     } catch (acceptError) {
       setActionError(acceptError instanceof Error ? acceptError.message : "Erreur lors de l'acceptation.");
+      toastError("Impossible d'accepter l'offre");
     } finally {
       setActionId(null);
     }
