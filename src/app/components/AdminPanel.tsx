@@ -174,7 +174,11 @@ export function AdminPanel() {
   const [liveUsers, setLiveUsers] = useState<any[]>([]);
   const [liveAllPros, setLiveAllPros] = useState<any[]>([]);
   const [liveAllBookings, setLiveAllBookings] = useState<any[]>([]);
-  const [bookingFilter, setBookingFilter] = useState<string | null>(null);
+  const [bookingFilter, setBookingFilter] = useState<string | null>(null); // raw status key: 'open'|'in_progress'|'completed'
+  // New filters for bookings
+  const [specialtyFilter, setSpecialtyFilter] = useState<string | null>(null); // e.g. 'nurse', 'psychologist', 'physiotherapist', 'yoga_instructor'
+  const [urgentOnly, setUrgentOnly] = useState<boolean>(false);
+  const [bookingSearch, setBookingSearch] = useState<string>("");
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
   const [serviceTypes, setServiceTypes] = useState<any[]>([]);
   const [selectedServiceTypeCategory, setSelectedServiceTypeCategory] = useState<string>("Infirmier");
@@ -347,63 +351,116 @@ export function AdminPanel() {
         };
       }));
 
-      // All bookings table — from admin_booking_logs with patient & professional info
-      const { data: bookingsAll } = await supabase
-        .from("admin_booking_logs")
-        .select("id,booking_id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,price,alert_level,created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      // Also fetch all yoga bookings directly from bookings (fallback if admin logs missing)
-      const { data: bookingsYoga } = await supabase
+      // Fetch bookings directly from the bookings table (don't rely solely on admin_booking_logs)
+      const { data: bookings } = await supabase
         .from("bookings")
         .select("id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,final_price_mad,budget_max_mad,created_at")
-        .eq("specialty", "yoga_instructor")
         .order("created_at", { ascending: false })
-        .limit(2000);
+        .limit(1000)
+        .catch(() => ({ data: [] }));
 
-      // Merge admin logs + bookingsYoga, preferring admin log when present
-      const mergedByBookingId = new Map();
-      (bookingsAll ?? []).forEach((r: any) => mergedByBookingId.set(r.booking_id, { ...r, source: "admin" }));
-      (bookingsYoga ?? []).forEach((r: any) => {
-        if (!mergedByBookingId.has(r.id)) {
-          mergedByBookingId.set(r.id, { ...r, booking_id: r.id, price: r.final_price_mad ?? r.budget_max_mad, alert_level: "normal", source: "bookings" });
+      // Also fetch any admin log metadata (alert_level) if present
+      const { data: adminLogs } = await supabase
+        .from("admin_booking_logs")
+        .select("booking_id,alert_level")
+        .limit(2000)
+        .catch(() => ({ data: [] }));
+      const alertMap = Object.fromEntries((adminLogs ?? []).map((a: any) => [a.booking_id, a.alert_level]));
+
+      // Start with bookings
+      const merged: any[] = (bookings ?? []).map((b: any) => ({
+        booking_id: b.id,
+        id: "#" + (b.id ?? "").slice(0, 6).toUpperCase(),
+        patient_id: b.patient_id,
+        professional_id: b.professional_id,
+        specialty: b.specialty,
+        status: b.status,
+        statusLabel: b.status, // will map to human label later
+        urgency: b.urgency,
+        scheduled_at: b.scheduled_at,
+        address: b.address,
+        price: b.final_price_mad ?? b.budget_max_mad ?? 0,
+        created_at: b.created_at,
+        alert_level: alertMap[b.id] ?? "normal",
+        source: "bookings",
+      }));
+
+      // Also include yoga enrollments as bookings (mirrors mobile behaviour)
+      const { data: yogaEnrollmentsData } = await supabase
+        .from("yoga_enrollments")
+        .select(`
+          session_id,
+          patient_id,
+          enrolled_at,
+          yoga_sessions!session_id(
+            id,
+            starts_at,
+            price_mad,
+            title
+          )
+        `)
+        .order("enrolled_at", { ascending: false })
+        .limit(200)
+        .catch(() => ({ data: [] }));
+
+      (yogaEnrollmentsData ?? []).forEach((e: any) => {
+        if (!merged.find((m: any) => m.booking_id === e.session_id)) {
+          merged.unshift({
+            booking_id: e.session_id,
+            id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+            patient_id: e.patient_id,
+            professional_id: null,
+            specialty: "yoga_instructor",
+            status: "matched",
+            statusLabel: "Confirmé",
+            urgency: "normal",
+            scheduled_at: e.yoga_sessions?.starts_at,
+            address: null,
+            price: e.yoga_sessions?.price_mad ?? 0,
+            created_at: e.enrolled_at ?? e.yoga_sessions?.starts_at,
+            alert_level: "normal",
+            source: "yoga_enrollment",
+          });
         }
       });
-      const merged = Array.from(mergedByBookingId.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      // Fetch patient names (for merged set)
-      const patientIds = [...new Set(merged.map((b: any) => b.patient_id))];
+      // Fetch patient profiles (name, email, city)
+      const patientIds = [...new Set(merged.map((b: any) => b.patient_id))].filter(Boolean);
       const { data: patientProfiles } = patientIds.length > 0 ? await supabase
         .from("profiles")
-        .select("id,full_name")
+        .select("id,full_name,email,city")
         .in("id", patientIds) : { data: [] };
-      const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
-      
-      // Fetch professional names (for merged set)
+      const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, { name: p.full_name, email: p.email, city: p.city }]));
+
+      // Fetch professional profiles
       const proIds = [...new Set(merged.map((b: any) => b.professional_id).filter(Boolean))];
       const { data: proProfiles } = proIds.length > 0 ? await supabase
         .from("profiles")
         .select("id,full_name")
         .in("id", proIds) : { data: [] };
-      const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, p.full_name]));
-      
+      const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, { name: p.full_name }]));
+
       const statusFr: Record<string, string> = {
-        open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
+        open: "En attente", matched: "Confirmé", in_progress: "En cours",
         completed: "Terminé", cancelled: "Annulé",
       };
 
       setLiveAllBookings(merged.map((b: any) => ({
-        id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
-        patient: patientMap[b.patient_id] ?? "—",
-        pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
+        id: b.id,
+        bookingId: b.booking_id,
+        patient: patientMap[b.patient_id]?.name ?? "—",
+        patientEmail: patientMap[b.patient_id]?.email ?? "",
+        patientCity: patientMap[b.patient_id]?.city ?? "",
+        pro: b.professional_id ? (proMap[b.professional_id]?.name ?? "—") : "—",
         service: labelMap[b.specialty] ?? b.specialty,
         specialtyKey: b.specialty,
         date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
         price: (b.price ?? 0) + " MAD",
-        status: statusFr[b.status] ?? b.status,
+        status: b.status,                // raw status key for filtering
+        statusLabel: b.statusLabel ?? (statusFr[b.status] ?? b.status),
         alertLevel: b.alert_level ?? "normal",
-        urgency: b.urgency,
+        urgency: b.urgency ?? "normal",
+        address: b.address,
       })));
 
       // Also load yoga enrollments as bookings
@@ -1116,16 +1173,32 @@ export function AdminPanel() {
   };
 
   const exportBookingsToCSV = () => {
-    const headers = ["ID", "Patient", "Pro", "Service", "Date", "Prix", "Priorité", "Statut"];
-    const rows = (liveAllBookings ?? []).filter((b) => !bookingFilter || b.specialtyKey === bookingFilter).map((b) => [
+    const headers = ["ID", "Patient", "Email", "Ville", "Pro", "Service", "Date", "Prix", "Priorité", "Statut"];
+    const q = (bookingSearch || "").trim().toLowerCase();
+    const filtered = (liveAllBookings ?? []).filter((b) => {
+      if (bookingFilter && b.status !== bookingFilter) return false;
+      if (specialtyFilter && b.specialtyKey !== specialtyFilter) return false;
+      if (urgentOnly && !(b.urgency === "urgent" || b.urgency === "emergency")) return false;
+      if (q.length === 0) return true;
+      return (
+        (b.patient ?? "").toLowerCase().includes(q) ||
+        (b.patientCity ?? "").toLowerCase().includes(q) ||
+        (b.patientEmail ?? "").toLowerCase().includes(q) ||
+        (b.pro ?? "").toLowerCase().includes(q)
+      );
+    });
+
+    const rows = filtered.map((b) => [
       b.id,
       b.patient,
+      b.patientEmail ?? "",
+      b.patientCity ?? "",
       b.pro,
       b.service,
       b.date,
       b.price,
-      b.alertLevel,
-      b.status,
+      b.urgency,
+      b.statusLabel ?? b.status,
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -1173,6 +1246,29 @@ export function AdminPanel() {
     { key: "yoga", icon: Flower2, label: "Yoga" },
     { key: "settings", icon: Settings, label: "Paramètres" },
   ];
+
+  // Derived booking filters and counters (used by the Bookings tab)
+  const bookingQuery = (bookingSearch || "").trim().toLowerCase();
+  const bookingsFiltered = (liveAllBookings ?? []).filter((b: any) => {
+    if (specialtyFilter && b.specialtyKey !== specialtyFilter) return false;
+    if (urgentOnly && !(b.urgency === "urgent" || b.urgency === "emergency")) return false;
+    if (!bookingQuery) return true;
+    return (
+      (b.patient ?? "").toLowerCase().includes(bookingQuery) ||
+      (b.patientCity ?? "").toLowerCase().includes(bookingQuery) ||
+      (b.patientEmail ?? "").toLowerCase().includes(bookingQuery) ||
+      (b.pro ?? "").toLowerCase().includes(bookingQuery)
+    );
+  });
+
+  const bookingCounts = {
+    total: bookingsFiltered.length,
+    open: bookingsFiltered.filter((b: any) => b.status === "open").length,
+    in_progress: bookingsFiltered.filter((b: any) => b.status === "in_progress").length,
+    completed: bookingsFiltered.filter((b: any) => b.status === "completed").length,
+  };
+
+  const displayedBookings = bookingsFiltered.filter((b: any) => !bookingFilter || b.status === bookingFilter);
 
   return (
     <div
@@ -1609,7 +1705,7 @@ export function AdminPanel() {
                           <td className="py-3 pr-4 text-xs text-[#888780]">{b.service}</td>
                           <td className="py-3 pr-4 text-xs text-[#888780]">{b.date}</td>
                           <td className="py-3 pr-4 text-xs text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.price}</td>
-                          <td className="py-3"><StatusBadge status={b.status} /></td>
+                          <td className="py-3"><StatusBadge status={b.statusLabel ?? b.status} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1868,10 +1964,10 @@ export function AdminPanel() {
               {/* KPI Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 {[
-                  { label: "Total", value: liveAllBookings?.length || 0, icon: BookOpen, color: "#0D0870" },
-                  { label: "En attente", value: liveAllBookings?.filter((b: any) => b.status === "open")?.length || 0, icon: Clock, color: "#F59E0B" },
-                  { label: "En cours", value: liveAllBookings?.filter((b: any) => b.status === "in_progress")?.length || 0, icon: Activity, color: "#10B981" },
-                  { label: "Complétées", value: liveAllBookings?.filter((b: any) => b.status === "completed")?.length || 0, icon: CheckCircle2, color: "#8B5CF6" },
+                  { label: "Total", value: bookingCounts.total || 0, icon: BookOpen, color: "#0D0870" },
+                  { label: "En attente", value: bookingCounts.open || 0, icon: Clock, color: "#F59E0B" },
+                  { label: "En cours", value: bookingCounts.in_progress || 0, icon: Activity, color: "#10B981" },
+                  { label: "Complétées", value: bookingCounts.completed || 0, icon: CheckCircle2, color: "#8B5CF6" },
                 ].map((card, i) => {
                   const Icon = card.icon;
                   return (
@@ -1890,8 +1986,41 @@ export function AdminPanel() {
 
               {/* Filter & Action Bar */}
               <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-                <p className="text-sm text-[#888780]">{liveAllBookings?.length || 0} réservations au total</p>
+                <p className="text-sm text-[#888780]">{bookingCounts.total || 0} réservations au total</p>
                 <div className="flex gap-2 items-center flex-wrap">
+                  {/* Search */}
+                  <div className="flex items-center bg-white rounded-xl px-3 py-1.5 border" style={{ borderColor: "#EDEFF3" }}>
+                    <input
+                      value={bookingSearch}
+                      onChange={(e) => setBookingSearch(e.target.value)}
+                      placeholder="Rechercher par nom, ville ou email"
+                      className="text-sm outline-none w-64"
+                    />
+                  </div>
+
+                  {/* Specialty filter */}
+                  <select
+                    value={specialtyFilter ?? ""}
+                    onChange={(e) => setSpecialtyFilter(e.target.value || null)}
+                    className="text-sm px-3 py-1 rounded-lg border"
+                    style={{ borderColor: "#EDEFF3", background: "white" }}
+                  >
+                    <option value="">Tous spécialités</option>
+                    <option value="nurse">Infirmier</option>
+                    <option value="psychologist">Psychologue</option>
+                    <option value="physiotherapist">Kinésithérapeute</option>
+                    <option value="yoga_instructor">Yoga</option>
+                  </select>
+
+                  {/* Urgent toggle */}
+                  <button
+                    onClick={() => setUrgentOnly(!urgentOnly)}
+                    className="px-3 py-1.5 rounded-lg text-sm transition-all"
+                    style={{ background: urgentOnly ? "#FEF2F2" : "transparent", color: urgentOnly ? "#B91C1C" : "#888780", border: urgentOnly ? "1px solid #FCA5A5" : "1px solid transparent" }}
+                  >
+                    🔴 Urgences
+                  </button>
+
                   {/* Status Filter */}
                   <div className="flex gap-1 rounded-xl p-1" style={{ background: "#F3F3F5" }}>
                     {[
@@ -1901,7 +2030,7 @@ export function AdminPanel() {
                       { key: "completed", label: "Complétées", icon: CheckCircle2 },
                     ].map((f) => (
                       <button
-                        key={f.key}
+                        key={String(f.key)}
                         onClick={() => setBookingFilter(f.key)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
                         style={{
@@ -1923,14 +2052,14 @@ export function AdminPanel() {
               </div>
 
               {/* Bookings List */}
-              {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).length === 0 ? (
+              {displayedBookings.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
                   <BookOpen size={40} className="mx-auto mb-3 text-[#D0D0D0]" />
                   <p className="text-[#888780]">Aucune réservation pour cette période</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
-                  {(liveAllBookings ?? []).filter((b: any) => !bookingFilter || b.status === bookingFilter).map((b: any) => {
+                  {displayedBookings.map((b: any) => {
                     const statusColors: Record<string, { bg: string; color: string; icon: any }> = {
                       open: { bg: "#FEF3C7", color: "#92400E", icon: Clock },
                       in_progress: { bg: "#D1FAE5", color: "#065F46", icon: Activity },
@@ -1942,8 +2071,18 @@ export function AdminPanel() {
                       urgent: "#F59E0B",
                       emergency: "#EF4444",
                     };
+
+                    const specialtyMeta: Record<string, { label: string; color: string; emoji: string }> = {
+                      nurse: { label: "Infirmier", color: "#0D87D0", emoji: "💉" },
+                      psychologist: { label: "Psychologue", color: "#8B5CF6", emoji: "🧠" },
+                      physiotherapist: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
+                      yoga_instructor: { label: "Yoga", color: "#06B6D4", emoji: "🧘" },
+                      kine: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
+                    };
+
                     const sColors = statusColors[b.status] || statusColors.open;
                     const StatusIcon = sColors.icon;
+                    const smeta = specialtyMeta[b.specialtyKey] ?? { label: b.service ?? b.specialtyKey ?? '—', color: '#888780', emoji: '🏷️' };
 
                     return (
                       <div
@@ -1955,26 +2094,33 @@ export function AdminPanel() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <span className="text-xs px-3 py-1 rounded-full font-mono" style={{ background: "#F3F3F5", color: "#888780" }}>{b.id}</span>
+
                               <span
                                 className="text-xs px-3 py-1 rounded-full flex items-center gap-1.5"
                                 style={{ background: sColors.bg, color: sColors.color, fontWeight: 600 }}
                               >
-                                <StatusIcon size={12} /> {b.status?.toUpperCase()}
+                                <StatusIcon size={12} /> {b.statusLabel ?? (b.status || '').toUpperCase()}
                               </span>
+
                               <span
-                                className="text-xs px-3 py-1 rounded-full font-semibold"
-                                style={{
-                                  background: `${urgencyColors[b.urgency || "normal"]}20`,
-                                  color: urgencyColors[b.urgency || "normal"],
-                                }}
+                                className="text-xs px-3 py-1 rounded-full flex items-center gap-1"
+                                style={{ background: `${smeta.color}15`, color: smeta.color, fontWeight: 700 }}
                               >
-                                {b.urgency?.toUpperCase() || "NORMAL"}
+                                <span>{smeta.emoji}</span>
+                                <span>{smeta.label}</span>
                               </span>
+
+                              { (b.urgency && b.urgency !== 'normal') && (
+                                <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: `#FEE2E2`, color: `#991B1B` }}>
+                                  URGENT
+                                </span>
+                              )}
                             </div>
                             <div className="grid grid-cols-3 gap-6 text-sm">
                               <div>
                                 <p className="text-[#888780] text-xs mb-1">Patient</p>
                                 <p className="text-[#1A1A1A] font-semibold">{b.patient}</p>
+                                <p className="text-xs text-[#888780]">{b.patientCity} · {b.patientEmail}</p>
                               </div>
                               <div>
                                 <p className="text-[#888780] text-xs mb-1">Professionnel</p>
@@ -2679,7 +2825,7 @@ export function AdminPanel() {
                 </div>
                 <div>
                   <p className="text-xs text-[#888780]" style={{ fontWeight: 500 }}>Statut</p>
-                  <StatusBadge status={selectedBookingForView.status} />
+                  <StatusBadge status={selectedBookingForView.statusLabel ?? selectedBookingForView.status} />
                 </div>
               </div>
               <button onClick={() => setSelectedBookingForView(null)} className="w-full mt-5 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Fermer</button>
