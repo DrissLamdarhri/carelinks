@@ -4,7 +4,7 @@
  */
 
 import type { Booking } from "@/lib/db/types";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export interface AdminBookingLog {
   id: string;
@@ -28,37 +28,11 @@ export interface AdminBookingLog {
 /**
  * Envoie une notification de réservation au panel admin
  */
-export async function notifyAdminNewBooking(booking: Booking): Promise<void> {
-  try {
-    const isPsychologist = booking.specialty === "psychologist";
-    const isUrgent = booking.urgency === "urgent" || booking.urgency === "emergency";
-    
-    let alertLevel: "normal" | "high" | "critical" = "normal";
-    if (isPsychologist && isUrgent) {
-      alertLevel = "critical";
-    } else if (isPsychologist || isUrgent) {
-      alertLevel = "high";
-    }
-
-    // Call server-side function to ensure admin logs & notifications are created (service role write, respects RLS)
-    try {
-      const { data } = await supabase.auth.getSession();
-      const token = (data as any)?.session?.access_token;
-      const fnUrl = `${SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/log-booking`;
-      await fetch(fnUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        body: JSON.stringify({ booking_id: booking.id }),
-      });
-    } catch (e) {
-      console.error("Erreur en appelant la function log-booking:", e);
-    }
-  } catch (error) {
-    console.error("Erreur lors de la notification admin:", error);
-  }
+export async function notifyAdminNewBooking(_booking: Booking): Promise<void> {
+  // No-op: admin logging is handled entirely in Postgres by the
+  // `booking_created_trigger` (log_booking_to_admin) which inserts into
+  // admin_booking_logs on every bookings INSERT. The admin panel reads that
+  // table directly (with realtime). No KV edge-function call needed.
 }
 
 /**

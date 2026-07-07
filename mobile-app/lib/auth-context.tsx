@@ -488,39 +488,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             console.log("[Auth] Attempting pro_documents insert via supabase client", { count: docsToInsert.length });
 
-            const { data: insertedDocs, error: insertError } = await supabase.from("pro_documents").insert(docsToInsert).select();
+            // Direct insert under RLS (prodocs_owner_all). No KV edge-function
+            // fallback — the pro_documents RLS lets the owner insert their rows.
+            const { error: insertError } = await supabase.from("pro_documents").insert(docsToInsert).select();
             if (insertError) {
-              console.warn("[Auth] pro_documents insert (client) error:", insertError);
-
-              // Fallback: call server function if client-side insert is blocked (log URL for debugging)
-              const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
-              const fnUrl = `${SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/professionals/documents`;
-              console.log("[Auth] Falling back to server function URL (for diagnostics):", fnUrl);
-
-              try {
-                const sessionRes2 = await supabase.auth.getSession();
-                const token2 = sessionRes2.data?.session?.access_token ?? null;
-                const headers: Record<string, string> = { "Content-Type": "application/json" };
-                if (token2) headers["Authorization"] = "Bearer " + token2;
-
-                const resp = await fetch(fnUrl, {
-                  method: "POST",
-                  headers,
-                  body: JSON.stringify({ professional_id: data.user.id, documents: options.documents, auth_token: token2 }),
-                });
-
-                let bodyText: string | null = null;
-                try { bodyText = await resp.text(); } catch (e) { bodyText = null; }
-                if (!resp.ok) {
-                  console.error("[Auth] server function fallback failed:", resp.status, bodyText);
-                } else {
-                  console.log("[Auth] server function fallback succeeded:", bodyText);
-                }
-              } catch (e) {
-                console.error("[Auth] Exception calling server fallback function:", e);
-              }
-            } else {
-              console.log("[Auth] pro_documents inserted client-side", { insertedCount: insertedDocs?.length ?? 0 });
+              console.warn("[Auth] pro_documents insert error:", insertError.message);
             }
           } catch (e) {
             console.error("[Auth] Exception inserting documents via supabase client:", e);
