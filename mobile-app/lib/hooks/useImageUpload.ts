@@ -12,7 +12,7 @@ export async function usePickImage() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: [ImagePicker.MediaType.Image],
+      mediaTypes: ImagePicker.MediaType.image,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,

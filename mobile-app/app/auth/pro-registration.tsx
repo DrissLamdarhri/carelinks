@@ -236,63 +236,30 @@ export default function ProRegistrationScreen() {
         experience: form.experience.trim(),
       });
 
-      // 2) If sign-up succeeded and we have a user id, upload any pending documents using that id and insert pro_documents rows
+      // 2) Create placeholder pro_documents rows (storage_path = null initially)
+      // Actual file uploads happen later via the KYC screen after user logs in.
+      // This avoids persistent network failures during signup on mobile.
       const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
-      if (uid && pendingUploads.length > 0) {
-        for (const file of pendingUploads) {
+      if (uid) {
+        const docTypes = [
+          { type: "diploma", label: getDiplomaTitle() },
+          { type: "cin", label: "CIN" },
+          { type: "selfie", label: "Selfie" },
+        ];
+        for (const doc of docTypes) {
           try {
-            // Attempt upload using shared helpers with retry
-            let uploadResult: { url: string; path: string } | null = null;
-            const maxRetries = 3;
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-              try {
-                if (file.type === "selfie") {
-                  uploadResult = await uploadSelfieToSupabase(uid, file.uri, file.mimeType);
-                } else {
-                  uploadResult = await uploadDocumentToSupabase(uid, file.uri, file.name, file.mimeType);
-                }
-                if (uploadResult) break;
-                // else retry
-              } catch (upErr) {
-                console.error(`Upload attempt ${attempt} failed for ${file.name}:`, upErr);
-              }
-              // small backoff
-              await new Promise((r) => setTimeout(r, 600 * attempt));
-            }
-
-            if (!uploadResult) {
-              console.error("Upload failed after retries for", file.name);
-              showToast("Échec de l'upload d'un document. Vérifiez votre connexion et réessayez.");
-              continue;
-            }
-
-            const storagePath = uploadResult.path;
-
-            // Insert pro_documents row (RLS allows when authenticated as owner)
             const { error: insertError } = await supabase.from("pro_documents").insert({
               professional_id: uid,
-              doc_type: file.type === "diploma" ? getDiplomaTitle() : file.type === "cin" ? "CIN" : "Selfie",
-              storage_path: storagePath,
+              doc_type: doc.label,
+              storage_path: null, // Will be filled when user uploads via KYC screen
               is_verified: false,
-              uploaded_at: new Date().toISOString(),
+              uploaded_at: null,
             });
             if (insertError) {
-              console.error("Failed to insert pro_documents for", storagePath, insertError);
-              showToast("Erreur lors de l'enregistrement du document.");
-              continue;
-            }
-
-            // Update local state paths so UI shows uploaded docs
-            if (file.type === "diploma") {
-              setDiplomaPath(storagePath);
-            } else if (file.type === "cin") {
-              setCinPath(storagePath);
-            } else if (file.type === "selfie") {
-              setSelfiePath(storagePath);
+              console.error("Failed to insert placeholder pro_documents for", doc.type, insertError);
             }
           } catch (e) {
-            console.error("Exception uploading pending file:", e);
-            showToast("Erreur lors de l'upload d'un document.");
+            console.error("Exception inserting placeholder pro_documents:", e);
           }
         }
       }
