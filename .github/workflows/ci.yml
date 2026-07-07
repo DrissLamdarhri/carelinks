@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "hardening/**", "feat/**"]
+  pull_request:
+
+jobs:
+  mobile-typecheck:
+    name: Mobile · type-check + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (workspace)
+        run: CI=true pnpm install --no-frozen-lockfile
+
+      - name: Type-check
+        run: pnpm -C mobile-app type-check
+
+      - name: Lint
+        run: pnpm -C mobile-app lint
+        continue-on-error: true
