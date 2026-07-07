@@ -17,7 +17,7 @@ export async function useTakePhoto(): Promise<CameraAsset | null> {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaType.image,
+      mediaTypes: ['images'],
       allowsEditing: false,
       aspect: [1, 1],
       quality: 0.85,
