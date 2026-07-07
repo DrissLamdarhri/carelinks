@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { approvePro, rejectPro, getProDocumentsAdmin } from "../../lib/api";
+import { approvePro, rejectPro, getProDocumentsAdmin, getAdminSignedUrl } from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
 type Professional = {
@@ -177,20 +178,38 @@ export function ProfessionalsManager() {
     }
   };
 
+  const { isAdminAuthed } = useAuth();
+
   const loadProDocuments = async (proId: string) => {
     setDocsLoading(true);
     try {
+      // If the admin UI flag is set, prefer the admin API (service-role) first — avoids RLS filtering
+      if (isAdminAuthed) {
+        try {
+          const res = await getProDocumentsAdmin(proId);
+          if (res?.documents && res.documents.length > 0) {
+            setProDocuments(res.documents);
+            return;
+          }
+        } catch (adminErr) {
+          console.warn("Admin API pro documents error (falling back to client):", adminErr);
+        }
+      }
+
       const { data, error } = await supabase
         .from("pro_documents")
         .select("id,doc_type,storage_path,is_verified,uploaded_at")
         .eq("professional_id", proId)
         .order("uploaded_at", { ascending: false });
 
+      console.log(`📄 Loaded pro_documents for ${proId}: ${data?.length ?? 0} rows`, { data });
+
       if (error) {
         console.warn("Error fetching pro documents via RLS:", error);
         // Try admin API fallback
         try {
           const res = await getProDocumentsAdmin(proId);
+          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
           setProDocuments(res.documents ?? []);
           return;
         } catch (apiErr) {
@@ -201,25 +220,34 @@ export function ProfessionalsManager() {
       }
 
       if (!data || data.length === 0) {
+        console.warn(`⚠️  No documents found for ${proId}. Trying admin API...`);
         // Fallback in case RLS filtered results
         try {
           const res = await getProDocumentsAdmin(proId);
+          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
           if (res.documents && res.documents.length > 0) {
             setProDocuments(res.documents);
             return;
           }
         } catch (apiErr) {
-          // ignore
+          console.error("Admin API pro documents error:", apiErr);
         }
       }
 
       setProDocuments(data ?? []);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error loading pro documents:", e);
+      console.error("Pro documents error details:", {
+        message: e?.message ?? String(e),
+        code: e?.code ?? null,
+        status: e?.status ?? null,
+        stack: e?.stack ?? null,
+      });
       try {
         const res = await getProDocumentsAdmin(proId);
         setProDocuments(res.documents ?? []);
-      } catch (_) {
+      } catch (fallbackErr) {
+        console.error("Fallback admin API failed:", fallbackErr);
         setProDocuments([]);
       }
     } finally {
@@ -933,9 +961,10 @@ export function ProfessionalsManager() {
                           </div>
                           <button onClick={async () => {
                             try {
-                              const { data } = await supabase.storage.from("pro-documents").createSignedUrl(d.storage_path, 60);
-                              if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-                              else toast.error("Impossible d'ouvrir le document");
+                              // Bucket is public - use direct URL
+                              const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+                              const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
+                              window.open(directUrl, "_blank");
                             } catch (e) {
                               console.error("Error opening doc:", e);
                               toast.error("Erreur lors de l'ouverture du document");

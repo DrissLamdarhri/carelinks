@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -68,26 +69,22 @@ export default function ProRegistrationScreen() {
     let mounted = true;
     (async () => {
       try {
-        const { data, error } = await supabase.from("services").select("name,category,is_active");
+        // Try to load services from DB; if schema is incomplete, use fallback
+        const { data, error } = await supabase.from("services").select("name,is_active");
         if (error) {
-          console.warn("Failed to load services:", error);
+          console.warn("Failed to load services (using fallbacks):", error);
           return;
         }
         const map: Record<string, string[]> = {};
         (data ?? []).forEach((s: any) => {
           if (s.is_active === false) return;
-          const cat = s.category ?? "Autre";
+          const cat = "Services"; // Default category since DB doesn't provide it
           map[cat] = map[cat] || [];
           map[cat].push(s.name);
-          const eng = frenchToKey[cat];
-          if (eng) {
-            map[eng] = map[eng] || [];
-            map[eng].push(s.name);
-          }
         });
         if (mounted) setServicesMap(map);
       } catch (e) {
-        console.warn("Failed to load services:", e);
+        console.warn("Failed to load services (using fallbacks):", e);
       }
     })();
     return () => {
@@ -127,6 +124,9 @@ export default function ProRegistrationScreen() {
   const [ocrDone, setOcrDone] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
 
+  // Pending uploads picked before sign-up; actual upload happens AFTER sign-up (when user id is available)
+  const [pendingUploads, setPendingUploads] = useState<Array<{ type: "diploma" | "cin" | "selfie"; uri: string; name: string; mimeType: string }>>([]);
+
   const [availDays, setAvailDays] = useState<string[]>(["Lun", "Mar", "Mer", "Ven"]);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
@@ -157,46 +157,33 @@ export default function ProRegistrationScreen() {
   );
 
   const handleUpload = async (type: "diploma" | "cin" | "selfie") => {
+    // Pick/capture document and store locally in pendingUploads.
+    // Actual upload to Supabase Storage will happen after successful sign-up (so we have the user id).
     setUploading(type);
     try {
       if (type === "selfie") {
-        // Use camera for selfie
         const photo = await useTakePhoto();
-        if (!photo) {
-          setUploading(null);
-          return;
-        }
-        const result = await uploadSelfieToSupabase(form.email || "user", photo.uri);
-        if (result) {
-          setSelfie(true);
-          setSelfieUrl(result.url);
-          setSelfiePath(result.path);
-          showToast("Selfie téléchargé avec succès.");
-        }
+        if (!photo) { setUploading(null); return; }
+        const fileName = photo.name ?? `selfie-${Date.now()}.jpg`;
+        setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: photo.type ?? "image/jpeg" }]);
+        setSelfie(true);
+        setSelfieUrl(photo.uri);
+        showToast("Selfie ajouté (upload après inscription)");
       } else {
-        // Use document picker for diploma and CIN
         const doc = await usePickDocument();
-        if (!doc) {
-          setUploading(null);
-          return;
+        if (!doc) { setUploading(null); return; }
+        setPendingUploads((p) => [...p, { type, uri: doc.uri, name: doc.name, mimeType: doc.type }]);
+        if (type === "diploma") {
+          setDiploma(true);
+          setDiplomaUrl(doc.uri);
+        } else if (type === "cin") {
+          setCin(true);
+          setCinUrl(doc.uri);
         }
-        const result = await uploadDocumentToSupabase(form.email || "user", doc.uri, doc.name, doc.type);
-        if (result) {
-          if (type === "diploma") {
-            setDiploma(true);
-            setDiplomaUrl(result.url);
-            setDiplomaPath(result.path);
-            showToast("Diplôme téléchargé avec succès.");
-          } else if (type === "cin") {
-            setCin(true);
-            setCinUrl(result.url);
-            setCinPath(result.path);
-            showToast("CIN téléchargée avec succès.");
-          }
-        }
+        showToast("Document ajouté (upload après inscription)");
       }
 
-      // Trigger OCR check if diploma and CIN are both uploaded
+      // Trigger OCR check if diploma and CIN are both present locally
       const nextDiploma = type === "diploma" ? true : diploma;
       const nextCin = type === "cin" ? true : cin;
       if (nextDiploma && nextCin) {
@@ -207,7 +194,8 @@ export default function ProRegistrationScreen() {
         }, 1700);
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("handleUpload error:", error);
+      showToast("Erreur lors de la sélection du document");
     } finally {
       setUploading(null);
     }
@@ -240,28 +228,116 @@ export default function ProRegistrationScreen() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      const documents = [];
-      if (diplomaPath) {
-        documents.push({ doc_type: getDiplomaTitle(), storage_path: diplomaPath });
-      }
-      if (cinPath) {
-        documents.push({ doc_type: "CIN", storage_path: cinPath });
-      }
-      if (selfiePath) {
-        documents.push({ doc_type: "Selfie", storage_path: selfiePath });
-      }
-      
-      await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
+      // 1) Sign up the user (create auth user + profile + professionals row)
+      const newUserId = await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
         services: selectedServices,
         experience: form.experience.trim(),
-        documents: documents.length > 0 ? documents : undefined,
       });
+
+      const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
+      if (!uid) throw new Error("Impossible de récupérer l'ID utilisateur après inscription");
+
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData.data?.session?.access_token;
+      if (!token) throw new Error("Session token manquant");
+
+      console.log(`📋 Signup successful for user ${uid}. Starting document uploads...`);
+
+      // 2) Upload all documents directly to Supabase Storage via REST API (more reliable for React Native)
+      const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+      const STORAGE_BUCKET = "pro-documents";
+      const uploadResults: Array<{ type: string; doc_type: string; storage_path: string }> = [];
+      const failedUploads: string[] = [];
+
+      for (const pending of pendingUploads) {
+        const docLabel = pending.type === "diploma" ? getDiplomaTitle() : pending.type === "cin" ? "CIN" : "Selfie";
+        console.log(`🔄 Uploading ${pending.type} (${docLabel})...`);
+        
+        try {
+          // Generate storage path: userId/docType-timestamp.ext (respects RLS policy)
+          const ext = pending.name.split(".").pop() || "jpg";
+          const timestamp = Date.now();
+          const storagePath = `${uid}/${pending.type}-${timestamp}.${ext}`;
+
+          console.log(`🔄 Uploading ${pending.type} to Storage path: ${storagePath}`);
+
+          // ✅ Upload via REST API using FormData (more reliable in React Native than SDK)
+          const formData = new FormData();
+          formData.append("file", {
+            uri: pending.uri,
+            name: pending.name,
+            type: pending.type === "selfie" ? "image/jpeg" : "image/jpeg",
+          } as any);
+
+          const storageUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${storagePath}`;
+          const uploadResponse = await fetch(storageUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            console.error(`❌ Storage upload failed for ${pending.type}: HTTP ${uploadResponse.status}`, errorText);
+            failedUploads.push(docLabel);
+            continue;
+          }
+
+          console.log(`✅ Uploaded ${pending.type} to Storage: ${storagePath}`);
+
+          // ✅ Insert record into pro_documents table
+          const { error: insertErr } = await supabase
+            .from("pro_documents")
+            .insert({
+              professional_id: uid,
+              doc_type: pending.type,
+              storage_path: storagePath,
+              uploaded_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (insertErr) {
+            console.error(`❌ DB insert failed for ${pending.type}:`, insertErr.message);
+            failedUploads.push(docLabel);
+            continue;
+          }
+
+          console.log(`✅ Recorded ${pending.type} in pro_documents`);
+          uploadResults.push({
+            type: pending.type,
+            doc_type: docLabel,
+            storage_path: storagePath,
+          });
+        } catch (e) {
+          console.error(`❌ Exception uploading ${pending.type}:`, e);
+          failedUploads.push(docLabel);
+        }
+      }
+
+      // 3) Check if all uploads succeeded
+      if (failedUploads.length > 0) {
+        const failedList = failedUploads.join(", ");
+        const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer.`;
+        console.error(`❌ Upload failures detected: ${failedList}`);
+        Alert.alert("Erreur lors de l'envoi des documents", errorMsg);
+        setSubmitting(false);
+        setErrorMessage(errorMsg);
+        return; // Don't proceed to success screen
+      }
+
+      console.log(`✅ All documents uploaded successfully! ${uploadResults.length} documents inserted.`);
       setSubmitted(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'inscription.");
+      const msg = error instanceof Error ? error.message : "Erreur lors de l'inscription.";
+      console.error("Signup error:", msg);
+      setErrorMessage(msg);
+      Alert.alert("Erreur", msg);
     } finally {
       setSubmitting(false);
     }

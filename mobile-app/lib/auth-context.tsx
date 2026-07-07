@@ -90,7 +90,7 @@ interface AuthContextValue {
     fullName: string,
     role: "patient" | "pro",
     options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
-  ) => Promise<void>;
+  ) => Promise<string | null>;
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
@@ -111,7 +111,7 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithGoogle: async () => ({ role: null, mfaRequired: false }),
   signInWithApple: async () => ({ role: null, mfaRequired: false }),
   signInWithEmail: async () => ({ role: null, mfaRequired: false }),
-  signUpWithEmail: async () => {},
+  signUpWithEmail: async () => null,
   sendPasswordReset: async () => {},
   updatePassword: async () => {},
   enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
@@ -494,7 +494,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               // Fallback: call server function if client-side insert is blocked (log URL for debugging)
               const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
-              const fnUrl = `${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/professionals/documents`;
+              const fnUrl = `${SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/professionals/documents`;
               console.log("[Auth] Falling back to server function URL (for diagnostics):", fnUrl);
 
               try {
@@ -528,6 +528,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     }
+    return data.user?.id ?? null;
   };
 
   // ── MFA helpers ─────────────────────────────────────────────────────────────

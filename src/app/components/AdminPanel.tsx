@@ -104,6 +104,8 @@ export function AdminPanel() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [sessions, setSessions] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>(initialServices);
+  const [adminNotifs, setAdminNotifs] = useState<any[]>([]);
+  const [adminNotifUnread, setAdminNotifUnread] = useState(0);
 
   // Load canonical services from public.services (keeps admin UI in sync with mobile)
   useEffect(() => {
@@ -160,7 +162,7 @@ export function AdminPanel() {
   const [serviceCatFilter, setServiceCatFilter] = useState<"Tous" | ServiceCategory>("Tous");
   const [searchQ, setSearchQ] = useState("");
   const [showYogaModal, setShowYogaModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
+  const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [liveKpi, setLiveKpi] = useState<{
     users: number; bookings: number; gmv: number; rating: number;
@@ -967,6 +969,8 @@ export function AdminPanel() {
         .insert({
           instructor_id: null, // Admin creates sessions without requiring an instructor
           title: newSession.title,
+          level: newSession.level,
+          image_url: newSession.imageUrl,
           starts_at,
           duration_min: 60,
           capacity: newSession.maxSpots,
@@ -991,7 +995,7 @@ export function AdminPanel() {
       }]);
       
       setShowYogaModal(false);
-      setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120 });
+      setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
       toast.success("Séance yoga créée et publiée");
     } catch (err: any) {
       console.error("Error adding yoga session:", err);
@@ -2370,7 +2374,7 @@ export function AdminPanel() {
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
+                   <div>
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Places max</label>
                     <input type="number" value={newSession.maxSpots} onChange={(e) => setNewSession({ ...newSession, maxSpots: Number(e.target.value) })} className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none" />
                   </div>
@@ -2378,6 +2382,44 @@ export function AdminPanel() {
                     <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Prix (MAD)</label>
                     <input type="number" value={newSession.price} onChange={(e) => setNewSession({ ...newSession, price: Number(e.target.value) })} className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none" />
                   </div>
+                </div>
+
+                {/* Level Selector */}
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Niveau</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {["Débutant", "Intermédiaire", "Avancé", "Tous niveaux"].map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => setNewSession({ ...newSession, level })}
+                        className="h-10 rounded-xl px-3 py-2 text-xs font-semibold border transition-all"
+                        style={{
+                          background: newSession.level === level ? "#0D0870" : "white",
+                          color: newSession.level === level ? "white" : "#888780",
+                          borderColor: newSession.level === level ? "#0D0870" : "#E0E0E0",
+                        }}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Image URL Input */}
+                <div>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Image URL</label>
+                  <input
+                    type="url"
+                    value={newSession.imageUrl}
+                    onChange={(e) => setNewSession({ ...newSession, imageUrl: e.target.value })}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
+                  />
+                  {newSession.imageUrl && (
+                    <div className="mt-2 rounded-xl overflow-hidden h-20 bg-[#F3F3F5]">
+                      <img src={newSession.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-3 mt-5">

@@ -44,7 +44,7 @@ export async function notifyAdminNewBooking(booking: Booking): Promise<void> {
     try {
       const { data } = await supabase.auth.getSession();
       const token = (data as any)?.session?.access_token;
-      const fnUrl = `${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/admin/log-booking`;
+      const fnUrl = `${SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/log-booking`;
       await fetch(fnUrl, {
         method: "POST",
         headers: {

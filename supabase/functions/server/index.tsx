@@ -8,7 +8,7 @@ const app = new Hono();
 app.use("*", logger(console.log));
 app.use("/*", cors({
   origin: "*",
-  allowHeaders: ["Content-Type", "Authorization"],
+  allowHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   exposeHeaders: ["Content-Length"],
   maxAge: 600,
@@ -1029,6 +1029,66 @@ app.get("/make-server-aa5d1aa6/admin/professionals/:id/documents", async (c) => 
   }
 });
 
+// GET /admin/storage/signed-url  → create signed URL for admin (service-role)
+app.get("/make-server-aa5d1aa6/admin/storage/signed-url", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const path = c.req.query("path");
+    const bucket = c.req.query("bucket") || "pro-documents";
+    const expires = parseInt(c.req.query("expires") || "60", 10);
+    if (!path) return c.json({ error: "path query required" }, 400);
+    const sb = supabaseAdmin();
+    const { data: signedData, error: signedErr } = await sb.storage.from(bucket).createSignedUrl(path, expires);
+    if (signedErr) {
+      console.log("admin/storage/signed-url error:", signedErr);
+      return c.json({ error: signedErr.message || "failed to create signed url" }, 400);
+    }
+    return c.json({ signedUrl: signedData?.signedUrl ?? signedData?.signedURL ?? null });
+  } catch (e) {
+    console.log("admin/storage/signed-url exception:", e);
+    return c.json({ error: "Erreur serveur" }, 500);
+  }
+});
+
+// GET /admin/storage/download/:filePath → download document file (service-role bypass)
+app.get("/make-server-aa5d1aa6/admin/storage/download/:filePath", async (c) => {
+  const adminKey = c.req.header("X-Admin-Key");
+  if (adminKey !== "carelink-admin-2024" && !(await requireAdmin(c))) {
+    return c.json({ error: "Non autorisé" }, 401);
+  }
+  try {
+    const filePath = c.req.param("filePath");
+    if (!filePath) return c.json({ error: "filePath required" }, 400);
+    
+    const sb = supabaseAdmin();
+    const { data, error } = await sb.storage.from("pro-documents").download(filePath);
+    
+    if (error) {
+      console.log("admin/storage/download error:", error);
+      return c.json({ error: error.message || "file not found" }, 404);
+    }
+    
+    if (!data) {
+      return c.json({ error: "no data" }, 404);
+    }
+    
+    // Convert blob to arrayBuffer then to response
+    const buffer = await data.arrayBuffer();
+    return new Response(buffer, {
+      headers: {
+        "Content-Type": data.type || "application/octet-stream",
+        "Content-Length": buffer.byteLength.toString(),
+      },
+    });
+  } catch (e) {
+    console.log("admin/storage/download exception:", e);
+    return c.json({ error: "Server error" }, 500);
+  }
+});
+
 // PUT /admin/professionals/:id/approve  → approve a pro
 app.put("/make-server-aa5d1aa6/admin/professionals/:id/approve", async (c) => {
   const adminKey = c.req.header("X-Admin-Key");
@@ -1072,56 +1132,6 @@ app.put("/make-server-aa5d1aa6/admin/professionals/:id/reject", async (c) => {
   const pending: string[] = (await kv.get("pros:pending")) || [];
   await kv.set("pros:pending", pending.filter((id) => id !== proId));
   return c.json({ success: true });
-});
-
-
-// POST /professionals/documents  → insert pro_documents (bypasses RLS via service-role)
-app.post("/make-server-aa5d1aa6/professionals/documents", async (c) => {
-  try {
-    const body = await c.req.json();
-    console.log('POST /professionals/documents body:', body);
-    const { professional_id, documents, auth_token } = body;
-    
-    if (!professional_id || !Array.isArray(documents)) {
-      return c.json({ error: "professional_id et documents[] requis" }, 400);
-    }
-    
-    // Allow if:
-    // 1. User just signed up (auth_token from the session)
-    // 2. Or user is authenticated with their own ID
-    // 3. Or user is admin
-    
-    const sb = supabaseAdmin();
-    const insertedDocs = [];
-    
-    for (const doc of documents) {
-      const { doc_type, storage_path } = doc;
-      if (!doc_type || !storage_path) continue;
-      
-      const { data, error } = await sb
-        .from("pro_documents")
-        .insert({
-          professional_id,
-          doc_type,
-          storage_path,
-          is_verified: false,
-          uploaded_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-      
-      if (error) {
-        console.error(`Error inserting ${doc_type}:`, error);
-      } else if (data) {
-        insertedDocs.push(data);
-      }
-    }
-    
-    return c.json({ success: true, documents: insertedDocs });
-  } catch (e) {
-    console.error("POST /professionals/documents error:", e);
-    return c.json({ error: "Erreur serveur" }, 500);
-  }
 });
 
 
@@ -1280,6 +1290,68 @@ app.post("/make-server-aa5d1aa6/admin/login", async (c) => {
     return c.json({ success: true, token: data.session!.access_token, role: "admin" });
   }
   return c.json({ error: "Identifiants incorrects" }, 401);
+});
+
+// POST /professionals/upload-document → upload base64-encoded document via Edge Function (server-side)
+// Avoids network issues with direct Storage uploads from Expo Go
+app.post("/make-server-aa5d1aa6/professionals/upload-document", async (c) => {
+  try {
+    const authUser = await getAuthUser(c);
+    if (!authUser) return c.json({ error: "Non autorisé" }, 401);
+
+    const body = await c.req.json();
+    const { base64, filename, docType } = body;
+
+    if (!base64 || !filename || !docType) {
+      return c.json({ error: "base64, filename, et docType requis" }, 400);
+    }
+
+    // Convert base64 to Uint8Array
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Generate storage path: userId/docType-timestamp.ext
+    const ext = filename.split(".").pop() || "bin";
+    const timestamp = Date.now();
+    const storagePath = `${authUser.id}/${docType}-${timestamp}.${ext}`;
+
+    // Upload to Storage
+    const sb = supabaseAdmin();
+    const { error: uploadErr } = await sb.storage
+      .from("pro-documents")
+      .upload(storagePath, bytes, { contentType: "application/octet-stream", upsert: false });
+
+    if (uploadErr) {
+      console.error("Storage upload error:", uploadErr);
+      return c.json({ error: `Échec upload Storage: ${uploadErr.message}` }, 500);
+    }
+
+    // Create pro_documents row
+    const { data: docRow, error: insertErr } = await sb
+      .from("pro_documents")
+      .insert({
+        professional_id: authUser.id,
+        doc_type: docType,
+        storage_path: storagePath,
+        uploaded_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error("pro_documents insert error:", insertErr);
+      return c.json({ error: `Échec insertion DB: ${insertErr.message}` }, 500);
+    }
+
+    console.log(`✅ Document uploaded server-side: ${docType} → ${storagePath}`);
+    return c.json({ success: true, storage_path: storagePath, doc: docRow });
+  } catch (e: any) {
+    console.error("POST /professionals/upload-document error:", e);
+    return c.json({ error: `Erreur serveur: ${e?.message ?? String(e)}` }, 500);
+  }
 });
 
 Deno.serve(app.fetch);

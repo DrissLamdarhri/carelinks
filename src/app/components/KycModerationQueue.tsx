@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { sendApprovalEmail, sendRejectionEmail } from "../../lib/api";
+import { sendApprovalEmail, sendRejectionEmail, getAdminSignedUrl } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -23,24 +23,96 @@ export function KycModerationQueue() {
 
   const fetchQueue = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("professionals")
-      .select("id, specialty, city, profiles!professionals_id_fkey(full_name), pro_documents(id,doc_type,storage_path,is_verified)")
-      .eq("verification_status", "pending");
-    if (error) toast.error(error.message);
-    setPros((data ?? []).map((p: any) => ({
-      id: p.id, full_name: p.profiles?.full_name ?? null,
-      specialty: p.specialty, city: p.city,
-      documents: p.pro_documents ?? [],
-    })));
+    try {
+      // Fetch pending professionals via Edge Function (uses service role to bypass RLS)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token || "";
+      
+      console.log("[KycModerationQueue] Fetching pending professionals...");
+      const pendingResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/professionals/pending`,
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+            "X-Admin-Key": "carelink-admin-2024",
+          },
+        }
+      );
+      
+      console.log("[KycModerationQueue] Pending response status:", pendingResponse.status);
+      const pendingData = await pendingResponse.json();
+      console.log("[KycModerationQueue] Pending professionals:", pendingData);
+      
+      if (!pendingResponse.ok) {
+        console.error("[KycModerationQueue] Pending response error:", pendingData);
+        toast.error(`Erreur: ${pendingData.error || "Impossible de charger les professionnels"}`);
+        setPros([]);
+        return;
+      }
+      
+      const professionals = pendingData.professionals || [];
+      console.log(`[KycModerationQueue] Found ${professionals.length} pending professionals`);
+      
+      // Fetch documents for each professional
+      const prosWithDocs = await Promise.all(
+        professionals.map(async (p: any) => {
+          console.log(`[KycModerationQueue] Fetching documents for pro ${p.id}...`);
+          const docsResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/professionals/${p.id}/documents`,
+            {
+              headers: {
+                Authorization: token ? `Bearer ${token}` : "",
+                "X-Admin-Key": "carelink-admin-2024",
+              },
+            }
+          );
+          
+          console.log(`[KycModerationQueue] Documents response status for ${p.id}:`, docsResponse.status);
+          const docsData = await docsResponse.json();
+          console.log(`[KycModerationQueue] Documents for ${p.id}:`, docsData);
+          
+          return {
+            id: p.id,
+            full_name: p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : p.firstName || "Unknown",
+            specialty: p.specialty,
+            city: p.city,
+            documents: docsData.documents || [],
+          };
+        })
+      );
+      
+      console.log("[KycModerationQueue] Final pros with docs:", prosWithDocs);
+      setPros(prosWithDocs);
+    } catch (err) {
+      console.error("[KycModerationQueue] Error fetching pending professionals:", err);
+      toast.error("Erreur lors de la récupération des professionnels");
+      setPros([]);
+    }
     setLoading(false);
   };
 
   useEffect(() => { fetchQueue(); }, []);
 
   const signedUrl = async (path: string) => {
-    const { data } = await supabase.storage.from("pro-documents").createSignedUrl(path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    try {
+      console.log("[KycModerationQueue] Opening document, path:", path);
+      if (!path) {
+        console.error("[KycModerationQueue] No path provided");
+        toast.error("Pas de chemin de fichier");
+        return;
+      }
+      
+      // Bucket is public, use direct REST API URL
+      const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+      const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${path}`;
+      console.log("[KycModerationQueue] Opening URL in new page:", directUrl);
+      
+      window.open(directUrl, "_blank");
+      console.log("[KycModerationQueue] Window opened");
+    } catch (e) {
+      console.error('[KycModerationQueue] Error opening document:', e);
+      toast.error(`Erreur: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const decide = async (proId: string, status: "approved" | "rejected") => {

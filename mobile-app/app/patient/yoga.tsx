@@ -79,7 +79,7 @@ export default function YogaCatalogScreen() {
     ? yogaSessions.map((s) => ({
         id: s.id, // Keep UUID from database
         name: s.title,
-        level: "Tous niveaux",
+        level: s.level || "Tous niveaux",
         instructor: s.instructor,
         instructorImg: "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
         duration: `${s.durationMin} min`,
@@ -92,7 +92,7 @@ export default function YogaCatalogScreen() {
         }),
         spots: s.capacity - s.enrolledCount,
         rating: 4.8,
-        img: "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+        img: s.imageUrl || "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
       }))
     : []; // Empty array, not fallback
 
