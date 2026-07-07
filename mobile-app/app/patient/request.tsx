@@ -40,12 +40,6 @@ import { geo } from "@/lib/db/geo";
 import { toDbSpecialty } from "@/lib/db/types";
 import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
-<<<<<<< HEAD
-<<<<<<< HEAD
-import { useServiceTypes } from "@/lib/service-types";
-=======
-=======
->>>>>>> 7608fae5864a48c65491a0428638fb076459c511
 import type { ProPinData } from "../../components/map/Pins";
 import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
 import { useServiceTypes } from "@/lib/service-types";
@@ -78,10 +72,6 @@ function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
     distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
   }));
 }
-<<<<<<< HEAD
->>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
-=======
->>>>>>> 7608fae5864a48c65491a0428638fb076459c511
 
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
@@ -293,23 +283,7 @@ export default function PatientRequestScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-      if (demoMode) {
-        const serviceKey = isKine ? "kine" : "infirmier";
-        const mockBookingId = `demo-${serviceKey}-${Date.now()}`;
-        await new Promise(resolve => setTimeout(resolve, 800));
-        router.push(`/patient/waiting/${mockBookingId}`);
-        setSubmitting(false);
-        return;
-      }
-
-=======
       // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
->>>>>>> ace814689c3549ff55c359e3031e4e09cbcc449e
-=======
-      // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
->>>>>>> 7608fae5864a48c65491a0428638fb076459c511
       await db.patients.upsert({ id: user.id });
 
       const [hour, minute] = times[selectedTime].split(":");

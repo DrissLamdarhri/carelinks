@@ -6,7 +6,7 @@
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { supabase } from "./supabase";
 
-const BASE = `https://${projectId}.supabase.co/functions/v1/make-server-aa5d1aa6`;
+const BASE = `https://${projectId}.supabase.co/functions/v1/server/make-server-aa5d1aa6`;
 const ADMIN_KEY = "carelink-admin-2024";
 
 async function getToken(): Promise<string> {
@@ -193,7 +193,16 @@ export async function getProDocumentsAdmin(proId: string) {
 }
 
 export async function getAdminSignedUrl(path: string, bucket = "pro-documents", expires = 60) {
-  return fetchAPI(`/admin/storage/signed-url?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(bucket)}&expires=${expires}`, {}, true);
+  const fullUrl = `/admin/storage/signed-url?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(bucket)}&expires=${expires}`;
+  console.log("[API] Getting admin signed URL:", { path, bucket, expires, fullUrl });
+  try {
+    const result = await fetchAPI(fullUrl, {}, true);
+    console.log("[API] Signed URL result:", result);
+    return result;
+  } catch (err) {
+    console.error("[API] Signed URL error:", err);
+    throw err;
+  }
 }
 
 export async function approvePro(proId: string) {

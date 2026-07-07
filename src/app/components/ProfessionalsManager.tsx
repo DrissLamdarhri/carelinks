@@ -202,11 +202,14 @@ export function ProfessionalsManager() {
         .eq("professional_id", proId)
         .order("uploaded_at", { ascending: false });
 
+      console.log(`📄 Loaded pro_documents for ${proId}: ${data?.length ?? 0} rows`, { data });
+
       if (error) {
         console.warn("Error fetching pro documents via RLS:", error);
         // Try admin API fallback
         try {
           const res = await getProDocumentsAdmin(proId);
+          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
           setProDocuments(res.documents ?? []);
           return;
         } catch (apiErr) {
@@ -217,15 +220,17 @@ export function ProfessionalsManager() {
       }
 
       if (!data || data.length === 0) {
+        console.warn(`⚠️  No documents found for ${proId}. Trying admin API...`);
         // Fallback in case RLS filtered results
         try {
           const res = await getProDocumentsAdmin(proId);
+          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
           if (res.documents && res.documents.length > 0) {
             setProDocuments(res.documents);
             return;
           }
         } catch (apiErr) {
-          // ignore
+          console.error("Admin API pro documents error:", apiErr);
         }
       }
 
@@ -956,11 +961,12 @@ export function ProfessionalsManager() {
                           </div>
                           <button onClick={async () => {
                             try {
-                              const res = await getAdminSignedUrl(d.storage_path);
-                              if (res?.signedUrl) window.open(res.signedUrl, "_blank");
-                              else toast.error("Impossible d'ouvrir le document");
+                              // Bucket is public - use direct URL
+                              const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+                              const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
+                              window.open(directUrl, "_self");
                             } catch (e) {
-                              console.error("Error opening doc via admin signed-url:", e);
+                              console.error("Error opening doc:", e);
                               toast.error("Erreur lors de l'ouverture du document");
                             }
                           }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#0D0870] text-white rounded-xl text-[12px] hover:opacity-90" style={{ fontWeight: 600 }}>

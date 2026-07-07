@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -236,37 +237,107 @@ export default function ProRegistrationScreen() {
         experience: form.experience.trim(),
       });
 
-      // 2) Create placeholder pro_documents rows (storage_path = null initially)
-      // Actual file uploads happen later via the KYC screen after user logs in.
-      // This avoids persistent network failures during signup on mobile.
       const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
-      if (uid) {
-        const docTypes = [
-          { type: "diploma", label: getDiplomaTitle() },
-          { type: "cin", label: "CIN" },
-          { type: "selfie", label: "Selfie" },
-        ];
-        for (const doc of docTypes) {
-          try {
-            const { error: insertError } = await supabase.from("pro_documents").insert({
-              professional_id: uid,
-              doc_type: doc.label,
-              storage_path: null, // Will be filled when user uploads via KYC screen
-              is_verified: false,
-              uploaded_at: null,
-            });
-            if (insertError) {
-              console.error("Failed to insert placeholder pro_documents for", doc.type, insertError);
-            }
-          } catch (e) {
-            console.error("Exception inserting placeholder pro_documents:", e);
+      if (!uid) throw new Error("Impossible de récupérer l'ID utilisateur après inscription");
+
+      const sessionData = await supabase.auth.getSession();
+      const token = sessionData.data?.session?.access_token;
+      if (!token) throw new Error("Session token manquant");
+
+      console.log(`📋 Signup successful for user ${uid}. Starting document uploads...`);
+
+      // 2) Upload all documents directly to Supabase Storage via REST API (more reliable for React Native)
+      const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+      const STORAGE_BUCKET = "pro-documents";
+      const uploadResults: Array<{ type: string; doc_type: string; storage_path: string }> = [];
+      const failedUploads: string[] = [];
+
+      for (const pending of pendingUploads) {
+        const docLabel = pending.type === "diploma" ? getDiplomaTitle() : pending.type === "cin" ? "CIN" : "Selfie";
+        console.log(`🔄 Uploading ${pending.type} (${docLabel})...`);
+        
+        try {
+          // Generate storage path: userId/docType-timestamp.ext (respects RLS policy)
+          const ext = pending.name.split(".").pop() || "jpg";
+          const timestamp = Date.now();
+          const storagePath = `${uid}/${pending.type}-${timestamp}.${ext}`;
+
+          console.log(`🔄 Uploading ${pending.type} to Storage path: ${storagePath}`);
+
+          // ✅ Upload via REST API using FormData (more reliable in React Native than SDK)
+          const formData = new FormData();
+          formData.append("file", {
+            uri: pending.uri,
+            name: pending.name,
+            type: pending.type === "selfie" ? "image/jpeg" : "image/jpeg",
+          } as any);
+
+          const storageUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${storagePath}`;
+          const uploadResponse = await fetch(storageUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            console.error(`❌ Storage upload failed for ${pending.type}: HTTP ${uploadResponse.status}`, errorText);
+            failedUploads.push(docLabel);
+            continue;
           }
+
+          console.log(`✅ Uploaded ${pending.type} to Storage: ${storagePath}`);
+
+          // ✅ Insert record into pro_documents table
+          const { error: insertErr } = await supabase
+            .from("pro_documents")
+            .insert({
+              professional_id: uid,
+              doc_type: pending.type,
+              storage_path: storagePath,
+              uploaded_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (insertErr) {
+            console.error(`❌ DB insert failed for ${pending.type}:`, insertErr.message);
+            failedUploads.push(docLabel);
+            continue;
+          }
+
+          console.log(`✅ Recorded ${pending.type} in pro_documents`);
+          uploadResults.push({
+            type: pending.type,
+            doc_type: docLabel,
+            storage_path: storagePath,
+          });
+        } catch (e) {
+          console.error(`❌ Exception uploading ${pending.type}:`, e);
+          failedUploads.push(docLabel);
         }
       }
 
+      // 3) Check if all uploads succeeded
+      if (failedUploads.length > 0) {
+        const failedList = failedUploads.join(", ");
+        const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer.`;
+        console.error(`❌ Upload failures detected: ${failedList}`);
+        Alert.alert("Erreur lors de l'envoi des documents", errorMsg);
+        setSubmitting(false);
+        setErrorMessage(errorMsg);
+        return; // Don't proceed to success screen
+      }
+
+      console.log(`✅ All documents uploaded successfully! ${uploadResults.length} documents inserted.`);
       setSubmitted(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'inscription.");
+      const msg = error instanceof Error ? error.message : "Erreur lors de l'inscription.";
+      console.error("Signup error:", msg);
+      setErrorMessage(msg);
+      Alert.alert("Erreur", msg);
     } finally {
       setSubmitting(false);
     }

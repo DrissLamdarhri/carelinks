@@ -104,6 +104,8 @@ export function AdminPanel() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [sessions, setSessions] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>(initialServices);
+  const [adminNotifs, setAdminNotifs] = useState<any[]>([]);
+  const [adminNotifUnread, setAdminNotifUnread] = useState(0);
 
   // Load canonical services from public.services (keeps admin UI in sync with mobile)
   useEffect(() => {

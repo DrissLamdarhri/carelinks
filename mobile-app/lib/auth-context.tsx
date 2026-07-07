@@ -491,7 +491,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               // Fallback: call server function if client-side insert is blocked (log URL for debugging)
               const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://wjhzrovmktekfcjohhrw.supabase.co";
-              const fnUrl = `${SUPABASE_URL}/functions/v1/make-server-aa5d1aa6/professionals/documents`;
+              const fnUrl = `${SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/professionals/documents`;
               console.log("[Auth] Falling back to server function URL (for diagnostics):", fnUrl);
 
               try {
