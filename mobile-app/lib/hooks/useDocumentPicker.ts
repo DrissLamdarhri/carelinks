@@ -1,6 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
 import { showToast } from "@/lib/toast";
-import * as ImageManipulator from "expo-image-manipulator";
 
 export interface DocumentAsset {
   uri: string;
@@ -72,10 +71,13 @@ export async function uploadDocumentToSupabase(
     let uploadUri = documentUri;
     if (documentType.startsWith("image/")) {
       try {
-        const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
-        if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+        const ImageManipulator = await import("expo-image-manipulator");
+        if (ImageManipulator && ImageManipulator.manipulateAsync) {
+          const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
+          if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+        }
       } catch (manipErr) {
-        console.warn("ImageManipulator resize failed, continuing with original file:", manipErr);
+        console.warn("ImageManipulator not available or resize failed, continuing with original file:", manipErr);
       }
     }
 
