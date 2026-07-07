@@ -16,7 +16,7 @@ import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
-import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuSections: Array<{
@@ -120,62 +120,22 @@ export default function PatientProfileScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>Mon profil</Text>
-
-        <View style={styles.profileRow}>
-          <View style={styles.avatarWrap}>
-            <AvatarWithDefault
-              avatarUrl={avatar}
-              initials={initials}
-              size={64}
-              borderRadius={32}
-              useDefaultImage={!avatar}
-            />
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={handleUploadAvatar}
-              disabled={uploadingAvatar}
-            >
-              {uploadingAvatar ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Edit3 size={10} color="white" />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.profileMeta}>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.email}>{email}</Text>
-            <View style={styles.contactRow}>
-              <Text style={styles.phone}>{phone}</Text>
-              <Text style={styles.contactDot}>·</Text>
-              <Text style={styles.city}>{city}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{bookingsLabel}</Text>
-            <Text style={styles.statLabel}>Réservations</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <View style={styles.ratingRow}>
-              <Star size={14} color="#FBBF24" fill="#FBBF24" />
-              <Text style={styles.statValue}>{ratingLabel}</Text>
-            </View>
-            <Text style={styles.statLabel}>Note moyenne</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: Colors.primary }]}>{spentLabel}</Text>
-            <Text style={styles.statLabel}>MAD dépensés</Text>
-          </View>
-        </View>
-      </View>
+      <ProfileHeaderCard
+        title="Mon profil"
+        name={displayName}
+        email={email}
+        phone={phone}
+        city={city}
+        avatarUrl={avatar}
+        initials={initials}
+        uploading={uploadingAvatar}
+        onEditAvatar={handleUploadAvatar}
+        stats={[
+          { value: bookingsLabel, label: "Réservations" },
+          { value: ratingLabel, label: "Note moyenne", star: true },
+          { value: spentLabel, label: "MAD dépensés", accent: true },
+        ]}
+      />
 
       {menuSections.map((section) => (
         <View key={section.title} style={styles.section}>

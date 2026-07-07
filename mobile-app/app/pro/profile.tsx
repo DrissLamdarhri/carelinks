@@ -20,6 +20,8 @@ import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Professional } from "@/lib/db/types";
 import { RadiusSlider } from "@/components/RadiusSlider";
+import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
 const menuItems = [
   { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/pro/profile-infos" },
@@ -38,7 +40,23 @@ export default function ProProfileScreen() {
   const [pro, setPro] = useState<Professional | null>(null);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleUploadAvatar = async () => {
+    if (!user?.id || uploadingAvatar) return;
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) return;
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (avatarUrl && (await updateProfileAvatar(user.id, avatarUrl))) {
+        await refreshProfile();
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Refresh profile when screen comes into focus
   useFocusEffect(
@@ -107,52 +125,22 @@ export default function ProProfileScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Mon profil pro</Text>
-
-      <View style={styles.headerCard}>
-        <View style={styles.profileRow}>
-          <Image
-            source={typeof avatar === "string" ? { uri: avatar } : avatar}
-            style={styles.avatar}
-            resizeMode="cover"
-          />
-          <View style={styles.profileMeta}>
-            <Text style={styles.name}>{displayName}</Text>
-            {email ? <Text style={styles.email}>{email}</Text> : null}
-            <View style={styles.contactRow}>
-              {phone ? <Text style={styles.phone}>{phone}</Text> : null}
-              {phone && city ? <Text style={styles.contactDot}>·</Text> : null}
-              {city ? <Text style={styles.city}>{city}</Text> : null}
-            </View>
-            <View style={styles.specialtyRow}>
-              <Text style={styles.specialty}>{specialty}</Text>
-              {isVerified ? <Shield size={14} color={Colors.primary} /> : null}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <View style={styles.ratingRow}>
-              <Star size={14} color="#FBBF24" fill="#FBBF24" />
-              <Text style={styles.statValue}>{rating > 0 ? rating.toFixed(1) : "—"}</Text>
-            </View>
-            <Text style={styles.statLabel}>Note</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{pro?.total_bookings ?? 0}</Text>
-            <Text style={styles.statLabel}>Missions</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: isVerified ? Colors.primary : "#D97706" }]}>
-              {isVerified ? "Vérifié" : "En attente"}
-            </Text>
-            <Text style={styles.statLabel}>Statut</Text>
-          </View>
-        </View>
-      </View>
+      <ProfileHeaderCard
+        title="Mon profil pro"
+        name={displayName}
+        email={email}
+        phone={phone}
+        city={city || specialty}
+        avatarUrl={typeof avatar === "string" ? avatar : ""}
+        initials={displayName.split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase()}
+        uploading={uploadingAvatar}
+        onEditAvatar={handleUploadAvatar}
+        stats={[
+          { value: rating > 0 ? rating.toFixed(1) : "—", label: "Note", star: true },
+          { value: pro?.total_bookings ?? 0, label: "Missions" },
+          { value: isVerified ? "Vérifié" : "En attente", label: "Statut", accent: isVerified },
+        ]}
+      />
 
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
