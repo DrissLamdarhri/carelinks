@@ -142,6 +142,7 @@ export default function ProProfileScreen() {
         ]}
       />
 
+      <View style={styles.body}>
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
           <TouchableOpacity
@@ -197,13 +198,15 @@ export default function ProProfileScreen() {
       </TouchableOpacity>
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  content: { paddingBottom: 24 },
+  body: { paddingHorizontal: 20, paddingTop: 16, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surfaceWarm },
   title: {
     fontSize: 22,

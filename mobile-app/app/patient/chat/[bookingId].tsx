@@ -118,7 +118,12 @@ export default function BookingChatScreen() {
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : recipientId && bookingId ? (
-        <LiveChat bookingId={bookingId} recipientId={recipientId} />
+        <LiveChat
+          bookingId={bookingId}
+          recipientId={recipientId}
+          recipientName={recipientProfile?.full_name ?? "Professionnel"}
+          recipientAvatar={recipientProfile?.avatar_url ?? null}
+        />
       ) : (
         <View style={styles.center}>
           <Text style={styles.errorText}>{errorMessage ?? "Destinataire introuvable."}</Text>

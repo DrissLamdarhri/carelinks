@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +11,7 @@ import {
   View,
   Keyboard,
 } from "react-native";
-import { Send } from "lucide-react-native";
+import { Check, CheckCheck, Send } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
@@ -22,9 +23,13 @@ import {
   isDemoBookingId,
 } from "@/lib/demo-booking";
 
+const NAVY = "#0D0870";
+
 type LiveChatProps = {
   bookingId: string;
   recipientId: string | null;
+  recipientName?: string;
+  recipientAvatar?: string | null;
 };
 
 type MessageRow = {
@@ -35,23 +40,38 @@ type MessageRow = {
   created_at: string;
 };
 
-type ChatMessage = MessageRow & {
-  sender_name: string;
+const initialsOf = (name: string) =>
+  name.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
+
+function BubbleAvatar({ url, name }: { url?: string | null; name: string }) {
+  if (url) return <Image source={{ uri: url }} style={styles.bubbleAvatar} />;
+  return (
+    <View style={[styles.bubbleAvatar, styles.bubbleAvatarFallback]}>
+      <Text style={styles.bubbleAvatarTxt}>{initialsOf(name)}</Text>
+    </View>
+  );
+}
+
+const dayLabel = (iso: string) => {
+  const d = new Date(iso);
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Aujourd'hui";
+  if (d.toDateString() === yest.toDateString()) return "Hier";
+  return d.toLocaleDateString("fr-MA", { day: "numeric", month: "long" });
 };
 
-export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps) {
+export function LiveChat({ bookingId, recipientId: _recipientId, recipientName = "Professionnel", recipientAvatar }: LiveChatProps) {
   const { user } = useAuth();
   const isDemoBooking = isDemoBookingId(bookingId);
   const demoRecipientId = _recipientId ?? DEMO_PRO_1_ID;
   const demoPatientId = user?.id ?? DEMO_PATIENT_ID;
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState("");
-  const namesRef = useRef<Map<string, string>>(new Map());
   const scrollRef = useRef<ScrollView | null>(null);
 
-  // Ensure chat scrolls to bottom when keyboard opens or input is focused
   const scrollToBottom = () => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   };
@@ -61,78 +81,29 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
     return () => showSub.remove();
   }, []);
 
-  const hydrateSenderName = useCallback(async (senderId: string) => {
-    if (namesRef.current.has(senderId)) return namesRef.current.get(senderId)!;
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("id", senderId)
-      .maybeSingle();
-    if (error) throw error;
-    const fullName = (data?.full_name as string) || "Utilisateur";
-    namesRef.current.set(senderId, fullName);
-    return fullName;
-  }, []);
-
   const loadMessages = useCallback(async () => {
     if (!bookingId) return;
     setLoading(true);
     try {
       if (isDemoBooking) {
-        const demoPro = buildDemoProfile(demoRecipientId);
-        const rows = buildDemoMessages(bookingId);
-        setMessages(
-          rows.map((row) => ({
-            ...row,
-            sender_name:
-              row.sender_id === demoRecipientId
-                ? demoPro.full_name
-                : row.sender_id === demoPatientId || row.sender_id === DEMO_PATIENT_ID
-                  ? "Vous"
-                  : "Utilisateur",
-          }))
-        );
+        setMessages(buildDemoMessages(bookingId));
         return;
       }
-
       const { data, error } = await supabase
         .from("messages")
         .select("id, booking_id, sender_id, body, created_at")
         .eq("booking_id", bookingId)
         .order("created_at", { ascending: true });
       if (error) throw error;
-
-      const rows = (data ?? []) as MessageRow[];
-      const senderIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-
-      if (senderIds.length > 0) {
-        const { data: profiles, error: profileError } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", senderIds);
-        if (profileError) throw profileError;
-        for (const row of profiles ?? []) {
-          namesRef.current.set(row.id as string, (row.full_name as string) || "Utilisateur");
-        }
-      }
-
-      setMessages(
-        rows.map((row) => ({
-          ...row,
-          sender_name: namesRef.current.get(row.sender_id) ?? "Utilisateur",
-        }))
-      );
+      setMessages((data ?? []) as MessageRow[]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Chat indisponible.";
-      Alert.alert("Erreur", message);
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Chat indisponible.");
     } finally {
       setLoading(false);
     }
-  }, [bookingId, demoPatientId, demoRecipientId, isDemoBooking]);
+  }, [bookingId, isDemoBooking]);
 
-  useEffect(() => {
-    void loadMessages();
-  }, [loadMessages]);
+  useEffect(() => { void loadMessages(); }, [loadMessages]);
 
   useEffect(() => {
     if (!bookingId || isDemoBooking) return;
@@ -140,40 +111,23 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
       .channel(`messages:live:${bookingId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `booking_id=eq.${bookingId}`,
-        },
-        async (payload) => {
+        { event: "INSERT", schema: "public", table: "messages", filter: `booking_id=eq.${bookingId}` },
+        (payload) => {
           const next = payload.new as MessageRow;
-          let senderName = namesRef.current.get(next.sender_id);
-          if (!senderName) {
-            try {
-              senderName = await hydrateSenderName(next.sender_id);
-            } catch {
-              senderName = "Utilisateur";
-            }
-          }
-
-          setMessages((prev) => {
-            if (prev.some((row) => row.id === next.id)) return prev;
-            return [...prev, { ...next, sender_name: senderName ?? "Utilisateur" }];
-          });
+          setMessages((prev) => (prev.some((r) => r.id === next.id) ? prev : [...prev, next]));
         }
       )
       .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [bookingId, hydrateSenderName, isDemoBooking]);
+    return () => { void supabase.removeChannel(channel); };
+  }, [bookingId, isDemoBooking]);
 
   const sorted = useMemo(
     () => [...messages].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)),
     [messages]
   );
+
+  const isMine = (m: MessageRow) =>
+    isDemoBooking ? m.sender_id === demoPatientId || m.sender_id === DEMO_PATIENT_ID : m.sender_id === user?.id;
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
@@ -182,31 +136,14 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
     setInput("");
     try {
       if (isDemoBooking) {
-        const localMessage: ChatMessage = {
-          id: `demo-msg-${Date.now()}`,
-          booking_id: bookingId,
-          sender_id: demoPatientId,
-          body,
-          created_at: new Date().toISOString(),
-          sender_name: "Vous",
-        };
-        setMessages((prev) => [...prev, localMessage]);
+        setMessages((prev) => [...prev, { id: `demo-msg-${Date.now()}`, booking_id: bookingId, sender_id: demoPatientId, body, created_at: new Date().toISOString() }]);
         return;
       }
-
-      if (!user?.id) {
-        throw new Error("Utilisateur non connecté.");
-      }
-
-      const { error } = await supabase.from("messages").insert({
-        booking_id: bookingId,
-        sender_id: user.id,
-        body,
-      });
+      if (!user?.id) throw new Error("Utilisateur non connecté.");
+      const { error } = await supabase.from("messages").insert({ booking_id: bookingId, sender_id: user.id, body });
       if (error) throw error;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossible d'envoyer le message.";
-      Alert.alert("Erreur", message);
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Impossible d'envoyer le message.");
       setInput(body);
     } finally {
       setSending(false);
@@ -224,34 +161,43 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
         keyboardDismissMode="interactive"
       >
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="small" color={Colors.primary} />
+          <View style={styles.center}><ActivityIndicator size="small" color={NAVY} /></View>
+        ) : sorted.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <BubbleAvatar url={recipientAvatar} name={recipientName} />
+            <Text style={styles.emptyTitle}>Démarrez la conversation</Text>
+            <Text style={styles.emptySub}>Envoyez un message à {recipientName.split(" ")[0]}.</Text>
           </View>
         ) : null}
 
-        {!loading && sorted.length === 0 ? (
-          <View style={styles.center}>
-            <Text style={styles.emptyText}>Aucun message pour le moment.</Text>
-          </View>
-        ) : null}
-
-        {sorted.map((message) => {
-          const mine = isDemoBooking
-            ? message.sender_name === "Vous" ||
-              message.sender_id === demoPatientId ||
-              message.sender_id === DEMO_PATIENT_ID
-            : message.sender_id === user?.id;
+        {sorted.map((m, i) => {
+          const mine = isMine(m);
+          const showDate = i === 0 || new Date(m.created_at).toDateString() !== new Date(sorted[i - 1].created_at).toDateString();
+          const lastOfGroup = i === sorted.length - 1 || sorted[i + 1].sender_id !== m.sender_id;
+          const time = new Date(m.created_at).toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" });
           return (
-            <View key={message.id} style={[styles.row, mine ? styles.rowMine : styles.rowOther]}>
-              <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                <Text style={[styles.senderText, mine && styles.senderTextMine]}>{message.sender_name}</Text>
-                <Text style={[styles.bodyText, mine && styles.bodyTextMine]}>{message.body}</Text>
-                <Text style={[styles.timeText, mine && styles.timeTextMine]}>
-                  {new Date(message.created_at).toLocaleTimeString("fr-MA", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
+            <View key={m.id}>
+              {showDate ? (
+                <View style={styles.dateWrap}><Text style={styles.dateTxt}>{dayLabel(m.created_at)}</Text></View>
+              ) : null}
+              <View style={[styles.row, mine ? styles.rowMine : styles.rowOther]}>
+                {!mine ? (
+                  lastOfGroup ? <BubbleAvatar url={recipientAvatar} name={recipientName} /> : <View style={styles.avatarSpacer} />
+                ) : null}
+                <View
+                  style={[
+                    styles.bubble,
+                    mine ? styles.bubbleMine : styles.bubbleOther,
+                    mine && lastOfGroup && styles.tailMine,
+                    !mine && lastOfGroup && styles.tailOther,
+                  ]}
+                >
+                  <Text style={[styles.body, mine && styles.bodyMine]}>{m.body}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={[styles.time, mine && styles.timeMine]}>{time}</Text>
+                    {mine ? <CheckCheck size={13} color="rgba(255,255,255,0.7)" /> : null}
+                  </View>
+                </View>
               </View>
             </View>
           );
@@ -262,23 +208,19 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Votre message..."
+          placeholder="Écrivez un message…"
           placeholderTextColor={Colors.textSubtle}
-          selectionColor={Colors.primary}
-          cursorColor={Colors.primary}
+          selectionColor={NAVY}
           style={styles.input}
           onFocus={scrollToBottom}
+          multiline
         />
         <TouchableOpacity
-          style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.65 }]}
+          style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.5 }]}
           onPress={handleSend}
           disabled={!input.trim() || sending}
         >
-          {sending ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Send size={16} color="white" />
-          )}
+          {sending ? <ActivityIndicator size="small" color="white" /> : <Send size={17} color="white" />}
         </TouchableOpacity>
       </View>
     </View>
@@ -286,104 +228,38 @@ export function LiveChat({ bookingId, recipientId: _recipientId }: LiveChatProps
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  messages: {
-    flex: 1,
-  },
-  messagesContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  center: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 24,
-  },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
-  row: {
-    flexDirection: "row",
-  },
-  rowMine: {
-    justifyContent: "flex-end",
-  },
-  rowOther: {
-    justifyContent: "flex-start",
-  },
-  bubble: {
-    maxWidth: "82%",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  bubbleMine: {
-    backgroundColor: Colors.primary,
-    borderBottomRightRadius: 6,
-  },
-  bubbleOther: {
-    backgroundColor: "white",
-    borderBottomLeftRadius: 6,
-    borderWidth: 1,
-    borderColor: "#EDEDED",
-  },
-  senderText: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    marginBottom: 2,
-    fontWeight: "600",
-  },
-  senderTextMine: {
-    color: "rgba(255,255,255,0.75)",
-  },
-  bodyText: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  bodyTextMine: {
-    color: "white",
-  },
-  timeText: {
-    marginTop: 4,
-    color: Colors.textMuted,
-    fontSize: 10,
-    textAlign: "right",
-  },
-  timeTextMine: {
-    color: "rgba(255,255,255,0.75)",
-  },
-  inputRow: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    backgroundColor: "white",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  input: {
-    flex: 1,
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 14,
-    color: Colors.textPrimary,
-    fontSize: 14,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
+  messages: { flex: 1 },
+  messagesContent: { paddingHorizontal: 14, paddingVertical: 14, gap: 3 },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 24 },
+
+  emptyWrap: { alignItems: "center", paddingVertical: 50, gap: 6 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "800", marginTop: 8 },
+  emptySub: { color: Colors.textMuted, fontSize: 13 },
+
+  dateWrap: { alignItems: "center", marginVertical: 10 },
+  dateTxt: { backgroundColor: "rgba(13,8,112,0.07)", color: Colors.primary, fontSize: 11, fontWeight: "700", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
+
+  row: { flexDirection: "row", alignItems: "flex-end", gap: 7, marginTop: 2 },
+  rowMine: { justifyContent: "flex-end" },
+  rowOther: { justifyContent: "flex-start" },
+  avatarSpacer: { width: 26 },
+  bubbleAvatar: { width: 26, height: 26, borderRadius: 13 },
+  bubbleAvatarFallback: { backgroundColor: "#E7E4FA", alignItems: "center", justifyContent: "center" },
+  bubbleAvatarTxt: { color: NAVY, fontSize: 10, fontWeight: "800" },
+
+  bubble: { maxWidth: "78%", borderRadius: 18, paddingHorizontal: 13, paddingVertical: 9 },
+  bubbleMine: { backgroundColor: NAVY },
+  bubbleOther: { backgroundColor: "white", shadowColor: NAVY, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  tailMine: { borderBottomRightRadius: 5 },
+  tailOther: { borderBottomLeftRadius: 5 },
+  body: { color: Colors.textPrimary, fontSize: 14.5, lineHeight: 20 },
+  bodyMine: { color: "white" },
+  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 3 },
+  time: { color: Colors.textSubtle, fontSize: 10 },
+  timeMine: { color: "rgba(255,255,255,0.65)" },
+
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12, paddingVertical: 10, paddingBottom: 14, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#F0F0F0" },
+  input: { flex: 1, minHeight: 46, maxHeight: 120, borderRadius: 23, backgroundColor: Colors.surfaceWarm, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, color: Colors.textPrimary, fontSize: 14.5 },
+  sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: NAVY, alignItems: "center", justifyContent: "center" },
 });

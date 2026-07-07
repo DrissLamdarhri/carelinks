@@ -72,8 +72,9 @@ export function ProfileHeaderCard({
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: "white", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#F0F0F0", marginBottom: 14 },
-  title: { fontSize: 24, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular", marginBottom: 16 },
+  // Full-width white header (edge-to-edge), like the reference.
+  card: { backgroundColor: "white", paddingTop: 54, paddingHorizontal: 20, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  title: { fontSize: 26, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular", marginBottom: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatarWrap: { position: "relative" },
   editBtn: { position: "absolute", right: -1, bottom: -1, width: 22, height: 22, borderRadius: 11, backgroundColor: NAVY, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "white" },

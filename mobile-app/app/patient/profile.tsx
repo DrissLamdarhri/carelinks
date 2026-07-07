@@ -137,6 +137,7 @@ export default function PatientProfileScreen() {
         ]}
       />
 
+      <View style={styles.body}>
       {menuSections.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -170,13 +171,15 @@ export default function PatientProfileScreen() {
         <LogOut size={18} color={Colors.danger} />
         <Text style={styles.signOutText}>Se déconnecter</Text>
       </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 24 },
+  content: { paddingBottom: 24 },
+  body: { paddingHorizontal: 20, paddingTop: 16 },
   headerCard: {
     backgroundColor: "white",
     borderRadius: 20,
