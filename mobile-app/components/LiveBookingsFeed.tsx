@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Clock, Loader2, MapPin, Send } from "lucide-react-native";
+import { Clock, HandCoins, Loader2, MapPin, Send, Stethoscope, Zap } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import type { ProSpecialty } from "@/lib/db/types";
 
-type LiveBookingsFeedProps = {
-  specialty: ProSpecialty;
+const NAVY = "#0D0870";
+
+const SPEC_LABEL: Record<string, string> = {
+  nurse: "Soins infirmiers",
+  physiotherapist: "Kinésithérapie",
+  psychologist: "Psychologie",
+  yoga_instructor: "Yoga",
 };
+
+type LiveBookingsFeedProps = { specialty: ProSpecialty };
 
 export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   const { user } = useAuth();
@@ -29,11 +36,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      await db.bids.create({
-        booking_id: bookingId,
-        professional_id: user.id,
-        price_mad: n,
-      });
+      await db.bids.create({ booking_id: bookingId, professional_id: user.id, price_mad: n });
       setBidFor(null);
       setAmount("");
     } catch (error) {
@@ -53,131 +56,158 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
 
   if (bookings.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyText}>Aucune demande ouverte</Text>
+      <View style={styles.emptyCard}>
+        <View style={styles.emptyIcon}>
+          <Stethoscope size={22} color={Colors.textSubtle} />
+        </View>
+        <Text style={styles.emptyTitle}>Aucune demande pour le moment</Text>
+        <Text style={styles.emptySub}>Restez en ligne — les nouvelles demandes apparaîtront ici.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.list}>
-      {bookings.map((booking) => (
-        <View key={booking.id} style={styles.card}>
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Demande de soin</Text>
-              {booking.notes ? <Text style={styles.note}>{booking.notes}</Text> : null}
-            </View>
-            <Text style={styles.price}>
-              {booking.budget_min_mad ?? 0}-{booking.budget_max_mad ?? 0} MAD
-            </Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            {booking.address ? (
-              <View style={styles.metaItem}>
-                <MapPin size={11} color={Colors.textMuted} />
-                <Text style={styles.metaText}>{booking.address}</Text>
+      {bookings.map((booking) => {
+        const urgent = booking.urgency === "urgent";
+        const isBidding = bidFor === booking.id;
+        return (
+          <View key={booking.id} style={styles.card}>
+            {/* Header */}
+            <View style={styles.top}>
+              <View style={styles.iconWrap}>
+                <Stethoscope size={19} color={Colors.primary} strokeWidth={1.9} />
               </View>
-            ) : null}
-            {booking.scheduled_at ? (
-              <View style={styles.metaItem}>
-                <Clock size={11} color={Colors.textMuted} />
-                <Text style={styles.metaText}>
-                  {new Date(booking.scheduled_at).toLocaleString("fr-MA", {
-                    day: "numeric",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.title}>Demande de soin</Text>
+                <Text style={styles.subtitle}>{SPEC_LABEL[booking.specialty] ?? "Nouveau patient"}</Text>
+              </View>
+              <View style={styles.priceBadge}>
+                <Text style={styles.priceVal}>
+                  {booking.budget_min_mad ?? 0}–{booking.budget_max_mad ?? 0}
                 </Text>
+                <Text style={styles.priceUnit}>MAD</Text>
+              </View>
+            </View>
+
+            {urgent ? (
+              <View style={styles.urgent}>
+                <Zap size={12} color="#E24B4A" fill="#E24B4A" />
+                <Text style={styles.urgentTxt}>Urgent</Text>
               </View>
             ) : null}
-          </View>
 
-          {bidFor === booking.id ? (
-            <View style={styles.bidRow}>
-              <TextInput
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-                style={styles.input}
-                placeholder="Votre offre (MAD)"
-                placeholderTextColor={Colors.textSubtle}
-              />
-              <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.id)} disabled={submitting}>
-                {submitting ? (
-                  <Loader2 size={14} color="white" />
-                ) : (
-                  <>
-                    <Send size={13} color="white" />
-                    <Text style={styles.sendText}>Envoyer</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setBidFor(null)}>
-                <Text style={styles.cancelText}>Annuler</Text>
-              </TouchableOpacity>
+            {/* Meta */}
+            <View style={styles.meta}>
+              {booking.address ? (
+                <View style={styles.metaItem}>
+                  <MapPin size={13} color={Colors.textMuted} />
+                  <Text style={styles.metaText} numberOfLines={1}>{booking.address}</Text>
+                </View>
+              ) : null}
+              {booking.scheduled_at ? (
+                <View style={styles.metaItem}>
+                  <Clock size={13} color={Colors.textMuted} />
+                  <Text style={styles.metaText}>
+                    {new Date(booking.scheduled_at).toLocaleString("fr-MA", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+              {booking.notes ? (
+                <Text style={styles.note} numberOfLines={2}>“{booking.notes}”</Text>
+              ) : null}
             </View>
-          ) : (
-            <TouchableOpacity style={styles.offerBtn} onPress={() => setBidFor(booking.id)}>
-              <Text style={styles.offerText}>Faire une offre</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ))}
+
+            {/* CTA / bid */}
+            {isBidding ? (
+              <View style={styles.bidWrap}>
+                <View style={styles.inputWrap}>
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    keyboardType="numeric"
+                    style={styles.input}
+                    placeholder="Votre offre"
+                    placeholderTextColor={Colors.textSubtle}
+                    autoFocus
+                  />
+                  <Text style={styles.inputUnit}>MAD</Text>
+                </View>
+                <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.id)} disabled={submitting}>
+                  {submitting ? <Loader2 size={16} color="white" /> : <Send size={15} color="white" strokeWidth={2.2} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setBidFor(null); setErrorMessage(null); }}>
+                  <Text style={styles.cancelTxt}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.offerBtn}
+                activeOpacity={0.9}
+                onPress={() => { setBidFor(booking.id); setAmount(String(booking.budget_max_mad ?? "")); }}
+              >
+                <HandCoins size={17} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.offerTxt}>Faire une offre</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { alignItems: "center", justifyContent: "center", paddingVertical: 20 },
-  emptyText: { color: Colors.textMuted, fontSize: 13 },
-  list: { gap: 10 },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 24 },
+  emptyCard: { backgroundColor: "white", borderRadius: 18, paddingVertical: 28, paddingHorizontal: 20, alignItems: "center", gap: 8 },
+  emptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700" },
+  emptySub: { color: Colors.textMuted, fontSize: 12.5, textAlign: "center", lineHeight: 18 },
+
+  list: { gap: 12 },
   card: {
     backgroundColor: "white",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.surfaceWarm,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: NAVY,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 8 },
-  title: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  note: { marginTop: 2, color: Colors.textMuted, fontSize: 12 },
-  price: { color: Colors.primary, fontSize: 12, fontWeight: "700" },
-  metaRow: { gap: 6, marginBottom: 10 },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { color: Colors.textMuted, fontSize: 11 },
-  bidRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  input: {
-    flex: 1,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.input,
-    paddingHorizontal: 12,
-    color: Colors.textPrimary,
-    fontSize: 13,
-  },
-  sendBtn: {
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  sendText: { color: "white", fontSize: 12, fontWeight: "600" },
-  cancelText: { color: Colors.textMuted, fontSize: 12 },
-  offerBtn: {
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  offerText: { color: "white", fontSize: 13, fontWeight: "600" },
-  errorText: { color: Colors.danger, fontSize: 12 },
+
+  top: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center" },
+  title: { color: Colors.textPrimary, fontSize: 15.5, fontWeight: "800" },
+  subtitle: { color: Colors.textMuted, fontSize: 12.5, marginTop: 1 },
+  priceBadge: { alignItems: "flex-end", backgroundColor: Colors.surfaceWarm, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6 },
+  priceVal: { color: NAVY, fontSize: 15, fontWeight: "800", lineHeight: 17 },
+  priceUnit: { color: Colors.primary, fontSize: 9.5, fontWeight: "700", opacity: 0.7 },
+
+  urgent: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", backgroundColor: "#FDECEC", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, marginTop: 12 },
+  urgentTxt: { color: "#E24B4A", fontSize: 11, fontWeight: "800" },
+
+  meta: { gap: 7, marginTop: 12, marginBottom: 14 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 7 },
+  metaText: { flex: 1, color: Colors.textMuted, fontSize: 12.5 },
+  note: { color: Colors.textMuted, fontSize: 12.5, fontStyle: "italic", lineHeight: 17 },
+
+  offerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 15, backgroundColor: NAVY },
+  offerTxt: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+
+  bidWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+  inputWrap: { flex: 1, flexDirection: "row", alignItems: "center", height: 50, borderRadius: 15, backgroundColor: Colors.input, paddingHorizontal: 14, borderWidth: 1.5, borderColor: "#E7E4FA" },
+  input: { flex: 1, color: NAVY, fontSize: 17, fontWeight: "800" },
+  inputUnit: { color: Colors.textMuted, fontSize: 12, fontWeight: "700" },
+  sendBtn: { width: 50, height: 50, borderRadius: 15, backgroundColor: NAVY, alignItems: "center", justifyContent: "center" },
+  cancelBtn: { height: 50, justifyContent: "center", paddingHorizontal: 4 },
+  cancelTxt: { color: Colors.textMuted, fontSize: 13, fontWeight: "600" },
+
+  errorText: { color: Colors.danger, fontSize: 12.5, marginTop: 2, textAlign: "center" },
 });
