@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db, type Payment, type Payout } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
-const COMMISSION_RATE = 0.15;
+const COMMISSION_RATE = 0.2;
 const SPEC_LABEL: Record<string, string> = {
   nurse: "Soins infirmiers",
   physiotherapist: "Kinésithérapie",
@@ -170,7 +170,7 @@ export default function ProEarningsScreen() {
           <View style={styles.heroCard}>
             <TrendingUp size={14} color="rgba(255,255,255,0.65)" />
             <Text style={styles.heroCardValue}>-{commission} MAD</Text>
-            <Text style={styles.heroCardLabel}>Commission (15%)</Text>
+            <Text style={styles.heroCardLabel}>Commission (20%)</Text>
           </View>
         </View>
       </LinearGradient>

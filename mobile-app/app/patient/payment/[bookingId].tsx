@@ -2,269 +2,416 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { CheckCircle2, Circle, CreditCard, HandCoins, Landmark } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowLeft, Check, CreditCard, Lock, ShieldCheck, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 
-type PaymentProvider = "cmi" | "stripe" | "cash";
+const NAVY = "#0D0870";
+const CREAM = "#EDE5CC";
+const SERVICE_FEE = 5; // flat CareLink patient fee (MAD)
+const COMMISSION_RATE = 0.2; // 20% platform commission on the prestation
 
-const options: { value: PaymentProvider; label: string; icon: typeof CreditCard }[] = [
-  { value: "cmi", label: "CMI", icon: Landmark },
-  { value: "stripe", label: "Stripe", icon: CreditCard },
-  { value: "cash", label: "Espèces", icon: HandCoins },
-];
+const SPEC_LABEL: Record<string, string> = {
+  nurse: "Infirmier·ère",
+  physiotherapist: "Kinésithérapeute",
+  psychologist: "Psychologue",
+  yoga_instructor: "Coach yoga",
+};
 
-export default function PaymentSheetScreen() {
+type Step = 0 | 1 | 2 | 3; // Résumé · Paiement · 3-D Secure · Confirmé
+const STEPS = ["Résumé", "Paiement", "Confirmation"];
+
+const digits = (s: string) => s.replace(/\D/g, "");
+const fmtCard = (s: string) => digits(s).slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
+const fmtExp = (s: string) => {
+  const d = digits(s).slice(0, 4);
+  return d.length >= 3 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+};
+
+export default function PaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
+  const isDemo = isDemoBookingId(bookingId);
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState<Step>(0);
   const [submitting, setSubmitting] = useState(false);
-  const [selected, setSelected] = useState<PaymentProvider>("cmi");
-  const [amountMad, setAmountMad] = useState<number>(0);
-  const [professionalId, setProfessionalId] = useState<string | null>(null);
+
+  const [prestation, setPrestation] = useState(0);
+  const [proId, setProId] = useState<string | null>(null);
+  const [proName, setProName] = useState("Professionnel");
+  const [specialty, setSpecialty] = useState("nurse");
+  const [city, setCity] = useState("");
+  const [service, setService] = useState("Soin à domicile");
+  const [txId, setTxId] = useState("");
+
+  const [cardNum, setCardNum] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [exp, setExp] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [otp, setOtp] = useState("");
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
-      if (!bookingId) {
-        Alert.alert("Erreur", "Réservation introuvable.");
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
+    void (async () => {
+      if (!bookingId) { setLoading(false); return; }
       try {
-        if (isDemoBooking) {
+        if (isDemo) {
           if (!active) return;
-          setAmountMad(110);
-          setProfessionalId(DEMO_PRO_1_ID);
+          setPrestation(150); setProId(DEMO_PRO_1_ID); setProName("Salma B."); setCity("Casablanca");
+          setService("Injection à domicile"); setSpecialty("nurse");
           return;
         }
-
-        const booking = await db.bookings.get(bookingId);
+        const b = await db.bookings.get(bookingId);
         if (!active) return;
-        const fallbackAmount =
-          booking.final_price_mad ?? booking.budget_max_mad ?? booking.budget_min_mad ?? 0;
-        setAmountMad(Math.round(Number(fallbackAmount) || 0));
-        setProfessionalId(booking.professional_id);
+        setPrestation(Math.round(Number(b.final_price_mad ?? b.budget_max_mad ?? b.budget_min_mad ?? 0)));
+        setProId(b.professional_id);
+        setSpecialty(b.specialty);
+        setCity((b.address ?? "").split(",").pop()?.trim() || (b.address ?? ""));
+        if (b.professional_id) {
+          try {
+            const prof = await db.profiles.get(b.professional_id);
+            if (active && prof?.full_name) setProName(prof.full_name);
+          } catch { /* keep default */ }
+        }
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Impossible de récupérer la réservation.";
-        Alert.alert("Erreur", message);
+        Alert.alert("Erreur", error instanceof Error ? error.message : "Réservation introuvable.");
       } finally {
         if (active) setLoading(false);
       }
-    };
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [bookingId, isDemoBooking]);
+    })();
+    return () => { active = false; };
+  }, [bookingId, isDemo]);
 
-  const canSubmit = useMemo(
-    () => !!user?.id && amountMad > 0 && !submitting && !loading,
-    [amountMad, loading, submitting, user?.id]
+  const total = prestation + SERVICE_FEE;
+  const commission = Math.round(prestation * COMMISSION_RATE);
+  const proNet = prestation - commission;
+  const careLinkRevenue = SERVICE_FEE + commission;
+
+  const cardValid = useMemo(
+    () => digits(cardNum).length === 16 && cardName.trim().length > 1 && digits(exp).length === 4 && digits(cvv).length === 3,
+    [cardNum, cardName, exp, cvv],
   );
 
-  const handleConfirm = async () => {
-    if (!bookingId || !user?.id || !canSubmit) return;
+  const confirmPayment = async () => {
+    if (!bookingId || !user?.id || submitting) return;
     setSubmitting(true);
     try {
-      if (isDemoBooking) {
-        Alert.alert("Paiement validé", "Paiement démo confirmé avec succès.");
-        router.replace("/patient/bookings");
-        return;
+      if (!isDemo) {
+        await db.payments.create({
+          booking_id: bookingId,
+          patient_id: user.id,
+          professional_id: proId,
+          amount_mad: prestation,
+          provider: "cmi",
+        });
       }
-
-      await db.payments.create({
-        booking_id: bookingId,
-        patient_id: user.id,
-        professional_id: professionalId,
-        amount_mad: amountMad,
-        provider: selected,
-      });
-
-      Alert.alert(
-        "Paiement validé",
-        selected === "cash"
-          ? "Paiement en espèces enregistré — réglez le professionnel sur place."
-          : "Votre paiement a bien été autorisé. Il sera capturé à la fin de la mission.",
-      );
-      router.replace("/patient/bookings");
+      setTxId(String(Math.floor(100000 + Math.random() * 900000)));
+      setStep(3);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Le paiement n'a pas pu être confirmé.";
-      Alert.alert("Erreur", message);
+      Alert.alert("Paiement", error instanceof Error ? error.message : "Le paiement n'a pas pu être confirmé.");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.root}>
-      <Pressable style={styles.backdrop} onPress={() => router.back()} />
-      <View style={styles.sheet}>
-        <Text style={styles.title}>Paiement</Text>
-        <Text style={styles.subtitle}>Réservation #{(bookingId ?? "—").slice(0, 8)}</Text>
+    <View style={s.root}>
+      <LinearGradient colors={[NAVY, "#0A065A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
+        <TouchableOpacity style={s.back} onPress={() => (step > 0 && step < 3 ? setStep((step - 1) as Step) : router.back())}>
+          <ArrowLeft size={18} color="rgba(255,255,255,0.85)" />
+          <Text style={s.backTxt}>Retour</Text>
+        </TouchableOpacity>
+        <Text style={s.title}>Paiement</Text>
+        <Text style={s.sub}>Paiement sécurisé CMI · 3-D Secure</Text>
+        <View style={s.headerBlob} />
+      </LinearGradient>
 
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="small" color={Colors.primary} />
-          </View>
-        ) : (
-          <>
-            <View style={styles.amountCard}>
-              <Text style={styles.amountLabel}>Montant à autoriser</Text>
-              <Text style={styles.amountValue}>{amountMad} MAD</Text>
+      {/* Stepper */}
+      <View style={s.stepper}>
+        {STEPS.map((label, i) => {
+          const activeIdx = step === 3 ? 3 : step;
+          const on = i <= activeIdx;
+          return (
+            <View key={label} style={s.stepCol}>
+              <View style={[s.stepBar, on ? s.stepBarOn : null]} />
+              <Text style={[s.stepLbl, on ? s.stepLblOn : null]}>{label}</Text>
             </View>
-
-            <Text style={styles.sectionLabel}>Méthode de paiement</Text>
-            <View style={styles.optionsWrap}>
-              {options.map((item) => {
-                const selectedOption = selected === item.value;
-                const Icon = item.icon;
-                return (
-                  <TouchableOpacity
-                    key={item.value}
-                    style={[styles.option, selectedOption && styles.optionSelected]}
-                    onPress={() => setSelected(item.value)}
-                  >
-                    <Icon size={16} color={selectedOption ? Colors.primary : Colors.textMuted} />
-                    <Text style={[styles.optionText, selectedOption && styles.optionTextSelected]}>
-                      {item.label}
-                    </Text>
-                    {selectedOption ? (
-                      <CheckCircle2 size={18} color={Colors.primary} />
-                    ) : (
-                      <Circle size={18} color={Colors.textMuted} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.confirmBtn, !canSubmit && { opacity: 0.6 }]}
-              disabled={!canSubmit}
-              onPress={handleConfirm}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text style={styles.confirmText}>Confirmer le paiement</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
+          );
+        })}
       </View>
+
+      {loading ? (
+        <View style={s.center}><ActivityIndicator color={NAVY} /></View>
+      ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {/* ── Step 0: Résumé ── */}
+            {step === 0 && (
+              <>
+                <View style={s.card}>
+                  <View style={s.proRow}>
+                    <View style={s.avatar}><User size={20} color={NAVY} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.proName}>{proName} · {SPEC_LABEL[specialty] ?? specialty}</Text>
+                      <Text style={s.proMeta}>{service}{city ? ` · ${city}` : ""}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={s.card}>
+                  <Text style={s.cardLabel}>Détail à la charge du patient</Text>
+                  <Row label="Prestation" value={`${prestation} MAD`} />
+                  <Row label="Frais de service CareLink" value={`+${SERVICE_FEE} MAD`} muted />
+                  <View style={s.divider} />
+                  <Row label="Total à payer" value={`${total} MAD`} bold />
+                </View>
+
+                <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => setStep(1)}>
+                  <Text style={s.ctaTxt}>Continuer vers le paiement</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* ── Step 1: Paiement ── */}
+            {step === 1 && (
+              <>
+                <View style={s.totalBanner}>
+                  <Text style={s.totalBannerLbl}>Montant total</Text>
+                  <Text style={s.totalBannerVal}>{total} MAD</Text>
+                </View>
+
+                <CmiCard number={cardNum} name={cardName} exp={exp} />
+
+                <Field icon={<CreditCard size={17} color={Colors.textMuted} />} value={fmtCard(cardNum)} onChangeText={(t) => setCardNum(digits(t))} placeholder="4242 4242 4242 4242" keyboardType="number-pad" />
+                <Field value={cardName} onChangeText={setCardName} placeholder="Nom du titulaire" autoCapitalize="characters" />
+                <View style={s.rowFields}>
+                  <View style={{ flex: 1 }}><Field value={fmtExp(exp)} onChangeText={(t) => setExp(digits(t))} placeholder="MM/AA" keyboardType="number-pad" /></View>
+                  <View style={{ flex: 1 }}><Field icon={<Lock size={15} color={Colors.textMuted} />} value={cvv} onChangeText={(t) => setCvv(digits(t).slice(0, 3))} placeholder="CVV" keyboardType="number-pad" secureTextEntry /></View>
+                </View>
+
+                <TouchableOpacity style={[s.cta, !cardValid && s.ctaDisabled]} activeOpacity={0.9} disabled={!cardValid} onPress={() => setStep(2)}>
+                  <Lock size={16} color="#FFF" />
+                  <Text style={s.ctaTxt}>Payer {total} MAD via CMI</Text>
+                </TouchableOpacity>
+                <View style={s.secureRow}>
+                  <ShieldCheck size={13} color={Colors.textMuted} />
+                  <Text style={s.secureTxt}>Paiement 3-D Secure · chiffré · démo (aucune donnée réelle)</Text>
+                </View>
+              </>
+            )}
+
+            {/* ── Step 2: 3-D Secure ── */}
+            {step === 2 && (
+              <>
+                <View style={s.totalBanner}>
+                  <Text style={s.totalBannerLbl}>Montant total</Text>
+                  <Text style={s.totalBannerVal}>{total} MAD</Text>
+                </View>
+                <CmiCard number={cardNum} name={cardName} exp={exp} filled />
+                <View style={s.otpCard}>
+                  <View style={s.otpHead}>
+                    <ShieldCheck size={18} color={NAVY} />
+                    <Text style={s.otpTitle}>Vérification 3-D Secure</Text>
+                  </View>
+                  <Text style={s.otpSub}>Un code de confirmation a été envoyé au numéro associé à votre carte (démo : saisissez n'importe quel code).</Text>
+                  <TextInput
+                    value={otp}
+                    onChangeText={(t) => setOtp(digits(t).slice(0, 6))}
+                    placeholder="Code OTP"
+                    placeholderTextColor={Colors.textSubtle}
+                    keyboardType="number-pad"
+                    style={s.otpInput}
+                    textAlign="center"
+                  />
+                  <TouchableOpacity style={[s.cta, { marginTop: 12 }, otp.length < 4 && s.ctaDisabled]} disabled={otp.length < 4 || submitting} onPress={confirmPayment} activeOpacity={0.9}>
+                    {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={s.ctaTxt}>Confirmer</Text>}
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => setStep(1)}><Text style={s.linkCenter}>Modifier la carte</Text></TouchableOpacity>
+              </>
+            )}
+
+            {/* ── Step 3: Confirmé + Répartition ── */}
+            {step === 3 && (
+              <>
+                <View style={s.doneWrap}>
+                  <View style={s.doneCircle}><Check size={30} color={NAVY} strokeWidth={3} /></View>
+                  <Text style={s.doneTitle}>Paiement confirmé</Text>
+                  <Text style={s.doneSub}>Transaction CMI #{txId}</Text>
+                </View>
+
+                <View style={s.card}>
+                  <Text style={s.cardLabel}>Répartition de la transaction</Text>
+                  <Row label="Encaissé (patient)" value={`${total} MAD`} bold />
+                  <View style={s.divider} />
+                  <Row label="Frais de service · CareLink" value={`${SERVICE_FEE} MAD`} muted />
+                  <Row label={`Commission (${Math.round(COMMISSION_RATE * 100)} %) · CareLink`} value={`${commission} MAD`} muted />
+                  <View style={[s.splitRow, { backgroundColor: NAVY }]}>
+                    <Text style={[s.splitLbl, { color: "#FFF" }]}>Revenu net CareLink</Text>
+                    <Text style={[s.splitVal, { color: "#FFF" }]}>{careLinkRevenue} MAD</Text>
+                  </View>
+                  <View style={[s.splitRow, { backgroundColor: CREAM }]}>
+                    <Text style={[s.splitLbl, { color: NAVY }]}>Versé au professionnel</Text>
+                    <Text style={[s.splitVal, { color: NAVY }]}>{proNet} MAD</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => router.replace("/patient/bookings")}>
+                  <Text style={s.ctaTxt}>Voir mes réservations</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  sheet: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 24,
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  subtitle: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  center: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 24,
-  },
-  amountCard: {
-    borderRadius: 14,
-    backgroundColor: Colors.surfaceWarm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  amountLabel: {
-    color: Colors.textMuted,
-    fontSize: 12,
-  },
-  amountValue: {
-    color: Colors.primary,
-    fontSize: 26,
-    fontWeight: "800",
-  },
-  sectionLabel: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  optionsWrap: {
-    gap: 8,
-    marginBottom: 14,
-  },
-  option: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  optionSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceWarm,
-  },
-  optionText: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    flex: 1,
-  },
-  optionTextSelected: {
-    color: Colors.primary,
-    fontWeight: "600",
-  },
-  confirmBtn: {
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  confirmText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+function Row({ label, value, bold, muted }: { label: string; value: string; bold?: boolean; muted?: boolean }) {
+  return (
+    <View style={s.detailRow}>
+      <Text style={[s.detailLbl, bold && s.detailBold, muted && s.detailMuted]}>{label}</Text>
+      <Text style={[s.detailVal, bold && s.detailBold, muted && s.detailMuted]}>{value}</Text>
+    </View>
+  );
+}
+
+function Field({
+  icon, value, onChangeText, placeholder, keyboardType, secureTextEntry, autoCapitalize,
+}: {
+  icon?: React.ReactNode; value: string; onChangeText: (t: string) => void; placeholder: string;
+  keyboardType?: "number-pad" | "default"; secureTextEntry?: boolean; autoCapitalize?: "none" | "characters";
+}) {
+  return (
+    <View style={s.field}>
+      {icon}
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={Colors.textSubtle}
+        keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
+        style={s.fieldInput}
+      />
+    </View>
+  );
+}
+
+function CmiCard({ number, name, exp, filled }: { number: string; name: string; exp: string; filled?: boolean }) {
+  const shown = filled || digits(number).length > 0
+    ? (fmtCard(number) || "1234 1234 1234 1234")
+    : "••••  ••••  ••••  ••••";
+  return (
+    <LinearGradient colors={["#1A0F8C", "#3A2CC7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.cmi}>
+      <View style={s.cmiTop}>
+        <View style={s.cmiChip} />
+        <Text style={s.cmiBrand}>CMI · MAROC</Text>
+      </View>
+      <Text style={s.cmiNum}>{shown}</Text>
+      <View style={s.cmiBottom}>
+        <View>
+          <Text style={s.cmiCap}>TITULAIRE</Text>
+          <Text style={s.cmiVal}>{name.trim() ? name.toUpperCase() : "PRÉNOM NOM"}</Text>
+        </View>
+        <View>
+          <Text style={s.cmiCap}>EXPIRE</Text>
+          <Text style={s.cmiVal}>{fmtExp(exp) || "MM/AA"}</Text>
+        </View>
+      </View>
+      <View style={s.cmiBlob} />
+    </LinearGradient>
+  );
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.surfaceWarm },
+  header: { paddingTop: 52, paddingHorizontal: 20, paddingBottom: 22, overflow: "hidden" },
+  headerBlob: { position: "absolute", top: -40, right: -30, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.06)" },
+  back: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  backTxt: { color: "rgba(255,255,255,0.85)", fontSize: 14, fontWeight: "600" },
+  title: { color: "#FFF", fontSize: 30, fontFamily: "DMSerifDisplay_400Regular" },
+  sub: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 2 },
+
+  stepper: { flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4, backgroundColor: Colors.surfaceWarm },
+  stepCol: { flex: 1, gap: 6 },
+  stepBar: { height: 4, borderRadius: 2, backgroundColor: "#DEDBCE" },
+  stepBarOn: { backgroundColor: NAVY },
+  stepLbl: { fontSize: 10.5, color: Colors.textMuted, fontWeight: "600" },
+  stepLblOn: { color: NAVY, fontWeight: "800" },
+
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  body: { padding: 20, gap: 14, paddingBottom: 40 },
+
+  card: { backgroundColor: "#FFF", borderRadius: 18, padding: 16, shadowColor: NAVY, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  cardLabel: { color: Colors.textMuted, fontSize: 12.5, fontWeight: "600", marginBottom: 10 },
+  proRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: CREAM, alignItems: "center", justifyContent: "center" },
+  proName: { color: Colors.textPrimary, fontSize: 15.5, fontWeight: "800" },
+  proMeta: { color: Colors.textMuted, fontSize: 12.5, marginTop: 2 },
+
+  detailRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 5 },
+  detailLbl: { color: Colors.textPrimary, fontSize: 14 },
+  detailVal: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
+  detailMuted: { color: Colors.textMuted, fontWeight: "500" },
+  detailBold: { fontWeight: "800", fontSize: 15.5, color: NAVY },
+  divider: { height: 1, backgroundColor: "#EFEFEF", marginVertical: 6 },
+
+  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 54, borderRadius: 16, backgroundColor: NAVY, marginTop: 4 },
+  ctaDisabled: { backgroundColor: "#C9C7DE" },
+  ctaTxt: { color: "#FFF", fontSize: 15.5, fontWeight: "700" },
+  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10 },
+  secureTxt: { color: Colors.textMuted, fontSize: 11.5 },
+  linkCenter: { color: NAVY, fontSize: 13.5, fontWeight: "700", textAlign: "center", marginTop: 14 },
+
+  totalBanner: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: CREAM, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14 },
+  totalBannerLbl: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
+  totalBannerVal: { color: NAVY, fontSize: 20, fontWeight: "800" },
+
+  cmi: { height: 190, borderRadius: 20, padding: 18, justifyContent: "space-between", overflow: "hidden" },
+  cmiBlob: { position: "absolute", top: -30, right: -20, width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.08)" },
+  cmiTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cmiChip: { width: 40, height: 30, borderRadius: 7, backgroundColor: "rgba(237,229,204,0.85)" },
+  cmiBrand: { color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: "800", letterSpacing: 1 },
+  cmiNum: { color: "#FFF", fontSize: 21, fontWeight: "700", letterSpacing: 2 },
+  cmiBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  cmiCap: { color: "rgba(255,255,255,0.5)", fontSize: 9, fontWeight: "700", letterSpacing: 1 },
+  cmiVal: { color: "#FFF", fontSize: 14, fontWeight: "700", marginTop: 2 },
+
+  field: { flexDirection: "row", alignItems: "center", gap: 10, height: 54, borderRadius: 14, backgroundColor: "#F1F1F4", paddingHorizontal: 14 },
+  fieldInput: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
+  rowFields: { flexDirection: "row", gap: 12 },
+
+  otpCard: { backgroundColor: CREAM, borderRadius: 16, padding: 16 },
+  otpHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  otpTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "800" },
+  otpSub: { color: Colors.textMuted, fontSize: 12.5, lineHeight: 18, marginBottom: 12 },
+  otpInput: { backgroundColor: "#FFF", borderRadius: 12, height: 54, fontSize: 20, fontWeight: "800", letterSpacing: 8, color: NAVY },
+
+  doneWrap: { alignItems: "center", paddingVertical: 12, gap: 6 },
+  doneCircle: { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: NAVY, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  doneTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: "800" },
+  doneSub: { color: Colors.textMuted, fontSize: 13 },
+
+  splitRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8 },
+  splitLbl: { fontSize: 13.5, fontWeight: "700" },
+  splitVal: { fontSize: 15, fontWeight: "800" },
 });

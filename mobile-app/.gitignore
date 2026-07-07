@@ -8,3 +8,5 @@ credentials/
 
 expo-env.d.ts
 # @end expo-cli
+# Local design reference images
+design-refs/
