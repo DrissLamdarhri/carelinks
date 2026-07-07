@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Clock, HandCoins, Loader2, MapPin, Send, Stethoscope, Zap } from "lucide-react-native";
+import { Clock, HandCoins, Loader2, Lock, MapPin, Send, ShieldAlert, Stethoscope, Zap } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
-import type { ProSpecialty } from "@/lib/db/types";
+import type { ProSpecialty, VerificationStatus } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 
@@ -25,9 +25,25 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [proStatus, setProStatus] = useState<VerificationStatus | null>(null);
+  const approved = proStatus === "approved";
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    db.pros
+      .get(user.id)
+      .then((p) => { if (active) setProStatus(p?.verification_status ?? "pending"); })
+      .catch(() => { if (active) setProStatus("pending"); });
+    return () => { active = false; };
+  }, [user?.id]);
 
   const submitBid = async (bookingId: string) => {
     if (!user?.id || submitting) return;
+    if (!approved) {
+      setErrorMessage("Votre compte doit être vérifié avant de faire une offre.");
+      return;
+    }
     const n = Number(amount);
     if (!Number.isFinite(n) || n < 50) {
       setErrorMessage("Montant minimum 50 MAD.");
@@ -46,6 +62,23 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
     }
   };
 
+  const verificationBanner =
+    proStatus && !approved ? (
+      <View style={[styles.verifyBanner, proStatus === "rejected" && styles.verifyBannerRej]}>
+        <ShieldAlert size={18} color={proStatus === "rejected" ? "#E24B4A" : "#B45309"} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.verifyTitle}>
+            {proStatus === "rejected" ? "Compte non validé" : "Compte en cours de vérification"}
+          </Text>
+          <Text style={styles.verifySub}>
+            {proStatus === "rejected"
+              ? "Votre inscription a été refusée. Contactez le support CareLink."
+              : "Vous pourrez faire des offres dès que l'équipe aura validé vos documents."}
+          </Text>
+        </View>
+      </View>
+    ) : null;
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -56,18 +89,22 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
 
   if (bookings.length === 0) {
     return (
-      <View style={styles.emptyCard}>
-        <View style={styles.emptyIcon}>
-          <Stethoscope size={22} color={Colors.textSubtle} />
+      <View style={styles.list}>
+        {verificationBanner}
+        <View style={styles.emptyCard}>
+          <View style={styles.emptyIcon}>
+            <Stethoscope size={22} color={Colors.textSubtle} />
+          </View>
+          <Text style={styles.emptyTitle}>Aucune demande pour le moment</Text>
+          <Text style={styles.emptySub}>Restez en ligne — les nouvelles demandes apparaîtront ici.</Text>
         </View>
-        <Text style={styles.emptyTitle}>Aucune demande pour le moment</Text>
-        <Text style={styles.emptySub}>Restez en ligne — les nouvelles demandes apparaîtront ici.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.list}>
+      {verificationBanner}
       {bookings.map((booking) => {
         const urgent = booking.urgency === "urgent";
         const isBidding = bidFor === booking.id;
@@ -145,6 +182,11 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
                   <Text style={styles.cancelTxt}>Annuler</Text>
                 </TouchableOpacity>
               </View>
+            ) : !approved ? (
+              <View style={styles.lockedBtn}>
+                <Lock size={15} color={Colors.textMuted} />
+                <Text style={styles.lockedTxt}>Vérification requise pour faire une offre</Text>
+              </View>
             ) : (
               <TouchableOpacity
                 style={styles.offerBtn}
@@ -200,6 +242,13 @@ const styles = StyleSheet.create({
 
   offerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 15, backgroundColor: NAVY },
   offerTxt: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  lockedBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 15, backgroundColor: "#F1F1F4" },
+  lockedTxt: { color: Colors.textMuted, fontSize: 13.5, fontWeight: "700" },
+
+  verifyBanner: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: "#FEF6E7", borderRadius: 14, padding: 13, borderWidth: 1, borderColor: "#F6E2B8" },
+  verifyBannerRej: { backgroundColor: "#FDECEC", borderColor: "#F6C9C9" },
+  verifyTitle: { color: Colors.textPrimary, fontSize: 13.5, fontWeight: "800" },
+  verifySub: { color: Colors.textMuted, fontSize: 12, marginTop: 2, lineHeight: 16 },
 
   bidWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
   inputWrap: { flex: 1, flexDirection: "row", alignItems: "center", height: 50, borderRadius: 15, backgroundColor: Colors.input, paddingHorizontal: 14, borderWidth: 1.5, borderColor: "#E7E4FA" },
