@@ -985,11 +985,11 @@ export function AdminPanel() {
     }
     
     try {
-      let imageUrl = "";
+      let imageBase64 = "";
       
-      // Convert image to base64 for storage in DB
+      // Convert image to base64
       const reader = new FileReader();
-      imageUrl = await new Promise<string>((resolve, reject) => {
+      imageBase64 = await new Promise<string>((resolve, reject) => {
         reader.onloadend = () => {
           resolve(reader.result as string);
         };
@@ -1001,20 +1001,21 @@ export function AdminPanel() {
       const [datePart, timePart] = newSession.date.split(" ");
       const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
       
-      // For admin, use null instructor_id (can be assigned later)
+      const insertData: any = {
+        instructor_id: null,
+        title: newSession.title,
+        level: newSession.level,
+        starts_at,
+        duration_min: 60,
+        capacity: newSession.maxSpots,
+        price_mad: newSession.price,
+        description: `Instructeur: ${newSession.instructor}`,
+        address: `data:image/jpeg;base64,${imageBase64.substring(imageBase64.indexOf(',') + 1)}`, // Store image as base64 in address field
+      };
+      
       const { data, error } = await supabase
         .from("yoga_sessions")
-        .insert({
-          instructor_id: null, // Admin creates sessions without requiring an instructor
-          title: newSession.title,
-          level: newSession.level,
-          image_url: imageUrl,
-          starts_at,
-          duration_min: 60,
-          capacity: newSession.maxSpots,
-          price_mad: newSession.price,
-          description: `Instructeur: ${newSession.instructor}`,
-        })
+        .insert(insertData)
         .select()
         .single();
       
