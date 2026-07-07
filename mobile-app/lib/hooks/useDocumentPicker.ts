@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import { showToast } from "@/lib/toast";
 
 export interface DocumentAsset {
@@ -67,38 +68,39 @@ export async function uploadDocumentToSupabase(
   bucket: string = "pro-documents"
 ): Promise<{ url: string; path: string } | null> {
   try {
-    // Optionally resize large images to avoid timeouts
-    let uploadUri = documentUri;
-    if (documentType.startsWith("image/")) {
-      try {
-        const ImageManipulator = await import("expo-image-manipulator");
-        if (ImageManipulator && ImageManipulator.manipulateAsync) {
-          const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
-          if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
-        }
-      } catch (manipErr) {
-        console.warn("ImageManipulator not available or resize failed, continuing with original file:", manipErr);
-      }
-    }
-
     const fileName = `${userId}/${Date.now()}-${documentName}`;
 
-    const formData = new FormData();
-    formData.append("file", {
-      uri: uploadUri,
-      name: fileName.split("/").pop(),
-      type: documentType || "application/octet-stream",
-    } as any);
+    let fileData: Uint8Array | null = null;
+
+    try {
+      const base64Content = await FileSystem.readAsStringAsync(documentUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryString = atob(base64Content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      fileData = bytes;
+    } catch (readErr) {
+      console.error("Failed to read file as base64:", readErr);
+      showToast("Erreur lors de la lecture du fichier.");
+      return null;
+    }
+
+    if (!fileData) {
+      console.error("No file data to upload");
+      return null;
+    }
 
     const { supabase } = await import("@/lib/supabase");
 
-    // Use the storage-js helper; passing FormData works on React Native via fetch
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(fileName, formData as any, {
+      .upload(fileName, fileData, {
         contentType: documentType,
         upsert: true,
-      } as any);
+      });
 
     if (error) {
       console.error("Upload error:", error, {
