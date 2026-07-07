@@ -1,3 +1,15 @@
+// ============================================================================
+// ⚠️ LEGACY — Figma-Make KV demo backend (make-server-aa5d1aa6).
+// Stores data as JSON blobs in kv_store_aa5d1aa6 (NOT relational tables).
+//
+// This is NOT the production backend. The mobile app (the product) and the web
+// ADMIN panel both run on real Postgres tables + RLS + Realtime.
+//
+// The ONLY remaining caller is the web "iPhone preview" patient/pro DEMO
+// (src/app routes /app/* and /nurse/*). When that demo is retired, delete this
+// function + supabase/functions/server/ + the kv_store_aa5d1aa6 table entirely.
+// Do NOT build new features on this.
+// ============================================================================
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";

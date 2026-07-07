@@ -20,20 +20,20 @@ the patient accepts a bid, then gets live tracking, chat, payment, and rating. P
 
 **Supabase project ref:** `wjhzrovmktekfcjohhrw`. Edge Function base path: `make-server-aa5d1aa6`.
 
-## ⚠️ The one thing to internalize: there are TWO parallel backends
+## Backend: Postgres is the single source of truth (KV is legacy demo-only)
 
-The web app and mobile app do **not** share a data path, and they use **incompatible data models**:
+**Path B — Direct Postgres tables** is the production backend and is now used by
+**everything real**: the **mobile app** (the product) and the **web admin panel**.
+A typed DAL (`mobile-app/lib/db/dal.ts`, `src/lib/db/dal.ts`) reads/writes relational
+tables (`bookings`, `bids`, `payments`, …) under RLS, with Supabase Realtime for live
+updates. **Build here.**
 
-- **Path A — KV Edge Function** (web only): `src/lib/api.ts` → Hono server `supabase/functions/server/index.tsx`,
-  which stores `request:*` / `offer:*` / `user:*` / `pro:*` blobs in a JSONB `kv_store_aa5d1aa6` table.
-  This is the Figma-Make-generated demo backend.
-- **Path B — Direct Postgres tables** (mobile, and parts of web): a typed DAL (`mobile-app/lib/db/dal.ts`,
-  `src/lib/db/dal.ts`) reads/writes relational tables (`bookings`, `bids`, …) directly under RLS, with
-  Supabase Realtime (`postgres_changes`) for live updates. **This is the intended production model.**
-
-They are **not synchronized**. Terminology differs: Path A = *requests/offers*; Path B = *bookings/bids*.
-Some web components (e.g. `NurseBooking`, `MyBookings`, `WaitingOffers`) import both in the same file.
-**When in doubt, build on Path B (relational tables + DAL + Realtime).** Details: [`docs/architecture.md`](docs/architecture.md).
+**Path A — KV Edge Function** (`make-server-aa5d1aa6`, `supabase/functions/server/index.tsx`,
+blobs in `kv_store_aa5d1aa6`) is the **Figma-Make demo backend — LEGACY**. It is no longer
+used by mobile or by the web admin. Its **only** remaining caller is the web *"iPhone preview"*
+patient/pro **demo** (`src/app` routes `/app/*`, `/nurse/*`, via the non-admin functions in
+`src/lib/api.ts`). When that demo is retired, delete the function + the `kv_store_aa5d1aa6`
+table. **Do not build new features on Path A.** Details: [`docs/architecture.md`](docs/architecture.md).
 
 ## Commands
 
