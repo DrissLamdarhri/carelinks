@@ -38,27 +38,56 @@ export function useYogaSessions() {
         setError(null);
 
         // Fetch yoga sessions (without requiring instructor to exist)
-        const { data: sessionsData, error: sessionsError } = await supabase
-          .from('yoga_sessions')
-          .select(`
-            id,
-            title,
-            description,
-            level,
-            image_url,
-            starts_at,
-            duration_min,
-            capacity,
-            price_mad,
-            address,
-            is_online,
-            meeting_url
-          `)
-          .gt('starts_at', new Date().toISOString()) // Only future sessions
-          .order('starts_at', { ascending: true })
-          .limit(50);
-
-        if (sessionsError) throw sessionsError;
+        let sessionsData: any[] | null = null;
+        try {
+          const res = await supabase
+            .from('yoga_sessions')
+            .select(`
+              id,
+              title,
+              description,
+              level,
+              image_url,
+              starts_at,
+              duration_min,
+              capacity,
+              price_mad,
+              address,
+              is_online,
+              meeting_url
+            `)
+            .gt('starts_at', new Date().toISOString()) // Only future sessions
+            .order('starts_at', { ascending: true })
+            .limit(50);
+          if (res.error) throw res.error;
+          sessionsData = res.data;
+        } catch (err: any) {
+          // If the DB doesn't have a 'level' column (older schema), retry without it.
+          if (err && (err.code === '42703' || String(err.message || '').includes('yoga_sessions.level'))) {
+            const res2 = await supabase
+              .from('yoga_sessions')
+              .select(`
+                id,
+                title,
+                description,
+                image_url,
+                starts_at,
+                duration_min,
+                capacity,
+                price_mad,
+                address,
+                is_online,
+                meeting_url
+              `)
+              .gt('starts_at', new Date().toISOString())
+              .order('starts_at', { ascending: true })
+              .limit(50);
+            if (res2.error) throw res2.error;
+            sessionsData = res2.data;
+          } else {
+            throw err;
+          }
+        }
 
         if (!mounted) return;
 
