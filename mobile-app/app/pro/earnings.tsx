@@ -7,13 +7,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { ArrowUpRight, Banknote, Calendar, TrendingUp } from "lucide-react-native";
-import { Colors } from "@/lib/colors";
+import { Colors, Gradients } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
 const COMMISSION_RATE = 0.15;
+const SPEC_LABEL: Record<string, string> = {
+  nurse: "Soins infirmiers",
+  physiotherapist: "Kinésithérapie",
+  psychologist: "Psychologie",
+  yoga_instructor: "Yoga",
+};
 
 export default function ProEarningsScreen() {
   const { user } = useAuth();
@@ -101,7 +108,7 @@ export default function ProEarningsScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
+      <LinearGradient colors={Gradients.nurse} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <Text style={styles.heroSub}>
           Revenus nets ({period === "week" ? "7 derniers jours" : "ce mois"})
         </Text>
@@ -120,7 +127,7 @@ export default function ProEarningsScreen() {
             <Text style={styles.heroCardLabel}>Commission (15%)</Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <View style={styles.periodSwitch}>
         <TouchableOpacity
@@ -187,9 +194,9 @@ export default function ProEarningsScreen() {
                 <Banknote size={18} color={Colors.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.txTitle}>Booking #{booking.id.slice(0, 8)}</Text>
+                <Text style={styles.txTitle}>{SPEC_LABEL[booking.specialty] ?? "Mission"}</Text>
                 <Text style={styles.txMeta}>
-                  {booking.specialty.replaceAll("_", " ")} ·{" "}
+                  Patient ·{" "}
                   {new Date(booking.created_at).toLocaleDateString("fr-MA", {
                     day: "numeric",
                     month: "short",
@@ -310,8 +317,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  txTitle: { color: Colors.textPrimary, fontSize: 13, fontWeight: "500" },
-  txMeta: { color: Colors.textMuted, fontSize: 11, textTransform: "capitalize" },
+  txTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", textTransform: "capitalize" },
+  txMeta: { color: Colors.textMuted, fontSize: 11 },
   txValue: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
   txFee: { color: Colors.textSubtle, fontSize: 10 },
   errorText: { marginHorizontal: 20, marginTop: 6, color: Colors.danger, fontSize: 12 },
