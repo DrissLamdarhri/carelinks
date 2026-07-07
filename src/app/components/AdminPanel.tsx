@@ -972,22 +972,6 @@ export function AdminPanel() {
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
 
-  // Ensure yoga-images bucket exists
-  const ensureYogaBucket = async () => {
-    try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const yogaBucketExists = buckets?.some(b => b.id === 'yoga-images');
-      
-      if (!yogaBucketExists) {
-        await supabase.storage.createBucket('yoga-images', {
-          public: true,
-        });
-      }
-    } catch (err) {
-      console.warn("Could not ensure yoga bucket:", err);
-    }
-  };
-
   // Yoga Sessions — Save to Supabase
   const addYogaSession = async () => {
     if (!newSession.title || !newSession.date) {
@@ -1001,25 +985,17 @@ export function AdminPanel() {
     }
     
     try {
-      // Ensure bucket exists before uploading
-      await ensureYogaBucket();
-      
       let imageUrl = "";
       
-      // Upload image to Supabase Storage
-      const fileName = `yoga/${Date.now()}-${newSession.imageFile.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("yoga-images")
-        .upload(fileName, newSession.imageFile);
-      
-      if (uploadError) throw new Error(`Erreur upload: ${uploadError.message}`);
-      
-      // Get public URL
-      const { data: publicUrl } = supabase.storage
-        .from("yoga-images")
-        .getPublicUrl(fileName);
-      
-      imageUrl = publicUrl.publicUrl;
+      // Convert image to base64 for storage in DB
+      const reader = new FileReader();
+      imageUrl = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(newSession.imageFile!);
+      });
       
       // Parse date format: "YYYY-MM-DD HH:mm"
       const [datePart, timePart] = newSession.date.split(" ");
@@ -1063,6 +1039,22 @@ export function AdminPanel() {
     } catch (err: any) {
       console.error("Error adding yoga session:", err);
       toast.error(err.message || "Erreur lors de la création de la séance");
+    }
+  };
+  
+  // Ensure yoga-images bucket exists
+  const ensureYogaBucket = async () => {
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const yogaBucketExists = buckets?.some(b => b.id === 'yoga-images');
+      
+      if (!yogaBucketExists) {
+        await supabase.storage.createBucket('yoga-images', {
+          public: true,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not ensure yoga bucket:", err);
     }
   };
   
