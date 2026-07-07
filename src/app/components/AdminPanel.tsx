@@ -162,7 +162,8 @@ export function AdminPanel() {
   const [serviceCatFilter, setServiceCatFilter] = useState<"Tous" | ServiceCategory>("Tous");
   const [searchQ, setSearchQ] = useState("");
   const [showYogaModal, setShowYogaModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
+  const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageFile: null as File | null });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [liveKpi, setLiveKpi] = useState<{
     users: number; bookings: number; gmv: number; rating: number;
@@ -206,7 +207,7 @@ export function AdminPanel() {
     if (!isAdminAuthed) return;
     const load = async () => {
       const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-      const [users, bookings, payments, ratings, pros, kyc, disputes] = await Promise.all([
+      const [users, bookingsCount, payments, ratings, pros, kyc, disputes] = await Promise.all([
         supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase.from("bookings").select("id", { count: "exact", head: true }).gte("created_at", since),
         supabase.from("payments").select("amount_mad,status").gte("created_at", since),
@@ -221,7 +222,7 @@ export function AdminPanel() {
       const rating = stars.length ? stars.reduce((a: number, b: number) => a + b, 0) / stars.length : 0;
       setLiveKpi({
         users: users.count ?? 0,
-        bookings: bookings.count ?? 0,
+        bookings: bookingsCount.count ?? 0,
         gmv,
         rating: Math.round(rating * 10) / 10,
         activePros: pros.count ?? 0,
@@ -385,44 +386,6 @@ export function AdminPanel() {
         source: "bookings",
       }));
 
-      // Also include yoga enrollments as bookings (mirrors mobile behaviour)
-      const { data: yogaEnrollmentsData } = await supabase
-        .from("yoga_enrollments")
-        .select(`
-          session_id,
-          patient_id,
-          enrolled_at,
-          yoga_sessions!session_id(
-            id,
-            starts_at,
-            price_mad,
-            title
-          )
-        `)
-        .order("enrolled_at", { ascending: false })
-        .limit(200)
-        .catch(() => ({ data: [] }));
-
-      (yogaEnrollmentsData ?? []).forEach((e: any) => {
-        if (!merged.find((m: any) => m.booking_id === e.session_id)) {
-          merged.unshift({
-            booking_id: e.session_id,
-            id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
-            patient_id: e.patient_id,
-            professional_id: null,
-            specialty: "yoga_instructor",
-            status: "matched",
-            statusLabel: "Confirmé",
-            urgency: "normal",
-            scheduled_at: e.yoga_sessions?.starts_at,
-            address: null,
-            price: e.yoga_sessions?.price_mad ?? 0,
-            created_at: e.enrolled_at ?? e.yoga_sessions?.starts_at,
-            alert_level: "normal",
-            source: "yoga_enrollment",
-          });
-        }
-      });
 
       // Fetch patient profiles (name, email, city)
       const patientIds = [...new Set(merged.map((b: any) => b.patient_id))].filter(Boolean);
@@ -1015,7 +978,30 @@ export function AdminPanel() {
       toast.error("Titre et date/heure sont obligatoires");
       return;
     }
+    
+    if (!newSession.imageFile) {
+      toast.error("Veuillez sélectionner une image");
+      return;
+    }
+    
     try {
+      let imageUrl = "";
+      
+      // Upload image to Supabase Storage
+      const fileName = `yoga/${Date.now()}-${newSession.imageFile.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("yoga-images")
+        .upload(fileName, newSession.imageFile);
+      
+      if (uploadError) throw new Error(`Erreur upload: ${uploadError.message}`);
+      
+      // Get public URL
+      const { data: publicUrl } = supabase.storage
+        .from("yoga-images")
+        .getPublicUrl(fileName);
+      
+      imageUrl = publicUrl.publicUrl;
+      
       // Parse date format: "YYYY-MM-DD HH:mm"
       const [datePart, timePart] = newSession.date.split(" ");
       const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
@@ -1027,7 +1013,7 @@ export function AdminPanel() {
           instructor_id: null, // Admin creates sessions without requiring an instructor
           title: newSession.title,
           level: newSession.level,
-          image_url: newSession.imageUrl,
+          image_url: imageUrl,
           starts_at,
           duration_min: 60,
           capacity: newSession.maxSpots,
@@ -1052,7 +1038,8 @@ export function AdminPanel() {
       }]);
       
       setShowYogaModal(false);
-      setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
+      setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageFile: null });
+      setImagePreview(null);
       toast.success("Séance yoga créée et publiée");
     } catch (err: any) {
       console.error("Error adding yoga session:", err);
@@ -2551,19 +2538,28 @@ export function AdminPanel() {
                   </div>
                 </div>
 
-                {/* Image URL Input */}
+                {/* Image Upload Input */}
                 <div>
-                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Image URL</label>
+                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Image (depuis PC)</label>
                   <input
-                    type="url"
-                    value={newSession.imageUrl}
-                    onChange={(e) => setNewSession({ ...newSession, imageUrl: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setNewSession({ ...newSession, imageFile: file });
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImagePreview(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
                     className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
                   />
-                  {newSession.imageUrl && (
+                  {imagePreview && (
                     <div className="mt-2 rounded-xl overflow-hidden h-20 bg-[#F3F3F5]">
-                      <img src={newSession.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
