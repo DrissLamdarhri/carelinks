@@ -1,6 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
 import { showToast } from "@/lib/toast";
-import * as ImageManipulator from "expo-image-manipulator";
 
 export interface CameraAsset {
   uri: string;
@@ -51,10 +50,13 @@ export async function uploadSelfieToSupabase(
     // Resize to avoid huge uploads
     let uploadUri = imageUri;
     try {
-      const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
-      if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+      const ImageManipulator = await import("expo-image-manipulator");
+      if (ImageManipulator && ImageManipulator.manipulateAsync) {
+        const manipResult = await ImageManipulator.manipulateAsync(uploadUri, [{ resize: { width: 1280 } }], { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
+        if (manipResult && manipResult.uri) uploadUri = manipResult.uri;
+      }
     } catch (mErr) {
-      console.warn("ImageManipulator failed to resize selfie, continuing with original:", mErr);
+      console.warn("ImageManipulator not available or resize failed, continuing with original:", mErr);
     }
 
     const fileName = `${userId}/selfie-${Date.now()}.jpg`;
