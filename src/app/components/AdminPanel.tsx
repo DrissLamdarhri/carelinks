@@ -972,6 +972,22 @@ export function AdminPanel() {
     } catch (err: any) { toast.error(err.message || "Erreur"); }
   };
 
+  // Ensure yoga-images bucket exists
+  const ensureYogaBucket = async () => {
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const yogaBucketExists = buckets?.some(b => b.id === 'yoga-images');
+      
+      if (!yogaBucketExists) {
+        await supabase.storage.createBucket('yoga-images', {
+          public: true,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not ensure yoga bucket:", err);
+    }
+  };
+
   // Yoga Sessions — Save to Supabase
   const addYogaSession = async () => {
     if (!newSession.title || !newSession.date) {
@@ -985,6 +1001,9 @@ export function AdminPanel() {
     }
     
     try {
+      // Ensure bucket exists before uploading
+      await ensureYogaBucket();
+      
       let imageUrl = "";
       
       // Upload image to Supabase Storage
