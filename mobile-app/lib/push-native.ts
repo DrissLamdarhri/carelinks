@@ -57,16 +57,39 @@ export async function registerExpoPushToken(userId: string): Promise<void> {
       return;
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    // EAS builds require the projectId to mint a push token.
+    const projectId =
+      (Constants.expoConfig?.extra as any)?.eas?.projectId ??
+      (Constants as any)?.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     const token = tokenData.data;
 
     await supabase.from("push_subscriptions").upsert({
       user_id: userId,
       expo_push_token: token,
       platform: Platform.OS,
+      updated_at: new Date().toISOString(),
     } as any);
   } catch (error) {
     console.warn("Failed to register push token:", error);
+  }
+}
+
+/** Fires when the user taps a push notification. Returns the notification's data payload. */
+export function addNotificationTapListener(
+  handler: (data: Record<string, unknown>) => void
+): { remove: () => void } {
+  if (isExpoGo) return { remove: () => {} };
+  try {
+    const Notifications = require("expo-notifications") as NotificationsModule;
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handler((response?.notification?.request?.content?.data ?? {}) as Record<string, unknown>);
+    });
+    return sub;
+  } catch {
+    return { remove: () => {} };
   }
 }
 

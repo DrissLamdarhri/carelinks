@@ -22,7 +22,8 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { AuthProvider } from "@/lib/auth-context";
 import { I18nProvider } from "@/lib/i18n";
-import { configureNotifications } from "@/lib/push-native";
+import { addNotificationTapListener, configureNotifications } from "@/lib/push-native";
+import { useAuth } from "@/lib/auth-context";
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
@@ -45,6 +46,24 @@ function DeepLinkHandler() {
 
     return () => subscription.remove();
   }, [router]);
+
+  return null;
+}
+
+/** Tapping a push opens the relevant booking (role-aware). */
+function PushTapHandler() {
+  const router = useRouter();
+  const { role } = useAuth();
+
+  useEffect(() => {
+    const sub = addNotificationTapListener((data) => {
+      const bookingId = typeof data?.booking_id === "string" ? data.booking_id : null;
+      if (!bookingId) return;
+      const base = role === "pro" ? "/pro/tracking" : "/patient/tracking";
+      router.push(`${base}/${bookingId}`);
+    });
+    return () => sub.remove();
+  }, [router, role]);
 
   return null;
 }
@@ -90,6 +109,8 @@ export default function RootLayout() {
           )}
           {/* Handles deep-links when app is already running in background */}
           <DeepLinkHandler />
+          {/* Routes push-notification taps to the right booking */}
+          <PushTapHandler />
         </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>
