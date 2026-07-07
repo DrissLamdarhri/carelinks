@@ -1,5 +1,4 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
 import { showToast } from "@/lib/toast";
 
 export interface DocumentAsset {
@@ -35,13 +34,11 @@ export async function usePickDocument(): Promise<DocumentAsset | null> {
     
     if (!asset) return null;
 
-    // Validate file type
     if (!ALLOWED_FORMATS.includes(asset.mimeType || "")) {
       showToast("Format non autorisé. Utilisez PDF, JPG ou PNG.");
       return null;
     }
 
-    // Check file size
     if (asset.size && asset.size > MAX_FILE_SIZE) {
       showToast("Le fichier est trop volumineux (max 5MB).");
       return null;
@@ -70,37 +67,21 @@ export async function uploadDocumentToSupabase(
   try {
     const fileName = `${userId}/${Date.now()}-${documentName}`;
 
-    let fileData: Uint8Array | null = null;
-
-    try {
-      const base64Content = await FileSystem.readAsStringAsync(documentUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(base64Content);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      fileData = bytes;
-    } catch (readErr) {
-      console.error("Failed to read file as base64:", readErr);
-      showToast("Erreur lors de la lecture du fichier.");
-      return null;
-    }
-
-    if (!fileData) {
-      console.error("No file data to upload");
-      return null;
-    }
+    const formData = new FormData();
+    formData.append("file", {
+      uri: documentUri,
+      name: documentName,
+      type: documentType || "application/octet-stream",
+    } as any);
 
     const { supabase } = await import("@/lib/supabase");
 
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(fileName, fileData, {
+      .upload(fileName, formData as any, {
         contentType: documentType,
         upsert: true,
-      });
+      } as any);
 
     if (error) {
       console.error("Upload error:", error, {

@@ -1,5 +1,4 @@
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import { showToast } from "@/lib/toast";
 
 export interface CameraAsset {
@@ -50,47 +49,34 @@ export async function uploadSelfieToSupabase(
   try {
     const fileName = `${userId}/selfie-${Date.now()}.jpg`;
 
-    let fileData: Uint8Array | null = null;
-
-    try {
-      const base64Content = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(base64Content);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      fileData = bytes;
-    } catch (readErr) {
-      console.error("Failed to read selfie as base64:", readErr);
-      showToast("Erreur lors de la lecture du selfie.");
-      return null;
-    }
-
-    if (!fileData) {
-      console.error("No selfie data to upload");
-      return null;
-    }
+    const formData = new FormData();
+    formData.append("file", {
+      uri: imageUri,
+      name: "selfie.jpg",
+      type: mimeType,
+    } as any);
 
     const { supabase } = await import("@/lib/supabase");
 
     const { data, error } = await supabase.storage
       .from("pro-documents")
-      .upload(fileName, fileData, {
+      .upload(fileName, formData as any, {
         contentType: mimeType,
         upsert: true,
-      });
+      } as any);
 
     if (error) {
       console.error("Upload selfie error:", error, {
         message: error.message,
         status: (error as any).status ?? null,
+        details: (error as any).details ?? null,
       });
       if (error.message?.includes("row-level security")) {
-        showToast("Erreur de sécurité.");
+        showToast("Erreur de sécurité. Veuillez réessayer ou contacter le support.");
+      } else if (error.message?.includes("Bucket not found")) {
+        showToast("Le bucket de stockage n'existe pas. Veuillez contacter le support.");
       } else if (error.message?.includes("Network")) {
-        showToast("Erreur réseau.");
+        showToast("Erreur réseau. Vérifiez votre connexion internet.");
       } else {
         showToast("Erreur lors de l'upload du selfie.");
       }
@@ -104,7 +90,12 @@ export async function uploadSelfieToSupabase(
     return { url: publicUrl.publicUrl, path: fileName };
   } catch (error) {
     console.error("Exception uploadSelfieToSupabase:", error);
-    showToast("Erreur lors de l'upload du selfie.");
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("Network")) {
+      showToast("Erreur réseau. Vérifiez votre connexion internet.");
+    } else {
+      showToast("Erreur lors de l'upload du selfie.");
+    }
     return null;
   }
 }
