@@ -155,16 +155,9 @@ export default function ProLoginScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.formLead}>Connectez-vous à votre compte professionnel</Text>
-
-        <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignIn} />
-        <View style={styles.oauthSpacer} />
-        <AppleAuthButton loading={appleLoading} onPress={handleAppleSignIn} />
-
-        <View style={styles.sepRow}>
-          <View style={styles.sepLine} />
-          <Text style={styles.sepText}>ou avec email</Text>
-          <View style={styles.sepLine} />
-        </View>
+        <Text style={styles.formHint}>
+          Les professionnels se connectent avec l'email de leur compte vérifié (pas de connexion Google).
+        </Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email professionnel</Text>
@@ -305,7 +298,8 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: { color: "rgba(255,255,255,0.65)", fontSize: 13, marginTop: 1 },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 28 },
-  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 14 },
+  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 6 },
+  formHint: { fontSize: 12, color: Colors.textMuted, lineHeight: 17, marginBottom: 16 },
   sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 14 },
   sepLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
   sepText: { fontSize: 11, color: Colors.textMuted },

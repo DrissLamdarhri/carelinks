@@ -4,7 +4,7 @@
  */
 
 import { Tabs } from "expo-router";
-import { Home, CalendarDays, Wallet, User } from "lucide-react-native";
+import { Home, CalendarDays, Wallet, User, MessageCircle } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -90,6 +90,17 @@ export default function ProLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profil",
@@ -121,6 +132,7 @@ export default function ProLayout() {
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
     </Tabs>
   );
 }
