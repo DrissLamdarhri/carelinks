@@ -1,173 +1,148 @@
-import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Users, Briefcase, CalendarClock, Star, AlertTriangle } from "lucide-react-native";
+import { AlertTriangle, Briefcase, CalendarClock, ShieldCheck, Star, UserX, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 
-const kpis = [
-  { label: "Utilisateurs", value: "1,247", icon: Users },
-  { label: "Professionnels", value: "312", icon: Briefcase },
-  { label: "Réservations", value: "342", icon: CalendarClock },
-  { label: "Note moyenne", value: "4.8", icon: Star },
-];
+type Stats = {
+  users: number;
+  pros: number;
+  bookings: number;
+  rating: string;
+  pendingKyc: number;
+  suspended: number;
+  disputes: number;
+};
 
-// Alerts now include a live KYC counter
-// The first element will be populated from the professionals table (verification_status = 'pending')
-// and kept in sync via a realtime channel.
-
-const defaultAlerts = [
-  "3 litiges nécessitent une décision",
-  "2 professionnels suspendus aujourd’hui",
-];
+const countOf = async (table: string, apply?: (q: any) => any): Promise<number> => {
+  let q = supabase.from(table).select("id", { count: "exact", head: true });
+  if (apply) q = apply(q);
+  const { count } = await q;
+  return count ?? 0;
+};
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const [pendingKyc, setPendingKyc] = useState(0);
+  const [stats, setStats] = useState<Stats>({ users: 0, pros: 0, bookings: 0, rating: "—", pendingKyc: 0, suspended: 0, disputes: 0 });
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
-    const loadPending = async () => {
-      try {
-        const { count, error } = await supabase
-          .from("professionals")
-          .select("id", { count: "exact", head: true })
-          .eq("verification_status", "pending");
-        if (error) throw error;
-        if (mounted) setPendingKyc(count ?? 0);
-      } catch (e) {
-        console.error("loadPendingKyc error:", e);
-      }
-    };
-    void loadPending();
-
-    const channel = supabase
-      .channel("professionals:pending")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "professionals", filter: "verification_status=eq.pending" },
-        () => {
-          void loadPending();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      mounted = false;
-      void supabase.removeChannel(channel);
-    };
+  const load = useCallback(async () => {
+    try {
+      const [users, pros, bookings, pendingKyc, suspended, ratingRows, disputes] = await Promise.all([
+        countOf("profiles"),
+        countOf("professionals"),
+        countOf("bookings"),
+        countOf("professionals", (q) => q.eq("verification_status", "pending")),
+        countOf("profiles", (q) => q.eq("is_suspended", true)),
+        supabase.from("professionals").select("rating_avg").gt("rating_count", 0),
+        countOf("disputes", (q) => q.in("status", ["open", "pending"])).catch(() => 0),
+      ]);
+      const rated = (ratingRows.data ?? []).map((r: any) => Number(r.rating_avg)).filter((n) => n > 0);
+      const avg = rated.length ? (rated.reduce((s, n) => s + n, 0) / rated.length).toFixed(1) : "—";
+      setStats({ users, pros, bookings, rating: avg, pendingKyc, suspended, disputes });
+    } catch (e) {
+      console.error("dashboard load error:", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const alerts = [
-    `${pendingKyc} documents KYC en attente`,
-    ...defaultAlerts,
+  useEffect(() => {
+    void load();
+    const channel = supabase
+      .channel("admin-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "professionals" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => void load())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [load]);
+
+  const kpis = [
+    { label: "Utilisateurs", value: String(stats.users), icon: Users },
+    { label: "Professionnels", value: String(stats.pros), icon: Briefcase },
+    { label: "Réservations", value: String(stats.bookings), icon: CalendarClock },
+    { label: "Note moyenne", value: stats.rating, icon: Star },
+  ];
+
+  const alerts: { text: string; kind: "warn" | "ok"; onPress?: () => void }[] = [
+    stats.pendingKyc > 0
+      ? { text: `${stats.pendingKyc} document(s) KYC en attente`, kind: "warn", onPress: () => router.push("/admin/kyc") }
+      : { text: "Aucun KYC en attente", kind: "ok" },
+    ...(stats.suspended > 0 ? [{ text: `${stats.suspended} compte(s) suspendu(s)`, kind: "warn" as const }] : []),
+    ...(stats.disputes > 0 ? [{ text: `${stats.disputes} litige(s) à traiter`, kind: "warn" as const }] : []),
   ];
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <LinearGradient colors={[Colors.primary, "#1A1585"]} style={styles.header}>
         <Text style={styles.headerTitle}>Tableau de bord admin</Text>
-        <Text style={styles.headerSubtitle}>Vue synthèse de la plateforme CareLink</Text>
+        <Text style={styles.headerSubtitle}>Vue synthèse — données en temps réel</Text>
       </LinearGradient>
 
-      <View style={styles.grid}>
-        {kpis.map((item) => (
-          <View key={item.label} style={styles.kpiCard}>
-            <item.icon size={16} color={Colors.primary} />
-            <Text style={styles.kpiValue}>{item.value}</Text>
-            <Text style={styles.kpiLabel}>{item.label}</Text>
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 30 }} color={Colors.primary} />
+      ) : (
+        <>
+          <View style={styles.grid}>
+            {kpis.map((item) => (
+              <View key={item.label} style={styles.kpiCard}>
+                <item.icon size={16} color={Colors.primary} />
+                <Text style={styles.kpiValue}>{item.value}</Text>
+                <Text style={styles.kpiLabel}>{item.label}</Text>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Actions prioritaires</Text>
-        {alerts.map((line) => (
-          <View key={line} style={styles.alertRow}>
-            <AlertTriangle size={14} color="#D97706" />
-            <Text style={styles.alertText}>{line}</Text>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Actions prioritaires</Text>
+            {alerts.map((a) => (
+              <TouchableOpacity key={a.text} style={styles.alertRow} disabled={!a.onPress} onPress={a.onPress}>
+                {a.kind === "ok" ? <ShieldCheck size={15} color="#16A34A" /> : a.text.includes("suspendu") ? <UserX size={15} color="#E24B4A" /> : <AlertTriangle size={15} color="#D97706" />}
+                <Text style={styles.alertText}>{a.text}</Text>
+                {a.onPress ? <Text style={styles.alertGo}>›</Text> : null}
+              </TouchableOpacity>
+            ))}
           </View>
-        ))}
-      </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Gestion des réservations</Text>
-        <Text style={styles.panelText}>Consultez toutes les réservations et rendez-vous de psychologue en temps réel.</Text>
-        <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/bookings")}>
-          <Text style={styles.ctaText}>📋 Gerer les réservations</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Configuration</Text>
-        <Text style={styles.panelText}>Tarification, zones géographiques, validation KYC et gestion des litiges sont disponibles ici dans la version mobile.</Text>
-        <View style={styles.ctaRow}>
-          <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/metrics")}>
-            <Text style={styles.ctaText}>Voir les métriques</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/kyc")}>
-            <Text style={styles.ctaText}>File KYC</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Gestion</Text>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/kyc")}>
+                <Text style={styles.ctaText}>File KYC{stats.pendingKyc > 0 ? ` (${stats.pendingKyc})` : ""}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/bookings")}>
+                <Text style={styles.ctaText}>Réservations</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={[styles.ctaBtn, styles.ctaWide]} onPress={() => router.push("/admin/metrics")}>
+              <Text style={styles.ctaText}>Voir les métriques</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { padding: 20, paddingBottom: 26 },
-  header: {
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-  },
-  headerTitle: {
-    color: "white",
-    fontSize: 24,
-    fontFamily: "DMSerifDisplay_400Regular",
-  },
+  content: { padding: 20, paddingTop: 44, paddingBottom: 26 },
+  header: { borderRadius: 18, padding: 16, marginBottom: 12 },
+  headerTitle: { color: "white", fontSize: 24, fontFamily: "DMSerifDisplay_400Regular" },
   headerSubtitle: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 },
-  kpiCard: {
-    width: "48.5%",
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-    padding: 12,
-  },
-  kpiValue: { color: Colors.textPrimary, fontSize: 20, fontWeight: "700", marginTop: 8 },
+  kpiCard: { width: "48.5%", backgroundColor: "white", borderRadius: 14, borderWidth: 1, borderColor: "#F0F0F0", padding: 12 },
+  kpiValue: { color: Colors.textPrimary, fontSize: 22, fontWeight: "800", marginTop: 8 },
   kpiLabel: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
-  panel: {
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-    padding: 12,
-    marginBottom: 10,
-  },
-  panelTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700", marginBottom: 8 },
-  alertRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  panel: { backgroundColor: "white", borderRadius: 14, borderWidth: 1, borderColor: "#F0F0F0", padding: 14, marginBottom: 10 },
+  panelTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "800", marginBottom: 10 },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7 },
   alertText: { color: Colors.textPrimary, fontSize: 13, flex: 1 },
-  panelText: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
-  ctaRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 8,
-  },
-  ctaBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ctaText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  alertGo: { color: Colors.textMuted, fontSize: 18 },
+  ctaRow: { flexDirection: "row", gap: 8 },
+  ctaBtn: { flex: 1, height: 42, borderRadius: 11, backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center" },
+  ctaWide: { marginTop: 8, flex: undefined, width: "100%" },
+  ctaText: { color: "white", fontSize: 13, fontWeight: "700" },
 });
