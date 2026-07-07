@@ -1,30 +1,35 @@
 -- =====================================================================
--- CRITICAL FIX: pro_documents RLS policy blocks inserts during signup
+-- pro_documents RLS — owner full access, admin read (KYC review), service role.
+-- Postgres policies are ONE command each (or `for all`) — you cannot write
+-- `for select, update, delete`. Run once in Supabase → SQL Editor. Idempotent.
 -- =====================================================================
 
--- Drop the broken policy that uses non-existent function
-drop policy if exists "prodocs_owner" on public.pro_documents;
+alter table public.pro_documents enable row level security;
 
--- Create working policy:
--- 1. Authenticated user can INSERT/UPDATE/DELETE their own documents
--- 2. Service role (for backups/admin) can do anything
-create policy "prodocs_user_insert_select"
+-- Clean up any earlier / broken policies
+drop policy if exists "prodocs_owner"                        on public.pro_documents;
+drop policy if exists "prodocs_user_insert_select"           on public.pro_documents;
+drop policy if exists "prodocs_user_select_update_delete"    on public.pro_documents;
+drop policy if exists "prodocs_owner_all"                    on public.pro_documents;
+drop policy if exists "prodocs_admin_read"                   on public.pro_documents;
+drop policy if exists "prodocs_service_role_all"             on public.pro_documents;
+
+-- 1. Owner: full access to their own documents (insert / select / update / delete)
+create policy "prodocs_owner_all"
 on public.pro_documents
-for insert to authenticated
+for all to authenticated
+using (auth.uid() = professional_id)
 with check (auth.uid() = professional_id);
 
-create policy "prodocs_user_select_update_delete"
+-- 2. Admins: read every document (for KYC review in /admin/kyc)
+create policy "prodocs_admin_read"
 on public.pro_documents
-for select, update, delete to authenticated
-using (auth.uid() = professional_id);
+for select to authenticated
+using (public.current_role() = 'admin');
 
--- Service role (Edge Functions with X-Admin-Key) can bypass RLS entirely
--- This is handled at the application level, so RLS just needs to not block service_role
+-- 3. Service role (Edge Functions) bypasses RLS
 create policy "prodocs_service_role_all"
 on public.pro_documents
 for all to service_role
 using (true)
 with check (true);
-
--- Enable RLS on the table
-alter table public.pro_documents enable row level security;
