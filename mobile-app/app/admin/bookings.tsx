@@ -19,11 +19,13 @@ import {
   AlertCircle,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { fetchAdminBookings, fetchPriorityBookings, fetchBookingStats } from "@/lib/admin/booking-notifications";
 import type { AdminBookingLog } from "@/lib/admin/booking-notifications";
 
 export default function AdminBookingsScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const [bookings, setBookings] = useState<AdminBookingLog[]>([]);
   const [priorityBookings, setPriorityBookings] = useState<AdminBookingLog[]>([]);
@@ -173,7 +175,7 @@ export default function AdminBookingsScreen() {
                     hour: "2-digit",
                     minute: "2-digit",
                   })
-                : "Date non fixée"}
+                : t("date_not_set")}
             </Text>
           </View>
 
@@ -188,7 +190,7 @@ export default function AdminBookingsScreen() {
 
           {item.notes && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Notes:</Text>
+              <Text style={styles.detailLabel}>{t("notes_label")}</Text>
               <Text style={styles.detailText} numberOfLines={1}>
                 {item.notes}
               </Text>
@@ -232,27 +234,27 @@ export default function AdminBookingsScreen() {
     >
       {/* En-tête */}
       <View style={styles.header}>
-        <Text style={styles.title}>Gestion des réservations</Text>
-        <Text style={styles.subtitle}>Toutes les réservations et rendez-vous de psychologue</Text>
+        <Text style={styles.title}>{t("bookings_management")}</Text>
+        <Text style={styles.subtitle}>{t("all_bookings_desc")}</Text>
       </View>
 
       {/* Statistiques */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total</Text>
+          <Text style={styles.statLabel}>{t("total")}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftColor: "#EC4899", borderLeftWidth: 3 }]}>
           <Text style={[styles.statValue, { color: "#EC4899" }]}>{stats.psychologist}</Text>
-          <Text style={styles.statLabel}>Psychologues</Text>
+          <Text style={styles.statLabel}>{t("psychologists")}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftColor: "#F59E0B", borderLeftWidth: 3 }]}>
           <Text style={[styles.statValue, { color: "#F59E0B" }]}>{stats.urgent}</Text>
-          <Text style={styles.statLabel}>Urgentes</Text>
+          <Text style={styles.statLabel}>{t("urgent_f")}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftColor: "#DC2626", borderLeftWidth: 3 }]}>
           <Text style={[styles.statValue, { color: "#DC2626" }]}>{stats.critical}</Text>
-          <Text style={styles.statLabel}>Critiques</Text>
+          <Text style={styles.statLabel}>{t("critical")}</Text>
         </View>
         <View style={[styles.statCard, styles.statCardSpan]}>
           <Text style={[styles.statValue, { color: "#0284C7" }]}>{stats.today}</Text>
@@ -297,7 +299,7 @@ export default function AdminBookingsScreen() {
               <AlertTriangle size={16} color="#DC2626" />
               <View style={styles.priorityInfo}>
                 <Text style={styles.priorityText}>
-                  {booking.is_psychologist ? "Rendez-vous psychologue" : "Réservation urgente"}
+                  {booking.is_psychologist ? t("psy_appointment") : t("urgent_booking")}
                 </Text>
                 <Text style={styles.prioritySubtext}>{booking.specialty}</Text>
               </View>

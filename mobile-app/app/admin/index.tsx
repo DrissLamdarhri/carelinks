@@ -4,9 +4,11 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Shield, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminLoginScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +30,7 @@ export default function AdminLoginScreen() {
         password,
       });
       if (error || !data.user) {
-        setErrorMessage("Identifiants incorrects.");
+        setErrorMessage(t("wrong_credentials"));
         return;
       }
       const { data: profile } = await supabase
@@ -40,10 +42,10 @@ export default function AdminLoginScreen() {
         router.replace("/admin/dashboard");
       } else {
         await supabase.auth.signOut();
-        setErrorMessage("Accès réservé aux administrateurs.");
+        setErrorMessage(t("admin_only_access"));
       }
     } catch {
-      setErrorMessage("Connexion impossible. Réessayez.");
+      setErrorMessage(t("login_failed_retry"));
     } finally {
       setSubmitting(false);
     }
@@ -59,16 +61,16 @@ export default function AdminLoginScreen() {
             </View>
             <View>
               <Text style={styles.brandTitle}>CareLink</Text>
-              <Text style={styles.brandSub}>Admin Dashboard</Text>
+              <Text style={styles.brandSub}>{t("admin_dashboard")}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.title}>Connexion Admin</Text>
-          <Text style={styles.subtitle}>Accès réservé aux administrateurs CareLink</Text>
+          <Text style={styles.title}>{t("admin_login")}</Text>
+          <Text style={styles.subtitle}>{t("admin_only_carelink")}</Text>
 
-          <Text style={styles.label}>Adresse email</Text>
+          <Text style={styles.label}>{t("email_address")}</Text>
           <View style={styles.inputWrap}>
             <Mail size={18} color={Colors.textMuted} />
             <TextInput
@@ -83,8 +85,8 @@ export default function AdminLoginScreen() {
           </View>
 
           <View style={styles.passwordHeader}>
-            <Text style={styles.label}>Mot de passe</Text>
-            <Text style={styles.forgot}>Mot de passe oublié ?</Text>
+            <Text style={styles.label}>{t("password")}</Text>
+            <Text style={styles.forgot}>{t("forgot_password")}</Text>
           </View>
           <View style={styles.inputWrap}>
             <Lock size={18} color={Colors.textMuted} />

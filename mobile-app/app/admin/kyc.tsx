@@ -12,6 +12,7 @@ import {
 import { Check, CircleUserRound, X } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import type { ProDocument, Professional, Profile } from "@/lib/db/types";
 
@@ -22,6 +23,7 @@ type QueueItem = {
 };
 
 export default function KycModerationQueueScreen() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [actingOn, setActingOn] = useState<string | null>(null);
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -72,7 +74,7 @@ export default function KycModerationQueueScreen() {
       }));
       setItems(queue);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossible de charger la file KYC.";
+      const message = error instanceof Error ? error.message : t("cannot_load_kyc_queue");
       Alert.alert("Erreur", message);
     } finally {
       setLoading(false);
@@ -149,15 +151,15 @@ export default function KycModerationQueueScreen() {
       );
 
       Alert.alert(
-        "Mise à jour",
+        t("update_title"),
         decision === "approved"
-          ? "Document approuvé et professionnel validé."
-          : "Document rejeté et professionnel refusé."
+          ? t("doc_approved_msg")
+          : t("doc_rejected_msg")
       );
     } catch (error) {
       // Rollback to previous state on error
       setItems(previousItems);
-      const message = error instanceof Error ? error.message : "Action impossible.";
+      const message = error instanceof Error ? error.message : t("action_failed");
       Alert.alert("Erreur", message);
     } finally {
       setActingOn(null);
@@ -173,7 +175,7 @@ export default function KycModerationQueueScreen() {
       if (!data?.signedUrl) throw new Error("URL indisponible.");
       await Linking.openURL(data.signedUrl);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Prévisualisation impossible.";
+      const message = error instanceof Error ? error.message : t("preview_failed");
       Alert.alert("Erreur", message);
     }
   };
@@ -182,8 +184,8 @@ export default function KycModerationQueueScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>File KYC</Text>
-      <Text style={styles.subtitle}>Validation des documents des professionnels</Text>
+      <Text style={styles.title}>{t("kyc_queue")}</Text>
+      <Text style={styles.subtitle}>{t("validate_pro_docs")}</Text>
 
       {loading ? (
         <View style={styles.center}>
@@ -191,7 +193,7 @@ export default function KycModerationQueueScreen() {
         </View>
       ) : !hasPending ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucune vérification en attente.</Text>
+          <Text style={styles.emptyText}>{t("no_pending_verification")}</Text>
         </View>
       ) : (
         items.map((item) => (

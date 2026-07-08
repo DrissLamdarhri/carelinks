@@ -11,6 +11,7 @@ import {
 import { RefreshCw } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 
 type MetricsState = {
@@ -25,6 +26,7 @@ type MetricsState = {
 const TAKE_RATE = 0.15;
 
 export default function AdminMetricsScreen() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState<MetricsState>({
@@ -90,11 +92,11 @@ export default function AdminMetricsScreen() {
       if (paymentsRes.error) {
         Alert.alert(
           "Info",
-          "La table payments est indisponible. Les métriques financières affichent 0."
+          t("payments_unavailable")
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossible de charger les métriques.";
+      const message = error instanceof Error ? error.message : t("cannot_load_metrics");
       Alert.alert("Erreur", message);
     }
   }, []);
@@ -117,12 +119,12 @@ export default function AdminMetricsScreen() {
       { key: "gmv", label: "GMV (30j)", value: `${metrics.gmv.toLocaleString("fr-MA")} MAD` },
       {
         key: "commission",
-        label: "Commission",
+        label: t("commission"),
         value: `${metrics.commission.toLocaleString("fr-MA")} MAD`,
       },
-      { key: "bookings", label: "Réservations", value: String(metrics.totalBookings) },
-      { key: "activePros", label: "Pros actifs", value: String(metrics.activePros) },
-      { key: "disputes", label: "Litiges ouverts", value: String(metrics.openDisputes) },
+      { key: "bookings", label: t("bookings_lbl"), value: String(metrics.totalBookings) },
+      { key: "activePros", label: t("active_pros"), value: String(metrics.activePros) },
+      { key: "disputes", label: t("open_disputes"), value: String(metrics.openDisputes) },
       { key: "pendingKyc", label: "KYC en attente", value: String(metrics.pendingKyc) },
     ],
     [metrics]
@@ -132,8 +134,8 @@ export default function AdminMetricsScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.head}>
         <View>
-          <Text style={styles.title}>Métriques admin</Text>
-          <Text style={styles.subtitle}>Vue KPI de la plateforme</Text>
+          <Text style={styles.title}>{t("admin_metrics")}</Text>
+          <Text style={styles.subtitle}>{t("platform_kpi")}</Text>
         </View>
         <TouchableOpacity
           style={[styles.refreshBtn, refreshing && { opacity: 0.7 }]}
@@ -145,7 +147,7 @@ export default function AdminMetricsScreen() {
           ) : (
             <>
               <RefreshCw size={15} color={Colors.primary} />
-              <Text style={styles.refreshText}>Rafraîchir</Text>
+              <Text style={styles.refreshText}>{t("refresh")}</Text>
             </>
           )}
         </TouchableOpacity>
