@@ -82,6 +82,11 @@ const DICT: Record<Locale, Record<string, string>> = {
     first_name: "الاسم الشخصي", last_name: "الاسم العائلي", confirm_password: "تأكيد كلمة المرور", create_my_account: "إنشاء حسابي",
     hello: "مرحبا 👋", what_care: "ما الرعاية التي تبحث عنها؟", choose_service: "اختر خدمتك",
     request_care_now: "اطلب رعاية الآن", next_appointment: "الموعد القادم", confirmed: "مؤكد", see_all: "عرض الكل",
+    view_map: "عرض الخريطة", directions: "المسار", nearby_requests: "الطلبات القريبة", configure: "إعداد",
+    setup_specialty_hint: "اختر تخصصك وموقعك لتصلك الطلبات.",
+    no_appointments: "لا توجد مواعيد حاليًا.", patient: "المريض", navigate_to_patient: "التوجّه إلى المريض",
+    your_request: "طلبك", home_rehab: "إعادة التأهيل في المنزل", care_type: "نوع الرعاية", date: "التاريخ", time_lbl: "الوقت",
+    publish_request: "نشر طلبي", my_appointments_full: "مواعيدي", book_appointment: "حجز موعد",
   },
   fr: {
     welcome: "Bienvenue", booking: "Réservation", bookings_mine: "Mes réservations", new_request: "Nouvelle demande",
@@ -119,6 +124,11 @@ const DICT: Record<Locale, Record<string, string>> = {
     first_name: "Prénom", last_name: "Nom", confirm_password: "Confirmer mot de passe", create_my_account: "Créer mon compte",
     hello: "Bonjour 👋", what_care: "Quel soin recherchez-vous ?", choose_service: "Choisissez votre service",
     request_care_now: "Demander un soin maintenant", next_appointment: "Prochain rendez-vous", confirmed: "Confirmé", see_all: "Voir tout",
+    view_map: "Voir la carte", directions: "Itinéraire", nearby_requests: "Demandes proches", configure: "Configurer",
+    setup_specialty_hint: "Choisissez votre spécialité et votre position pour recevoir les demandes.",
+    no_appointments: "Aucun rendez-vous pour le moment.", patient: "Patient", navigate_to_patient: "Naviguer vers le patient",
+    your_request: "Votre demande", home_rehab: "Rééducation à domicile", care_type: "Type de soin", date: "Date", time_lbl: "Heure",
+    publish_request: "Publier ma demande", my_appointments_full: "Mes rendez-vous", book_appointment: "Prendre un rendez-vous",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",

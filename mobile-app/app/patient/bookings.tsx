@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { Calendar, CalendarClock, ChevronRight, MapPin, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import type { Booking } from "@/lib/db/types";
@@ -113,6 +114,7 @@ const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string 
 
 export default function PatientBookingsScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user } = useAuth();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
@@ -188,7 +190,7 @@ export default function PatientBookingsScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Mes rendez-vous</Text>
+      <Text style={styles.title}>{t("my_appointments_full")}</Text>
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -225,7 +227,7 @@ export default function PatientBookingsScreen() {
           </Text>
           {tab === "upcoming" ? (
             <TouchableOpacity style={styles.emptyCta} onPress={() => router.push("/patient/request")}>
-              <Text style={styles.emptyCtaText}>Prendre un rendez-vous</Text>
+              <Text style={styles.emptyCtaText}>{t("book_appointment")}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -322,7 +324,7 @@ export default function PatientBookingsScreen() {
                     });
                   }}
                 >
-                  <Text style={styles.secondaryBtnText}>Annuler</Text>
+                  <Text style={styles.secondaryBtnText}>{t("cancel")}</Text>
                 </TouchableOpacity>
                 )}
 

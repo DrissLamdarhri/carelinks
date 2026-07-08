@@ -32,6 +32,7 @@ import {
 } from "lucide-react-native";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
@@ -123,6 +124,7 @@ const times = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "1
 
 export default function PatientRequestScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const params = useLocalSearchParams<{ service?: string }>();
   const { user } = useAuth();
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
@@ -491,19 +493,19 @@ export default function PatientRequestScreen() {
         <View style={styles.grabber} />
 
         {/* ── Title row ── */}
-        <Text style={styles.sheetTitle}>Votre demande</Text>
+        <Text style={styles.sheetTitle}>{t("your_request")}</Text>
         {isKine && (
           <View style={styles.kineBadgeRow}>
             <View style={styles.kinePill}>
               <View style={styles.kinePillDot} />
               <Text style={styles.kinePillText}>Kinésithérapie</Text>
             </View>
-            <Text style={styles.kinePillSub}>Rééducation à domicile</Text>
+            <Text style={styles.kinePillSub}>{t("home_rehab")}</Text>
           </View>
         )}
 
         {/* ── Type de soin ── */}
-        <Text style={styles.label}>Type de soin</Text>
+        <Text style={styles.label}>{t("care_type")}</Text>
 
         {isKine ? (
           /* Kiné: visual chip grid */
@@ -573,7 +575,7 @@ export default function PatientRequestScreen() {
 
         {/* ── Date ── */}
         <View style={styles.dateHeaderRow}>
-          <Text style={styles.label}>Date</Text>
+          <Text style={styles.label}>{t("date")}</Text>
           <View style={styles.monthNav}>
             <TouchableOpacity
               style={[styles.monthNavBtn, selectedMonthIndex === 0 && styles.monthNavBtnDisabled]}
@@ -642,7 +644,7 @@ export default function PatientRequestScreen() {
         )}
 
         {/* ── Heure ── */}
-        <Text style={styles.label}>Heure</Text>
+        <Text style={styles.label}>{t("time_lbl")}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.rowChips}>
             {times.map((time, index) => (
@@ -762,7 +764,7 @@ export default function PatientRequestScreen() {
           ) : (
             <>
               <Navigation size={18} color="white" />
-              <Text style={styles.submitText}>Publier ma demande</Text>
+              <Text style={styles.submitText}>{t("publish_request")}</Text>
             </>
           )}
         </TouchableOpacity>

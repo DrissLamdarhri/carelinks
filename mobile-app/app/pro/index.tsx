@@ -22,6 +22,7 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { mockProProfile } from "@/lib/mock-data";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
@@ -36,6 +37,7 @@ const NAVY = "#0D0870";
 
 export default function ProHomeScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, profile, refreshProfile } = useAuth();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
@@ -184,7 +186,7 @@ export default function ProHomeScreen() {
                 </Text>
               </View>
               <View style={styles.missionGo}>
-                <Text style={styles.missionGoTxt}>Voir la carte</Text>
+                <Text style={styles.missionGoTxt}>{t("view_map")}</Text>
                 <ChevronRight size={16} color="#FFFFFF" />
               </View>
             </View>
@@ -198,7 +200,7 @@ export default function ProHomeScreen() {
             <View style={styles.missionActions}>
               <View style={styles.missionBtn}>
                 <Navigation size={14} color={NAVY} strokeWidth={2.4} />
-                <Text style={styles.missionBtnTxt}>Itinéraire</Text>
+                <Text style={styles.missionBtnTxt}>{t("directions")}</Text>
               </View>
               <Text style={styles.missionPrice}>{activeMission.final_price_mad ?? activeMission.budget_max_mad ?? "—"} MAD</Text>
             </View>
@@ -210,7 +212,7 @@ export default function ProHomeScreen() {
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/bids")}>
           <Banknote size={16} color={Colors.primary} />
-          <Text style={styles.quickTxt}>Demandes proches</Text>
+          <Text style={styles.quickTxt}>{t("nearby_requests")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
           <FileText size={16} color={Colors.primary} />
@@ -234,15 +236,15 @@ export default function ProHomeScreen() {
             <LiveBookingsFeed specialty={specialty} />
           ) : (
             <View style={styles.setupCard}>
-              <Text style={styles.setupText}>Choisissez votre spécialité et votre position pour recevoir les demandes.</Text>
+              <Text style={styles.setupText}>{t("setup_specialty_hint")}</Text>
               <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
-                <Text style={styles.setupBtnTxt}>Configurer</Text>
+                <Text style={styles.setupBtnTxt}>{t("configure")}</Text>
               </TouchableOpacity>
             </View>
           )
         ) : appointments.length === 0 ? (
           <View style={styles.setupCard}>
-            <Text style={styles.setupText}>Aucun rendez-vous pour le moment.</Text>
+            <Text style={styles.setupText}>{t("no_appointments")}</Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
@@ -263,7 +265,7 @@ export default function ProHomeScreen() {
                     </View>
                     <View style={styles.jobSep} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.jobPatient}>Patient</Text>
+                      <Text style={styles.jobPatient}>{t("patient")}</Text>
                       <Text style={styles.jobCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
                       {b.address ? (
                         <View style={styles.jobAddrRow}>
@@ -282,7 +284,7 @@ export default function ProHomeScreen() {
                   {!done ? (
                     <TouchableOpacity style={styles.navBtn} onPress={() => router.push(`/pro/tracking/${b.id}`)}>
                       <Navigation size={15} color="#FFFFFF" strokeWidth={2.2} />
-                      <Text style={styles.navBtnTxt}>Naviguer vers le patient</Text>
+                      <Text style={styles.navBtnTxt}>{t("navigate_to_patient")}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </TouchableOpacity>
