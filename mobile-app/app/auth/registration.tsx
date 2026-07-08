@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle2, ChevronRight, Eye, EyeOff, Lock, Mail, MapPin, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
@@ -18,6 +19,7 @@ import { AppleAuthButton } from "@/components/AppleAuthButton";
 import { showToast } from "@/lib/toast";
 
 export default function RegistrationScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
@@ -79,7 +81,7 @@ export default function RegistrationScreen() {
       }
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription Google impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("google_signup_failed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -98,7 +100,7 @@ export default function RegistrationScreen() {
       }
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription Apple impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("apple_signup_failed"));
     } finally {
       setAppleLoading(false);
     }
@@ -115,7 +117,7 @@ export default function RegistrationScreen() {
       });
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -128,16 +130,16 @@ export default function RegistrationScreen() {
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.title}>Créer un compte</Text>
-          <Text style={styles.subtitle}>Inscrivez-vous pour commencer à utiliser CareLink</Text>
+          <Text style={styles.title}>{t("create_account")}</Text>
+          <Text style={styles.subtitle}>{t("signup_to_start")}</Text>
         </View>
 
         <View style={styles.tabWrap}>
           <TouchableOpacity style={styles.tabBtn} onPress={() => router.push("/auth/patient-login")}>
-            <Text style={styles.tabText}>Connexion</Text>
+            <Text style={styles.tabText}>{t("login")}</Text>
           </TouchableOpacity>
           <View style={[styles.tabBtn, styles.tabActive]}>
-            <Text style={styles.tabActiveText}>Inscription</Text>
+            <Text style={styles.tabActiveText}>{t("signup")}</Text>
           </View>
         </View>
 
@@ -153,7 +155,7 @@ export default function RegistrationScreen() {
 
         <View style={styles.row}>
           <View style={styles.col}>
-            <Text style={styles.label}>Prénom</Text>
+            <Text style={styles.label}>{t("first_name")}</Text>
             <View style={styles.inputWrap}>
               <User size={16} color={Colors.textMuted} />
               <TextInput

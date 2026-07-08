@@ -11,6 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ShieldCheck, Smartphone, KeyRound } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useMfa } from "@/lib/hooks/useMfa";
 
@@ -52,6 +53,7 @@ function CodeInput({
 }
 
 export default function MfaChallengeScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams();
   const { user, profile, verifyMfaTotp, challengeMfaSms, verifyMfaSms } = useAuth();
@@ -82,11 +84,11 @@ export default function MfaChallengeScreen() {
           setMode("sms");
         } else {
           setMode("totp");
-          setErrorMessage("Le SMS est désactivé. Configurez un authentificateur TOTP.");
+          setErrorMessage(t("sms_disabled_desc"));
         }
       } catch (error) {
         if (!mounted) return;
-        setErrorMessage(error instanceof Error ? error.message : "Impossible de charger le MFA.");
+        setErrorMessage(error instanceof Error ? error.message : t("cannot_load_mfa"));
         setMode(profile?.mfaMethod === "sms" && smsAvailable ? "sms" : "totp");
       }
     };
@@ -105,7 +107,7 @@ export default function MfaChallengeScreen() {
         await challengeMfaSms(profile?.phone ?? "");
         setSmsSent(true);
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Envoi SMS impossible.");
+        setErrorMessage(error instanceof Error ? error.message : t("sms_send_failed"));
       } finally {
         setLoading(false);
       }
@@ -144,21 +146,21 @@ export default function MfaChallengeScreen() {
       if (mode === "backup") {
         const ok = await verifyBackupCode(code);
         if (!ok) {
-          setErrorMessage("Code de secours invalide.");
+          setErrorMessage(t("invalid_backup_code"));
         } else {
           finishLogin();
         }
         return;
       }
       if (!profile?.phone) {
-        setErrorMessage("Numéro de téléphone manquant.");
+        setErrorMessage(t("missing_phone"));
         return;
       }
       await verifyMfaSms(profile.phone, code);
       finishLogin();
     } catch (error) {
       if (mode === "sms") setSmsAttempts((prev) => prev + 1);
-      setErrorMessage(error instanceof Error ? error.message : "Code invalide.");
+      setErrorMessage(error instanceof Error ? error.message : t("invalid_code"));
     } finally {
       setLoading(false);
     }
@@ -172,7 +174,7 @@ export default function MfaChallengeScreen() {
       await challengeMfaSms(profile.phone);
       setSmsSent(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Envoi SMS impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("sms_send_failed"));
     } finally {
       setLoading(false);
     }
@@ -191,10 +193,10 @@ export default function MfaChallengeScreen() {
               <ShieldCheck size={22} color={Colors.primary} />
             )}
           </View>
-          <Text style={styles.title}>Vérification de sécurité</Text>
+          <Text style={styles.title}>{t("security_verification")}</Text>
           <Text style={styles.subtitle}>
             {mode === "sms"
-              ? "Confirmez votre identité avec un code SMS."
+              ? t("confirm_identity_sms")
               : mode === "backup"
               ? "Saisissez un code de secours à usage unique."
               : "Saisissez le code de votre application d'authentification."}

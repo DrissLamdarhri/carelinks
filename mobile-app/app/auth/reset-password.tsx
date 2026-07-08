@@ -21,8 +21,10 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { showToast } from "@/lib/toast";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 
 export default function ResetPasswordScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { updatePassword } = useAuth();
   const [checking, setChecking] = useState(true);
@@ -70,10 +72,10 @@ export default function ResetPasswordScreen() {
     setSubmitting(true);
     try {
       await updatePassword(password);
-      showToast("Mot de passe mis à jour ✓");
+      showToast(t("password_updated"));
       router.replace("/auth");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de mettre à jour le mot de passe.");
+      setError(e instanceof Error ? e.message : t("cannot_update_password"));
     } finally {
       setSubmitting(false);
     }
@@ -90,10 +92,10 @@ export default function ResetPasswordScreen() {
   if (!ready) {
     return (
       <View style={s.center}>
-        <Text style={s.title}>Lien invalide ou expiré</Text>
-        <Text style={s.sub}>Demandez un nouveau lien de réinitialisation.</Text>
+        <Text style={s.title}>{t("invalid_link")}</Text>
+        <Text style={s.sub}>{t("request_new_link")}</Text>
         <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace("/auth")}>
-          <Text style={s.primaryTxt}>Retour à la connexion</Text>
+          <Text style={s.primaryTxt}>{t("back_to_login")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -104,14 +106,14 @@ export default function ResetPasswordScreen() {
       <View style={s.iconWrap}>
         <Lock size={26} color={Colors.primary} />
       </View>
-      <Text style={s.title}>Nouveau mot de passe</Text>
+      <Text style={s.title}>{t("new_password")}</Text>
       <Text style={s.sub}>Choisissez un mot de passe d&apos;au moins 6 caractères.</Text>
 
       <View style={s.field}>
         <Lock size={18} color={Colors.textMuted} />
         <TextInput
           style={s.input}
-          placeholder="Nouveau mot de passe"
+          placeholder={t("new_password")}
           placeholderTextColor={Colors.textSubtle}
           secureTextEntry={!show}
           value={password}
@@ -126,7 +128,7 @@ export default function ResetPasswordScreen() {
         <CheckCircle2 size={18} color={confirm && password === confirm ? "#16A34A" : Colors.textMuted} />
         <TextInput
           style={s.input}
-          placeholder="Confirmer le mot de passe"
+          placeholder={t("confirm_password_ph")}
           placeholderTextColor={Colors.textSubtle}
           secureTextEntry={!show}
           value={confirm}

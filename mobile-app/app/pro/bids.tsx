@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { ArrowLeft, LocateFixed } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
@@ -17,6 +18,7 @@ const specialtyChoices = [
 ];
 
 export default function ProBidsScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [specialtyKey, setSpecialtyKey] = useState("infirmier");
@@ -33,7 +35,7 @@ export default function ProBidsScreen() {
       const coords = await geo.getCurrentPosition();
       await geo.setProLocation(user.id, coords.lat, coords.lng);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Position GPS non enregistrée.");
+      setErrorMessage(error instanceof Error ? error.message : t("gps_not_saved"));
     } finally {
       setLocating(false);
     }
@@ -46,8 +48,8 @@ export default function ProBidsScreen() {
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Demandes proches</Text>
-          <Text style={styles.subtitle}>Soumettez vos offres en temps réel</Text>
+          <Text style={styles.title}>{t("nearby_requests")}</Text>
+          <Text style={styles.subtitle}>{t("submit_offers_realtime")}</Text>
         </View>
       </View>
 
@@ -68,7 +70,7 @@ export default function ProBidsScreen() {
 
       <TouchableOpacity style={styles.locateBtn} onPress={handleSetLocation} disabled={locating}>
         {locating ? <ActivityIndicator size="small" color={Colors.primary} /> : <LocateFixed size={16} color={Colors.primary} />}
-        <Text style={styles.locateText}>Mettre à jour ma localisation GPS</Text>
+        <Text style={styles.locateText}>{t("update_gps")}</Text>
       </TouchableOpacity>
 
       <LiveBookingsFeed specialty={specialty} />
