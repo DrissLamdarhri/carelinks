@@ -264,7 +264,7 @@ export default function ProAuthFlowScreen() {
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <View style={styles.headerIcon}>
               <Stethoscope size={24} color="white" />
@@ -348,7 +348,7 @@ export default function ProAuthFlowScreen() {
         </ScrollView>
 
         {/* REGISTRATION SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <View style={styles.headerIcon}>
               <Shield size={24} color="white" />
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   },
   tabText: { fontSize: 14, color: Colors.textMuted },
   tabActiveText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
-  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 240 },
   screenHeader: { marginBottom: 16, alignItems: "center" },
   headerIcon: {
     width: 56,

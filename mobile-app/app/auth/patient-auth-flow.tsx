@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -71,6 +73,7 @@ export default function PatientAuthFlowScreen() {
     agreed;
 
   const routeByRole = (nextRole: string | null) => {
+    showToast("Connexion réussie ✓", "success");
     if (nextRole === "pro") {
       router.replace("/pro");
     } else if (nextRole === "admin") {
@@ -236,7 +239,7 @@ export default function PatientAuthFlowScreen() {
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <Text style={styles.screenTitle}>Bon retour !</Text>
             <Text style={styles.screenSubtitle}>Connectez-vous pour accéder à vos soins</Text>
@@ -317,7 +320,7 @@ export default function PatientAuthFlowScreen() {
         </ScrollView>
 
         {/* REGISTRATION SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <Text style={styles.screenTitle}>Bienvenue !</Text>
             <Text style={styles.screenSubtitle}>Créez votre compte pour débuter votre parcours</Text>
@@ -536,7 +539,7 @@ const styles = StyleSheet.create({
   },
   tabText: { fontSize: 14, color: Colors.textMuted },
   tabActiveText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
-  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 240 },
   screenHeader: { marginBottom: 16 },
   screenTitle: {
     fontSize: 28,
