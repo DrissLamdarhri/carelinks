@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { CalendarClock, CheckCircle2, MapPin, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
@@ -20,26 +20,26 @@ export default function AppointmentConfirmedScreen() {
   const bookingId = Array.isArray(params.bookingId) ? params.bookingId[0] : params.bookingId;
   const [booking, setBooking] = useState<Booking | null>(null);
   const [series, setSeries] = useState<Booking[]>([]);
+  const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      if (!bookingId) { setLoading(false); return; }
-      try {
-        const b = await db.bookings.get(bookingId);
-        if (!active) return;
-        setBooking(b);
-        if (b.series_id) {
-          const rows = await db.bookings.getSeries(b.series_id).catch(() => []);
-          if (active) setSeries(rows);
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
+  const load = useCallback(async () => {
+    if (!bookingId) { setLoading(false); return; }
+    try {
+      const b = await db.bookings.get(bookingId);
+      setBooking(b);
+      const rows = b.series_id ? await db.bookings.getSeries(b.series_id).catch(() => [b]) : [b];
+      setSeries(rows);
+      // Which sessions already have an escrow hold (paid).
+      const pays = await db.payments.listForBookings(rows.map((r) => r.id)).catch(() => []);
+      setPaidIds(new Set(pays.filter((p) => p.kind === "service" && p.status !== "refunded" && p.status !== "failed").map((p) => p.booking_id)));
+    } finally {
+      setLoading(false);
+    }
   }, [bookingId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // Open the meeting link in an in-app browser tab. This avoids Android routing
   // the URL straight into the Google Meet / Zoom app intent (which can be blocked,
@@ -108,15 +108,22 @@ export default function AppointmentConfirmedScreen() {
         <>
           <Text style={s.blockLabel}>{t("upcoming_sessions")}</Text>
           <View style={s.card}>
-            {series.map((sn) => (
-              <View key={sn.id} style={s.seriesRow}>
-                <Text style={s.seriesIdx}>{sn.session_index}/{sn.session_total}</Text>
-                <Text style={s.seriesDate}>{fmt(sn.scheduled_at)}</Text>
-                <Text style={[s.seriesTag, sn.id === booking.id && s.seriesTagPaid]}>
-                  {sn.id === booking.id ? t("status_matched") : t("tab_upcoming")}
-                </Text>
-              </View>
-            ))}
+            {series.map((sn) => {
+              const paid = paidIds.has(sn.id);
+              return (
+                <View key={sn.id} style={s.seriesRow}>
+                  <Text style={s.seriesIdx}>{sn.session_index}/{sn.session_total}</Text>
+                  <Text style={s.seriesDate}>{fmt(sn.scheduled_at)}</Text>
+                  {paid ? (
+                    <Text style={[s.seriesTag, s.seriesTagPaid]}>{t("session_paid")}</Text>
+                  ) : (
+                    <TouchableOpacity style={s.payBtn} onPress={() => router.push(`/patient/payment/${encodeURIComponent(sn.id)}`)}>
+                      <Text style={s.payBtnTxt}>{t("pay_session")}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
           <Text style={s.hint}>{t("series_payment_note")}</Text>
         </>
@@ -159,6 +166,8 @@ const s = StyleSheet.create({
   seriesDate: { color: Colors.textPrimary, fontSize: 12.5, flex: 1, textTransform: "capitalize" },
   seriesTag: { color: Colors.textMuted, fontSize: 11, fontWeight: "700" },
   seriesTagPaid: { color: "#16A34A" },
+  payBtn: { backgroundColor: "#0D0870", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 },
+  payBtnTxt: { color: "#fff", fontSize: 11.5, fontWeight: "800" },
   homeBtn: { height: 52, borderRadius: 16, backgroundColor: NAVY, alignItems: "center", justifyContent: "center", marginTop: 8 },
   homeTxt: { color: "#fff", fontSize: 15, fontWeight: "700" },
 });
