@@ -325,6 +325,14 @@ export default function PatientBookingsScreen() {
                       cancel_case: null,
                       refund_mad: null,
                       cancelled_by: null,
+                      session_mode: null,
+                      plan_type: null,
+                      recurrence: null,
+                      series_id: null,
+                      session_index: null,
+                      session_total: null,
+                      meet_link: null,
+                      zoom_link: null,
                     });
                   }}
                 >
