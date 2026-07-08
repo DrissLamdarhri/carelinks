@@ -40,6 +40,7 @@ const menuItems: { icon: typeof User; label: string; color: string; route?: stri
 ];
 
 export default function ProProfileScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [pro, setPro] = useState<Professional | null>(null);
@@ -202,7 +203,7 @@ export default function ProProfileScreen() {
         }}
       >
         <LogOut size={18} color={Colors.danger} />
-        <Text style={styles.signOutText}>Se déconnecter</Text>
+        <Text style={styles.signOutText}>{t("sign_out")}</Text>
       </TouchableOpacity>
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}

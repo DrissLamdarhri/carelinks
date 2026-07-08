@@ -155,7 +155,7 @@ export default function ProDocumentsScreen() {
 
       {!loading && documents.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucun document pour le moment.</Text>
+          <Text style={styles.emptyText}>{t("no_documents_yet")}</Text>
         </View>
       ) : null}
 

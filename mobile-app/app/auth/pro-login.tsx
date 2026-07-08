@@ -230,7 +230,7 @@ export default function ProLoginScreen() {
         <View style={styles.noticeCard}>
           <Shield size={20} color={Colors.primary} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.noticeTitle}>Compte vérifié requis</Text>
+            <Text style={styles.noticeTitle}>{t("verified_account_required")}</Text>
             <Text style={styles.noticeBody}>{t("only_approved_pros")}</Text>
           </View>
         </View>

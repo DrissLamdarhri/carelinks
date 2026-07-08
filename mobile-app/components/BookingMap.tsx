@@ -28,6 +28,7 @@ import {
   type PinchGestureHandlerStateChangeEvent,
 } from "react-native-gesture-handler";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { geo } from "@/lib/db/geo";
 import { haptics } from "@/lib/haptics";
 import {
@@ -70,6 +71,7 @@ async function nominatim(lat: number, lng: number): Promise<string | null> {
 
 // ── List rows (unchanged design) ──────────────────────────────────────────────
 function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSelected: boolean; onPress: () => void; tab: number }) {
+  const { t } = useI18n();
   const color = specialtyColor(pro.specialty);
   if (tab === 1) {
     return (
@@ -100,10 +102,10 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
                 } catch (e) {}
               }}
             >
-              <Text style={list.reserveBtnText}>Réserver</Text>
+              <Text style={list.reserveBtnText}>{t("reserve")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[list.profileBtn, { borderColor: color + "44" }]}> 
-              <Text style={[list.profileBtnText, { color }]}>Profil</Text>
+              <Text style={[list.profileBtnText, { color }]}>{t("profile")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -167,6 +169,7 @@ export function BookingMap({
   emptyText = "Aucun professionnel à proximité pour le moment.",
   showChrome = true,
 }: BookingMapProps) {
+  const { t } = useI18n();
   const vw = SCREEN_W;
   const vh = height;
   const displayPros = pros && pros.length > 0 ? pros : demo ? DEMO_PROS : [];
@@ -380,7 +383,7 @@ export function BookingMap({
                 accessibilityRole="button"
                 accessibilityLabel="Modifier l'adresse"
               >
-                <Text style={[styles.modBtnText, { color: primaryColor }]}>Modifier</Text>
+                <Text style={[styles.modBtnText, { color: primaryColor }]}>{t("edit")}</Text>
               </TouchableOpacity>
             </View>
 

@@ -174,7 +174,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
                     onChangeText={setAmount}
                     keyboardType="numeric"
                     style={styles.input}
-                    placeholder="Votre offre"
+                    placeholder={t("your_offer_ph")}
                     placeholderTextColor={Colors.textSubtle}
                     autoFocus
                   />
@@ -184,7 +184,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
                   {submitting ? <Loader2 size={16} color="white" /> : <Send size={15} color="white" strokeWidth={2.2} />}
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => { setBidFor(null); setErrorMessage(null); }}>
-                  <Text style={styles.cancelTxt}>Annuler</Text>
+                  <Text style={styles.cancelTxt}>{t("cancel")}</Text>
                 </TouchableOpacity>
               </View>
             ) : !approved ? (

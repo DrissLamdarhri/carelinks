@@ -153,7 +153,7 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Catégories</Text>
+            <Text style={styles.sectionTitle}>{t("categories")}</Text>
             {categoryRows.map((row) => (
               <View key={row.key} style={styles.row}>
                 <View style={styles.rowLeft}>
