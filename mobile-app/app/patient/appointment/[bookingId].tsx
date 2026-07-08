@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { CalendarClock, CheckCircle2, MapPin, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { showToast } from "@/lib/toast";
 import { db } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
@@ -39,7 +41,18 @@ export default function AppointmentConfirmedScreen() {
     return () => { active = false; };
   }, [bookingId]);
 
-  const open = (url: string | null) => { if (url) void Linking.openURL(url); };
+  // Open the meeting link in an in-app browser tab. This avoids Android routing
+  // the URL straight into the Google Meet / Zoom app intent (which can be blocked,
+  // e.g. meet.google.com/new needs CALL_PHONE). The browser then offers to open
+  // the app or join on the web.
+  const open = async (url: string | null) => {
+    if (!url) { showToast(t("link_not_set")); return; }
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      try { await Linking.openURL(url); } catch { showToast(t("link_open_failed")); }
+    }
+  };
 
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={NAVY} /></View>;
   if (!booking) return <View style={s.center}><Text style={s.muted}>{t("cannot_load_booking")}</Text></View>;
