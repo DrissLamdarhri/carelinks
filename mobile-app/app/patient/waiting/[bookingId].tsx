@@ -11,6 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Banknote, Bell, Clock3, Loader2, MapPin, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
@@ -26,6 +27,7 @@ import {
 import { LiveBidsFeed } from "../../../components/LiveBidsFeed";
 
 export default function WaitingOffersScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
@@ -93,7 +95,7 @@ export default function WaitingOffersScreen() {
     const loadBooking = async () => {
       setBookingError(null);
       if (!bookingId) {
-        if (!cancelled) setBookingError("Réservation introuvable.");
+        if (!cancelled) setBookingError(t("reservation_not_found"));
         return;
       }
 
@@ -107,7 +109,7 @@ export default function WaitingOffersScreen() {
         if (!cancelled) setBooking(next);
       } catch (loadError) {
         if (!cancelled) {
-          setBookingError(loadError instanceof Error ? loadError.message : "Impossible de charger la demande.");
+          setBookingError(loadError instanceof Error ? loadError.message : t("cannot_load_request"));
         }
       }
     };
@@ -154,14 +156,14 @@ export default function WaitingOffersScreen() {
       await db.bookings.setStatus(bookingId, "cancelled");
       router.replace("/patient");
     } catch (cancelErr) {
-      setCancelError(cancelErr instanceof Error ? cancelErr.message : "Impossible d'annuler la demande.");
+      setCancelError(cancelErr instanceof Error ? cancelErr.message : t("cannot_cancel_request"));
     } finally {
       setCancelling(false);
     }
   };
 
   const scheduledLabel = useMemo(() => {
-    if (!booking?.scheduled_at) return "Flexible";
+    if (!booking?.scheduled_at) return t("flexible");
     return new Date(booking.scheduled_at).toLocaleString("fr-MA", {
       day: "numeric",
       month: "short",
@@ -176,7 +178,7 @@ export default function WaitingOffersScreen() {
         <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace("/patient/bookings"))} style={styles.closeBtn}>
           <X size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Recherche en cours</Text>
+        <Text style={styles.headerTitle}>{t("searching")}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -211,7 +213,7 @@ export default function WaitingOffersScreen() {
           </View>
         </View>
 
-        <Text style={styles.searchTitle}>Recherche de professionnels</Text>
+        <Text style={styles.searchTitle}>{t("searching_pros")}</Text>
         <Text style={styles.searchSubtitle}>
           Nous cherchons les professionnels disponibles dans votre zone
         </Text>
@@ -219,7 +221,7 @@ export default function WaitingOffersScreen() {
         <View style={styles.realtimeRow}>
           <View style={[styles.realtimeDot, { backgroundColor: theme.primary }]} />
           <Text style={[styles.realtimeText, { color: theme.primary }]}>
-            {isDemoBooking ? "Mode démo actif" : "Connexion temps réel active"}
+            {isDemoBooking ? t("demo_mode_active") : t("realtime_active")}
           </Text>
         </View>
 
@@ -230,7 +232,7 @@ export default function WaitingOffersScreen() {
                 <Clock3 size={15} color={theme.primary} />
               </View>
               <View>
-                <Text style={styles.summaryLabel}>Date & heure</Text>
+                <Text style={styles.summaryLabel}>{t("date_time")}</Text>
                 <Text style={styles.summaryValue}>{scheduledLabel}</Text>
               </View>
             </View>
@@ -240,8 +242,8 @@ export default function WaitingOffersScreen() {
                 <MapPin size={15} color={theme.primary} />
               </View>
               <View>
-                <Text style={styles.summaryLabel}>Adresse</Text>
-                <Text style={styles.summaryValue}>{booking.address ?? "Non renseignée"}</Text>
+                <Text style={styles.summaryLabel}>{t("address")}</Text>
+                <Text style={styles.summaryValue}>{booking.address ?? t("not_provided")}</Text>
               </View>
             </View>
 
@@ -250,7 +252,7 @@ export default function WaitingOffersScreen() {
                 <Banknote size={15} color={theme.primary} />
               </View>
               <View>
-                <Text style={styles.summaryLabel}>Votre budget</Text>
+                <Text style={styles.summaryLabel}>{t("your_budget")}</Text>
                 <Text style={[styles.summaryPrice, { color: theme.primary }]}>
                   {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} MAD
                 </Text>
@@ -260,7 +262,7 @@ export default function WaitingOffersScreen() {
         ) : (
           <View style={styles.summaryCard}>
             <Loader2 size={18} color={theme.primary} />
-            <Text style={styles.summaryLabel}>Chargement de votre demande…</Text>
+            <Text style={styles.summaryLabel}>{t("loading_request")}</Text>
           </View>
         )}
 
@@ -271,7 +273,7 @@ export default function WaitingOffersScreen() {
                 <Text style={styles.offersCountText}>{offersCount}</Text>
               </View>
               <Bell size={16} color={theme.primary} />
-              <Text style={styles.previewTitle}>Offres reçues en direct</Text>
+              <Text style={styles.previewTitle}>{t("live_offers_received")}</Text>
             </View>
             <LiveBidsFeed
               bookingId={bookingId ?? ""}
