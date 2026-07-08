@@ -14,18 +14,9 @@ const OPTIONS: { code: Locale; native: string; sub: string; flag: string }[] = [
 export function LanguageSelector({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { locale, setLocale, t } = useI18n();
 
-  const choose = async (code: Locale) => {
-    if (code === locale) { onClose(); return; }
-    const needsReload = await setLocale(code);
+  const choose = (code: Locale) => {
+    setLocale(code); // instant — RTL flips live, no restart
     onClose();
-    if (needsReload) {
-      Alert.alert(
-        code === "ar" ? "تغيير اللغة" : "Changement de langue",
-        code === "ar"
-          ? "الرجاء إعادة تشغيل التطبيق لتطبيق الاتجاه من اليمين إلى اليسار."
-          : "Veuillez redémarrer l'application pour appliquer la nouvelle orientation.",
-      );
-    }
   };
 
   return (

@@ -151,51 +151,51 @@ const DICT: Record<Locale, Record<string, string>> = {
 
 interface Ctx {
   locale: Locale;
-  setLocale: (l: Locale) => Promise<boolean>; // returns true if a reload is needed (RTL flip)
+  setLocale: (l: Locale) => void; // instant — no reload needed (RTL flips live)
   t: (k: string) => string;
   dir: "ltr" | "rtl";
+  hasChosen: boolean; // whether the user has picked a language (for the launch picker)
+  ready: boolean;
 }
 
 const I18nContext = createContext<Ctx>({
   locale: "fr",
-  setLocale: async () => false,
+  setLocale: () => {},
   t: (k: string) => k,
   dir: "ltr",
+  hasChosen: false,
+  ready: false,
 });
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("fr");
+  const [hasChosen, setHasChosen] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Keep I18nManager LTR globally — RTL is applied per-subtree via the `direction`
+    // style, so switching is INSTANT and never needs an app restart.
+    try { I18nManager.allowRTL(false); I18nManager.forceRTL(false); } catch { /* noop */ }
     AsyncStorage.getItem(STORAGE_KEY).then((saved) => {
       if (saved && saved in DICT) {
         setLocaleState(saved as Locale);
-        I18nManager.forceRTL(RTL_LOCALES.includes(saved as Locale));
+        setHasChosen(true);
       }
       setReady(true);
     });
   }, []);
 
-  const setLocale = useCallback(
-    async (l: Locale): Promise<boolean> => {
-      const rtlChanged = RTL_LOCALES.includes(l) !== RTL_LOCALES.includes(locale);
-      setLocaleState(l);
-      await AsyncStorage.setItem(STORAGE_KEY, l);
-      if (rtlChanged) {
-        I18nManager.allowRTL(RTL_LOCALES.includes(l));
-        I18nManager.forceRTL(RTL_LOCALES.includes(l));
-      }
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    setHasChosen(true);
+    void AsyncStorage.setItem(STORAGE_KEY, l);
+    void (async () => {
       try {
         const { data } = await supabase.auth.getUser();
         if (data.user) await supabase.from("profiles").update({ language: l }).eq("id", data.user.id);
-      } catch {
-        /* ignore */
-      }
-      return rtlChanged; // caller reloads the app when true
-    },
-    [locale]
-  );
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   const dir = RTL_LOCALES.includes(locale) ? "rtl" : "ltr";
 
@@ -204,12 +204,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       locale,
       setLocale,
       dir,
+      hasChosen,
+      ready,
       t: (k: string) => DICT[locale]?.[k] ?? DICT.en[k] ?? DICT.fr[k] ?? k,
     }),
-    [locale, dir, setLocale]
+    [locale, dir, setLocale, hasChosen, ready]
   );
 
-  if (!ready) return <>{children}</>;
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
