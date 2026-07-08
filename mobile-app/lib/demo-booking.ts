@@ -35,6 +35,17 @@ export function buildDemoBooking(bookingId: string): Booking {
     completed_at: null,
     cancelled_at: null,
     cancel_reason: null,
+    cancel_case: null,
+    refund_mad: null,
+    cancelled_by: null,
+    session_mode: null,
+    plan_type: null,
+    recurrence: null,
+    series_id: null,
+    session_index: null,
+    session_total: null,
+    meet_link: null,
+    zoom_link: null,
   };
 }
 
@@ -116,6 +127,8 @@ export function buildDemoProfessional(proId: string): Professional {
     total_bookings: isFirst ? 342 : 211,
     is_available: true,
     service_radius_km: 15,
+    meet_link: null,
+    zoom_link: null,
     created_at: now,
     updated_at: now,
   };

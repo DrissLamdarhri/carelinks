@@ -15,6 +15,14 @@ import type {
   UUID,
 } from "./types";
 
+// RFC-4122-ish v4 id for grouping (series). Dependency-free; fine as a group key.
+function uuidv4(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
   if (data === null) throw new Error("Empty result");
@@ -108,6 +116,37 @@ export const bookings = {
     return unwrap(await supabase.from("bookings").select("*").eq("id", id).single());
   },
 
+  // Create a recurring plan / subscription pack as N linked sessions sharing a
+  // series_id (each session is a normal booking → its own escrow payment).
+  async createSeries(
+    base: Pick<Booking, "patient_id" | "specialty"> & Partial<Booking>,
+    opts: { count: number; recurrence: Exclude<Booking["recurrence"], null | "none">; firstDateISO: string }
+  ): Promise<Booking[]> {
+    const seriesId = uuidv4();
+    const stepDays = opts.recurrence === "weekly" ? 7 : opts.recurrence === "biweekly" ? 14 : 0;
+    const rows = Array.from({ length: opts.count }, (_, i) => {
+      const d = new Date(opts.firstDateISO);
+      if (opts.recurrence === "monthly") d.setMonth(d.getMonth() + i);
+      else d.setDate(d.getDate() + stepDays * i);
+      return {
+        status: "matched",
+        urgency: "normal",
+        ...base,
+        scheduled_at: d.toISOString(),
+        series_id: seriesId,
+        session_index: i + 1,
+        session_total: opts.count,
+      };
+    });
+    return unwrap(await supabase.from("bookings").insert(rows).select("*"));
+  },
+
+  async getSeries(seriesId: UUID): Promise<Booking[]> {
+    return unwrap(
+      await supabase.from("bookings").select("*").eq("series_id", seriesId).order("session_index", { ascending: true })
+    );
+  },
+
   async listForPatient(patientId: UUID): Promise<Booking[]> {
     return unwrap(
       await supabase
@@ -166,11 +205,20 @@ export const bookings = {
     if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
     return unwrap(await supabase.from("bookings").update(patch).eq("id", id).select("*").single());
   },
-  // Late cancellation (pro en route): 5 MAD penalty + a warning; 2 → suspension.
-  async cancelWithPenalty(id: UUID): Promise<{ warnings: number; suspended: boolean; penalty_mad: number }> {
-    const { data, error } = await supabase.rpc("cancel_with_penalty", { p_booking: id });
+  // Nurse marks "I'm leaving / en route" (matched → en_route). Enables RULE #3.
+  async markEnRoute(id: UUID): Promise<Booking> {
+    return this.setStatus(id, "en_route");
+  },
+  // Cancel via the escrow-aware RPC. The RPC picks the cancellation rule (1-4)
+  // from the booking status + who is cancelling (patient vs nurse), settles the
+  // escrow (refund / fee retention / trip comp / penalty) and notifies both sides.
+  async cancelBooking(
+    id: UUID,
+    reason?: string
+  ): Promise<{ cancel_case: 1 | 2 | 3 | 4; refund_mad: number; nurse_comp_mad: number; penalty_mad: number }> {
+    const { data, error } = await supabase.rpc("cancel_booking", { p_booking: id, p_reason: reason ?? null });
     if (error) throw error;
-    return data as { warnings: number; suspended: boolean; penalty_mad: number };
+    return data as { cancel_case: 1 | 2 | 3 | 4; refund_mad: number; nurse_comp_mad: number; penalty_mad: number };
   },
 };
 
@@ -341,6 +389,9 @@ export const notificationSettings = {
 // ── Payments & payouts ──────────────────────────────────────────────────────
 export type PaymentProvider = "cmi" | "stripe" | "cash";
 export type PaymentStatus = "pending" | "authorized" | "captured" | "refunded" | "failed";
+// 'service' = the client's escrow hold; 'trip_comp' = RULE #3 credit to the nurse;
+// 'penalty' = RULE #4 debit against the nurse's balance.
+export type PaymentKind = "service" | "trip_comp" | "penalty";
 export type Payment = {
   id: UUID;
   booking_id: UUID;
@@ -351,6 +402,7 @@ export type Payment = {
   provider: PaymentProvider;
   provider_ref: string | null;
   status: PaymentStatus;
+  kind: PaymentKind;
   created_at: string;
   updated_at: string;
 };

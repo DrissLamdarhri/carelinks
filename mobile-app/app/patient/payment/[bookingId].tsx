@@ -24,7 +24,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
 const SERVICE_FEE = 5; // flat CareLink patient fee (MAD)
-const COMMISSION_RATE = 0.2; // 20% platform commission on the prestation
+const COMMISSION_RATE = 0.15; // 15% platform commission on the prestation
 
 const SPEC_LABEL: Record<string, string> = {
   nurse: "spec_nurse2",
@@ -276,8 +276,21 @@ export default function PaymentScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => router.replace("/patient/bookings")}>
-                  <Text style={s.ctaTxt}>{t("see_my_bookings")}</Text>
+                <TouchableOpacity
+                  style={s.cta}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    if (!bookingId) return router.replace("/patient/bookings");
+                    // Psychologist → appointment confirmation (Meet/Zoom links / directions);
+                    // other services → live tracking.
+                    router.replace(
+                      specialty === "psychologist"
+                        ? `/patient/appointment/${encodeURIComponent(bookingId)}`
+                        : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`
+                    );
+                  }}
+                >
+                  <Text style={s.ctaTxt}>{specialty === "psychologist" ? t("view_appointment") : t("see_my_bookings")}</Text>
                 </TouchableOpacity>
               </>
             )}

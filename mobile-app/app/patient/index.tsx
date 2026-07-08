@@ -18,6 +18,7 @@ import {
   Brain,
   Flower2,
   Activity,
+  AlertTriangle,
   ChevronRight,
   Star,
   Clock,
@@ -134,7 +135,7 @@ export default function PatientHomeScreen() {
                 onPress={() =>
                   router.push(
                     s.key === "psy"
-                      ? "/patient/psychologist"
+                      ? "/patient/psychologists"
                       : s.key === "yoga"
                       ? "/patient/yoga"
                       : `/patient/request?service=${s.key}`
@@ -173,6 +174,18 @@ export default function PatientHomeScreen() {
           <ChevronRight size={18} color="white" />
         </TouchableOpacity>
         <Text style={styles.ctaHint}>⚡ Réponse en moins de 5 minutes</Text>
+      </View>
+
+      {/* Dedicated urgent / SOS entry (danger-themed) */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.sosBanner} onPress={() => router.push("/patient/urgent")} activeOpacity={0.9}>
+          <View style={styles.sosIcon}><AlertTriangle size={18} color="#fff" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sosTitle}>{t("sos_banner_title")}</Text>
+            <Text style={styles.sosSub}>{t("sos_banner_sub")}</Text>
+          </View>
+          <ChevronRight size={18} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -307,6 +320,10 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  sosBanner: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#E24B4A", borderRadius: 16, padding: 14 },
+  sosIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" },
+  sosTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  sosSub: { color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 1 },
   serviceCard: {
     width: "48.5%",
     height: 140,

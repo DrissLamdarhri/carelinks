@@ -175,13 +175,16 @@ export default function NurseOffersScreen() {
             status: bid.id === offer.id ? "accepted" : "rejected",
           }))
         );
-        router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
+        // Escrow: pay first so the funds are held before the nurse travels.
+        router.replace(`/patient/payment/${encodeURIComponent(bookingId)}`);
         return;
       }
       // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
       await db.bids.acceptAndMatch(offer.id);
       toastSuccess(t("offer_accepted_notified"));
-      router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
+      // Escrow: route to payment so the agreed price is held (InHold) up-front;
+      // it is released to the nurse only when the job is completed.
+      router.replace(`/patient/payment/${encodeURIComponent(bookingId)}`);
     } catch (acceptError) {
       setActionError(acceptError instanceof Error ? acceptError.message : t("accept_error"));
       toastError(t("cannot_accept_offer"));

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   StyleSheet,
   Text,
@@ -186,6 +187,32 @@ export default function ProTrackingScreen() {
     [bookingId, busy, router],
   );
 
+  // RULE #4 — cancellation caused BY the nurse: the RPC refunds the client in full
+  // and debits a penalty from the nurse's balance.
+  const cancelByNurse = useCallback(() => {
+    if (!bookingId || busy) return;
+    Alert.alert(t("cancel_job"), t("cancel_job_confirm"), [
+      { text: t("keep"), style: "cancel" },
+      {
+        text: t("cancel_job"),
+        style: "destructive",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await db.bookings.cancelBooking(bookingId, "pro_cancelled");
+            haptics.success();
+            showToast(t("job_cancelled"));
+            router.back();
+          } catch {
+            showToast(t("action_failed"));
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  }, [bookingId, busy, router, t]);
+
   const patientName = patient?.full_name ?? "Patient";
   const distanceKm = nurse && dest ? haversineKm(nurse, dest) : null;
   const etaMin = distanceKm != null ? Math.max(1, Math.round((distanceKm / 30) * 60)) : null;
@@ -277,14 +304,26 @@ export default function ProTrackingScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Nurse journey: matched → en_route (out) → in_progress → completed */}
         {status === "matched" ? (
+          <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("en_route", t("en_route_toast"))}>
+            <Text style={s.statusTxt}>{t("im_leaving")}</Text>
+          </TouchableOpacity>
+        ) : status === "en_route" ? (
           <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("in_progress", t("mission_started"))}>
-            <Text style={s.statusTxt}>{t("start_mission")}</Text>
+            <Text style={s.statusTxt}>{t("i_arrived")}</Text>
           </TouchableOpacity>
         ) : status === "in_progress" ? (
           <TouchableOpacity style={[s.statusBtn, s.statusDone]} disabled={busy} onPress={() => advance("completed", t("mission_completed"))}>
             <CheckCircle2 size={18} color="#FFFFFF" />
             <Text style={s.statusTxt}>{t("end_mission")}</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* RULE #4 — nurse-initiated cancellation (penalty applies) */}
+        {status !== "completed" && status !== "cancelled" ? (
+          <TouchableOpacity style={s.cancelJobBtn} disabled={busy} onPress={cancelByNurse}>
+            <Text style={s.cancelJobTxt}>{t("cancel_job")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -361,4 +400,6 @@ const s = StyleSheet.create({
   },
   statusDone: { backgroundColor: NAVY },
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
+  cancelJobTxt: { color: "#E24B4A", fontSize: 14, fontWeight: "700" },
 });
