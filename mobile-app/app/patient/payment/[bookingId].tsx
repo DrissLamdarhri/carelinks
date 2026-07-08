@@ -24,7 +24,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
 const SERVICE_FEE = 5; // flat CareLink patient fee (MAD)
-const COMMISSION_RATE = 0.2; // 20% platform commission on the prestation
+const COMMISSION_RATE = 0.15; // 15% platform commission on the prestation
 
 const SPEC_LABEL: Record<string, string> = {
   nurse: "spec_nurse2",

@@ -153,7 +153,8 @@ export default function WaitingOffersScreen() {
         router.replace("/patient");
         return;
       }
-      await db.bookings.setStatus(bookingId, "cancelled");
+      // RULE #1 — no nurse assigned yet → standard full refund, no fees.
+      await db.bookings.cancelBooking(bookingId);
       router.replace("/patient");
     } catch (cancelErr) {
       setCancelError(cancelErr instanceof Error ? cancelErr.message : t("cannot_cancel_request"));

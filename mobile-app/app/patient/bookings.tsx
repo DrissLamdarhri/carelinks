@@ -115,7 +115,7 @@ const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string 
 export default function PatientBookingsScreen() {
   const router = useRouter();
   const { t } = useI18n();
-  const STATUS_KEY: Record<string, string> = { open: "status_open", matched: "status_matched", in_progress: "status_in_progress", completed: "status_completed", cancelled: "status_cancelled" };
+  const STATUS_KEY: Record<string, string> = { open: "status_open", matched: "status_matched", en_route: "status_en_route", in_progress: "status_in_progress", completed: "status_completed", cancelled: "status_cancelled" };
   const { user } = useAuth();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
@@ -322,6 +322,9 @@ export default function PatientBookingsScreen() {
                       completed_at: null,
                       cancelled_at: null,
                       cancel_reason: null,
+                      cancel_case: null,
+                      refund_mad: null,
+                      cancelled_by: null,
                     });
                   }}
                 >
@@ -357,6 +360,7 @@ export default function PatientBookingsScreen() {
           bookingId={cancelTarget.id}
           scheduledAt={cancelTarget.scheduled_at}
           status={cancelTarget.status}
+          price={cancelTarget.final_price_mad ?? cancelTarget.budget_max_mad ?? cancelTarget.budget_min_mad ?? 0}
           onClose={() => setCancelTarget(null)}
           onCancelled={refresh}
         />

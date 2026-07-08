@@ -35,6 +35,9 @@ export function buildDemoBooking(bookingId: string): Booking {
     completed_at: null,
     cancelled_at: null,
     cancel_reason: null,
+    cancel_case: null,
+    refund_mad: null,
+    cancelled_by: null,
   };
 }
 

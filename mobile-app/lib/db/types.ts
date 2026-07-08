@@ -11,6 +11,7 @@ export type VerificationStatus = "pending" | "approved" | "rejected";
 export type BookingStatus =
   | "open"
   | "matched"
+  | "en_route" // nurse has left / is "out" (RULE #3 boundary)
   | "in_progress"
   | "completed"
   | "cancelled";
@@ -93,6 +94,9 @@ export interface Booking {
   completed_at: ISODate | null;
   cancelled_at: ISODate | null;
   cancel_reason: string | null;
+  cancel_case: 1 | 2 | 3 | 4 | null; // which cancellation rule applied
+  refund_mad: number | null; // client refund recorded at cancellation
+  cancelled_by: "patient" | "pro" | null;
 }
 
 export interface Bid {

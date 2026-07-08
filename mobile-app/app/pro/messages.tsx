@@ -44,7 +44,7 @@ export default function ProMessagesScreen() {
     if (!user?.id) { setLoading(false); return; }
     try {
       const rows = (await db.bookings.listForPro(user.id)) as Booking[];
-      const chatReady = rows.filter((b) => ["matched", "in_progress", "completed"].includes(b.status));
+      const chatReady = rows.filter((b) => ["matched", "en_route", "in_progress", "completed"].includes(b.status));
       const items = await Promise.all(chatReady.map(async (b): Promise<Convo> => {
         const patient = b.patient_id ? await db.profiles.get(b.patient_id).catch(() => null) : null;
         let lastBody: string | null = null, lastMine = false, lastTime: string | null = null;

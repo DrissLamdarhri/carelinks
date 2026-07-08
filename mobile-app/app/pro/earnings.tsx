@@ -18,7 +18,7 @@ import { db, type Payment, type Payout } from "@/lib/db/dal";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
-const COMMISSION_PCT = 20;
+const COMMISSION_PCT = 15;
 const GREEN = "#16A34A";
 const RED = "#E24B4A";
 
@@ -63,11 +63,19 @@ export default function ProEarningsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // ── Wallet math (real captured money, net of commission, minus withdrawals) ──
+  // ── Wallet math — ONLY captured money counts; escrow holds are NOT withdrawable ──
+  // service + trip_comp credit the nurse (net of commission); penalty debits the balance.
   const netOf = (p: Payment) => Number(p.amount_mad) - Number(p.commission_mad);
   const captured = useMemo(() => payments.filter((p) => p.status === "captured"), [payments]);
-  const earned = captured.reduce((s, p) => s + netOf(p), 0);
-  const pendingNet = payments.filter((p) => p.status === "authorized").reduce((s, p) => s + netOf(p), 0);
+  const paidServices = useMemo(() => captured.filter((p) => p.kind === "service"), [captured]);
+  const earned = captured.reduce(
+    (s, p) => (p.kind === "penalty" ? s - Number(p.amount_mad) : s + netOf(p)),
+    0
+  );
+  // InHold (escrow): authorized service payments — shown but NOT withdrawable until the job is completed.
+  const pendingNet = payments
+    .filter((p) => p.status === "authorized")
+    .reduce((s, p) => s + netOf(p), 0);
   const activePayouts = payouts.filter((p) => p.status !== "rejected");
   const withdrawn = activePayouts.reduce((s, p) => s + Number(p.amount_mad), 0);
   const available = Math.max(0, earned - withdrawn);
@@ -75,6 +83,16 @@ export default function ProEarningsScreen() {
   const movements: Move[] = useMemo(() => {
     const list: Move[] = [];
     for (const p of captured) {
+      if (p.kind === "penalty") {
+        // RULE #4 — cancellation penalty debited from the nurse
+        list.push({ id: `${p.id}-pen`, kind: "payout", label: t("cancellation_penalty"), sub: fmtDate(p.created_at), amount: -Number(p.amount_mad), date: p.created_at });
+        continue;
+      }
+      if (p.kind === "trip_comp") {
+        // RULE #3 — trip compensation credited to the nurse
+        list.push({ id: `${p.id}-tc`, kind: "prestation", label: t("trip_compensation"), sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
+        continue;
+      }
       list.push({ id: `${p.id}-p`, kind: "prestation", label: t("home_service"), sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
       list.push({ id: `${p.id}-c`, kind: "commission", label: `Commission CareLink (${COMMISSION_PCT}%)`, sub: `sur ${p.amount_mad} MAD`, amount: -Number(p.commission_mad), date: p.created_at });
     }
@@ -145,7 +163,7 @@ export default function ProEarningsScreen() {
       <View style={s.statsRow}>
         <View style={s.statCard}>
           <CheckCircle2 size={17} color={NAVY} />
-          <Text style={s.statVal}>{captured.length}</Text>
+          <Text style={s.statVal}>{paidServices.length}</Text>
           <Text style={s.statLbl}>{t("paid_services")}</Text>
         </View>
         <View style={s.statCard}>
