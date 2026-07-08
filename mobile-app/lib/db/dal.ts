@@ -15,6 +15,14 @@ import type {
   UUID,
 } from "./types";
 
+// RFC-4122-ish v4 id for grouping (series). Dependency-free; fine as a group key.
+function uuidv4(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
   if (data === null) throw new Error("Empty result");
@@ -106,6 +114,37 @@ export const bookings = {
 
   async get(id: UUID): Promise<Booking> {
     return unwrap(await supabase.from("bookings").select("*").eq("id", id).single());
+  },
+
+  // Create a recurring plan / subscription pack as N linked sessions sharing a
+  // series_id (each session is a normal booking → its own escrow payment).
+  async createSeries(
+    base: Pick<Booking, "patient_id" | "specialty"> & Partial<Booking>,
+    opts: { count: number; recurrence: Exclude<Booking["recurrence"], null | "none">; firstDateISO: string }
+  ): Promise<Booking[]> {
+    const seriesId = uuidv4();
+    const stepDays = opts.recurrence === "weekly" ? 7 : opts.recurrence === "biweekly" ? 14 : 0;
+    const rows = Array.from({ length: opts.count }, (_, i) => {
+      const d = new Date(opts.firstDateISO);
+      if (opts.recurrence === "monthly") d.setMonth(d.getMonth() + i);
+      else d.setDate(d.getDate() + stepDays * i);
+      return {
+        status: "matched",
+        urgency: "normal",
+        ...base,
+        scheduled_at: d.toISOString(),
+        series_id: seriesId,
+        session_index: i + 1,
+        session_total: opts.count,
+      };
+    });
+    return unwrap(await supabase.from("bookings").insert(rows).select("*"));
+  },
+
+  async getSeries(seriesId: UUID): Promise<Booking[]> {
+    return unwrap(
+      await supabase.from("bookings").select("*").eq("series_id", seriesId).order("session_index", { ascending: true })
+    );
   },
 
   async listForPatient(patientId: UUID): Promise<Booking[]> {

@@ -17,6 +17,10 @@ export type BookingStatus =
   | "cancelled";
 export type BidStatus = "pending" | "accepted" | "rejected" | "withdrawn";
 export type UrgencyLevel = "normal" | "urgent" | "emergency";
+// Psychologist appointments (0024)
+export type SessionMode = "in_person" | "remote";
+export type PlanType = "single" | "recurring" | "subscription";
+export type Recurrence = "none" | "weekly" | "biweekly" | "monthly";
 
 export interface Profile {
   id: UUID;
@@ -62,6 +66,8 @@ export interface Professional {
   total_bookings: number;
   is_available: boolean;
   service_radius_km: number;
+  meet_link: string | null; // psychologist's remote-session Google Meet link
+  zoom_link: string | null; // psychologist's remote-session Zoom link
   created_at: ISODate;
   updated_at: ISODate;
 }
@@ -97,6 +103,15 @@ export interface Booking {
   cancel_case: 1 | 2 | 3 | 4 | null; // which cancellation rule applied
   refund_mad: number | null; // client refund recorded at cancellation
   cancelled_by: "patient" | "pro" | null;
+  // Psychologist appointments (0024)
+  session_mode: SessionMode | null; // 'in_person' | 'remote'
+  plan_type: PlanType | null; // 'single' | 'recurring' | 'subscription'
+  recurrence: Recurrence | null; // 'none' | 'weekly' | 'biweekly' | 'monthly'
+  series_id: UUID | null;
+  session_index: number | null;
+  session_total: number | null;
+  meet_link: string | null;
+  zoom_link: string | null;
 }
 
 export interface Bid {

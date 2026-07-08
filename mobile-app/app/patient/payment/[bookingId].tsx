@@ -279,13 +279,18 @@ export default function PaymentScreen() {
                 <TouchableOpacity
                   style={s.cta}
                   activeOpacity={0.9}
-                  onPress={() =>
+                  onPress={() => {
+                    if (!bookingId) return router.replace("/patient/bookings");
+                    // Psychologist → appointment confirmation (Meet/Zoom links / directions);
+                    // other services → live tracking.
                     router.replace(
-                      bookingId ? `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}` : "/patient/bookings"
-                    )
-                  }
+                      specialty === "psychologist"
+                        ? `/patient/appointment/${encodeURIComponent(bookingId)}`
+                        : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`
+                    );
+                  }}
                 >
-                  <Text style={s.ctaTxt}>{t("see_my_bookings")}</Text>
+                  <Text style={s.ctaTxt}>{specialty === "psychologist" ? t("view_appointment") : t("see_my_bookings")}</Text>
                 </TouchableOpacity>
               </>
             )}

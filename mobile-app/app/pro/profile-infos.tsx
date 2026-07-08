@@ -44,6 +44,8 @@ export default function ProProfileInfosScreen() {
   const [specialty, setSpecialty] = useState<ProSpecialty>("nurse");
   const [bio, setBio] = useState("");
   const [experience, setExperience] = useState("0");
+  const [meetLink, setMeetLink] = useState("");
+  const [zoomLink, setZoomLink] = useState("");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const handlePickImage = useCallback(async () => {
@@ -101,6 +103,8 @@ export default function ProProfileInfosScreen() {
         if (pro?.specialty) setSpecialty(pro.specialty);
         setBio(pro?.bio ?? "");
         setExperience(String(pro?.years_experience ?? 0));
+        setMeetLink(pro?.meet_link ?? "");
+        setZoomLink(pro?.zoom_link ?? "");
       } catch (error) {
         if (!active) return;
         setErrorMessage(error instanceof Error ? error.message : t("profile_unavailable"));
@@ -141,6 +145,9 @@ export default function ProProfileInfosScreen() {
         specialty,
         bio: bio.trim() || null,
         years_experience: experienceValue,
+        // Psychologist remote-session links (used on the appointment confirmation).
+        meet_link: specialty === "psychologist" ? meetLink.trim() || null : null,
+        zoom_link: specialty === "psychologist" ? zoomLink.trim() || null : null,
       });
       await refreshProfile();
       showToast(t("pro_profile_updated"));
@@ -276,6 +283,32 @@ export default function ProProfileInfosScreen() {
             style={styles.textArea}
             multiline
           />
+
+          {specialty === "psychologist" ? (
+            <>
+              <Text style={styles.label}>{t("meet_link_label")}</Text>
+              <TextInput
+                value={meetLink}
+                onChangeText={setMeetLink}
+                placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                placeholderTextColor={Colors.textSubtle}
+                autoCapitalize="none"
+                keyboardType="url"
+                style={styles.linkInput}
+              />
+              <Text style={styles.label}>{t("zoom_link_label")}</Text>
+              <TextInput
+                value={zoomLink}
+                onChangeText={setZoomLink}
+                placeholder="https://zoom.us/j/xxxxxxxxxx"
+                placeholderTextColor={Colors.textSubtle}
+                autoCapitalize="none"
+                keyboardType="url"
+                style={styles.linkInput}
+              />
+              <Text style={styles.hintText}>{t("remote_links_hint")}</Text>
+            </>
+          ) : null}
         </View>
         </>
       ) : null}
@@ -384,6 +417,16 @@ const styles = StyleSheet.create({
     minHeight: 90,
     textAlignVertical: "top",
   },
+  linkInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 46,
+    color: Colors.textPrimary,
+    fontSize: 13.5,
+  },
+  hintText: { color: Colors.textMuted, fontSize: 12, marginTop: 6, lineHeight: 16 },
   chipsRow: { flexDirection: "row", gap: 8, marginTop: 4, flexWrap: "wrap" },
   chip: {
     paddingHorizontal: 12,
