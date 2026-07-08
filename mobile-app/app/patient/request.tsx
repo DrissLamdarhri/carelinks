@@ -39,8 +39,7 @@ import { db } from "@/lib/db/dal";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { geo } from "@/lib/db/geo";
-import { toDbSpecialty, type UrgencyLevel } from "@/lib/db/types";
-import { UrgencySelector } from "@/components/UrgencySelector";
+import { toDbSpecialty } from "@/lib/db/types";
 import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
@@ -161,7 +160,6 @@ export default function PatientRequestScreen() {
   const [price, setPrice] = useState(isKine ? 120 : 80);
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [urgency, setUrgency] = useState<UrgencyLevel>("normal");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [mapPros, setMapPros] = useState<ProPinData[]>([]);
   const [selectedProId, setSelectedProId] = useState<string | null>(null);
@@ -320,7 +318,6 @@ export default function PatientRequestScreen() {
       const booking = await db.bookings.create({
         patient_id: user.id,
         specialty: toDbSpecialty(serviceKey),
-        urgency,
         notes: notes.trim() || null,
         address: address.trim(),
         budget_min_mad: Math.max(50, price - 20),
@@ -506,11 +503,6 @@ export default function PatientRequestScreen() {
             <Text style={styles.kinePillSub}>{t("home_rehab")}</Text>
           </View>
         )}
-
-        {/* ── Urgency (color-coded; makes the danger level visible) ── */}
-        <View style={{ marginBottom: 16 }}>
-          <UrgencySelector value={urgency} onChange={setUrgency} />
-        </View>
 
         {/* ── Type de soin ── */}
         <Text style={styles.label}>{t("care_type")}</Text>
