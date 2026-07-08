@@ -12,6 +12,7 @@ import {
 import { ArrowLeft, MapPin, Trash2, Pencil, Home } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Address } from "@/lib/db/types";
@@ -39,6 +40,7 @@ const emptyForm: AddressForm = {
 };
 
 export default function PatientAddressesScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -63,7 +65,7 @@ export default function PatientAddressesScreen() {
         const rows = await db.addresses.listForUser(user.id);
         if (active) setAddresses(rows);
       } catch (error) {
-        if (active) setErrorMessage(error instanceof Error ? error.message : "Adresses indisponibles.");
+        if (active) setErrorMessage(error instanceof Error ? error.message : t("addresses_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -108,7 +110,7 @@ export default function PatientAddressesScreen() {
           await db.addresses.setDefault(user.id, updated.id);
         }
         setAddresses((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-        showToast("Adresse mise à jour.");
+        showToast(t("address_updated"));
       } else {
         const created = await db.addresses.create({
           user_id: user.id,
@@ -124,18 +126,18 @@ export default function PatientAddressesScreen() {
           await db.addresses.setDefault(user.id, created.id);
         }
         setAddresses((prev) => [created, ...prev]);
-        showToast("Adresse ajoutée.");
+        showToast(t("address_added"));
       }
       resetForm();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Impossible d'enregistrer l'adresse.");
+      setErrorMessage(error instanceof Error ? error.message : t("address_save_failed"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = (addressId: string) => {
-    Alert.alert("Supprimer", "Voulez-vous supprimer cette adresse ?", [
+    Alert.alert("Supprimer", t("confirm_delete_address"), [
       { text: "Annuler", style: "cancel" },
       {
         text: "Supprimer",
@@ -144,10 +146,10 @@ export default function PatientAddressesScreen() {
           try {
             await db.addresses.remove(addressId);
             setAddresses((prev) => prev.filter((row) => row.id !== addressId));
-            showToast("Adresse supprimée.");
+            showToast(t("address_deleted"));
             if (form.id === addressId) resetForm();
           } catch (error) {
-            setErrorMessage(error instanceof Error ? error.message : "Suppression impossible.");
+            setErrorMessage(error instanceof Error ? error.message : t("delete_failed"));
           }
         },
       },
@@ -161,9 +163,9 @@ export default function PatientAddressesScreen() {
       setAddresses((prev) =>
         prev.map((row) => ({ ...row, is_default: row.id === addressId }))
       );
-      showToast("Adresse par défaut mise à jour.");
+      showToast(t("default_address_updated"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     }
   };
 

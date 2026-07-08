@@ -13,6 +13,7 @@ import { ArrowLeft, Calendar, MapPin, Phone, User, Edit3 } from "lucide-react-na
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { storage } from "@/lib/db/storage";
@@ -27,6 +28,7 @@ const genderOptions = [
 ];
 
 export default function PatientProfileInfosScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -64,15 +66,15 @@ export default function PatientProfileInfosScreen() {
           // Small delay to ensure database consistency
           await new Promise(resolve => setTimeout(resolve, 500));
           await refreshProfile();
-          showToast("Avatar mis à jour.");
+          showToast(t("avatar_updated"));
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : "Erreur lors du chargement de l'avatar.");
+          setErrorMessage(error instanceof Error ? error.message : t("avatar_upload_error"));
         } finally {
           setUploadingAvatar(false);
         }
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sélection de l'image.");
+      setErrorMessage(error instanceof Error ? error.message : t("image_pick_error"));
     }
   }, [user?.id, refreshProfile]);
 
@@ -99,7 +101,7 @@ export default function PatientProfileInfosScreen() {
         setAvatarUri(profileData.avatar_url ?? null);
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Profil indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("profile_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -142,11 +144,11 @@ export default function PatientProfileInfosScreen() {
   const handleSave = async () => {
     if (!user?.id || saving) return;
     if (!fullName) {
-      setErrorMessage("Veuillez renseigner votre nom complet.");
+      setErrorMessage(t("enter_full_name"));
       return;
     }
     if (!validDob) {
-      setErrorMessage("Date de naissance invalide (YYYY-MM-DD).");
+      setErrorMessage(t("invalid_birthdate"));
       return;
     }
     setSaving(true);
@@ -163,9 +165,9 @@ export default function PatientProfileInfosScreen() {
         gender: gender || null,
       });
       await refreshProfile();
-      showToast("Profil mis à jour.");
+      showToast(t("profile_updated"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     } finally {
       setSaving(false);
     }
@@ -177,7 +179,7 @@ export default function PatientProfileInfosScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Informations personnelles</Text>
+        <Text style={styles.title}>{t("personal_info")}</Text>
       </View>
 
       {loading ? (
@@ -209,9 +211,9 @@ export default function PatientProfileInfosScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarLabel}>Cliquez pour changer votre photo</Text>
+            <Text style={styles.avatarLabel}>{t("tap_change_photo")}</Text>
           </View>
-          <Text style={styles.label}>Prénom</Text>
+          <Text style={styles.label}>{t("first_name")}</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
             <TextInput

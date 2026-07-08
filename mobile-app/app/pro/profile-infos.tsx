@@ -13,6 +13,7 @@ import * as ImagePicker from "expo-image-picker";
 import { ArrowLeft, MapPin, Phone, User, Camera } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { storage } from "@/lib/db/storage";
@@ -27,6 +28,7 @@ const specialtyOptions: Array<{ label: string; value: ProSpecialty }> = [
 ];
 
 export default function ProProfileInfosScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -65,15 +67,15 @@ export default function ProProfileInfosScreen() {
           // Small delay to ensure database consistency
           await new Promise(resolve => setTimeout(resolve, 500));
           await refreshProfile();
-          showToast("Avatar mis à jour.");
+          showToast(t("avatar_updated"));
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : "Erreur lors du chargement de l'avatar.");
+          setErrorMessage(error instanceof Error ? error.message : t("avatar_upload_error"));
         } finally {
           setUploadingAvatar(false);
         }
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sélection de l'image.");
+      setErrorMessage(error instanceof Error ? error.message : t("image_pick_error"));
     }
   }, [user?.id, refreshProfile]);
 
@@ -101,7 +103,7 @@ export default function ProProfileInfosScreen() {
         setExperience(String(pro?.years_experience ?? 0));
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Profil indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("profile_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -119,11 +121,11 @@ export default function ProProfileInfosScreen() {
   const handleSave = async () => {
     if (!user?.id || saving) return;
     if (!fullName) {
-      setErrorMessage("Veuillez renseigner votre nom complet.");
+      setErrorMessage(t("enter_full_name"));
       return;
     }
     if (!isExperienceValid) {
-      setErrorMessage("Années d'expérience invalides.");
+      setErrorMessage(t("invalid_experience"));
       return;
     }
     setSaving(true);
@@ -141,9 +143,9 @@ export default function ProProfileInfosScreen() {
         years_experience: experienceValue,
       });
       await refreshProfile();
-      showToast("Profil pro mis à jour.");
+      showToast(t("pro_profile_updated"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     } finally {
       setSaving(false);
     }

@@ -31,6 +31,7 @@
 // import { MessageCircle, Phone, X } from "lucide-react-native";
 // import Svg, { Line as SvgLine, Path as SvgPath } from "react-native-svg";
 // import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 // import { db } from "@/lib/db/dal";
 // import type { Booking, Profile } from "@/lib/db/types";
 // import {
@@ -85,6 +86,7 @@
 // type TrackPosition = { lat: number; lng: number; at: string };
 
 // export default function LiveTrackingScreen() {
+  const { t } = useI18n();
 //   const router   = useRouter();
 //   const params   = useLocalSearchParams<{ bookingId?: string | string[] }>();
 //   const bookingId    = normalizeRouteParam(params.bookingId);
@@ -118,7 +120,7 @@
 //   useEffect(() => {
 //     let cancelled = false;
 //     const load = async () => {
-//       if (!bookingId) { setLoading(false); setErrorMsg("Réservation introuvable."); return; }
+//       if (!bookingId) { setLoading(false); setErrorMsg(t("reservation_not_found")); return; }
 //       setErrorMsg(null);
 //       setLoading(true);
 //       try {
@@ -136,7 +138,7 @@
 //         if (b.professional_id) prof = await db.profiles.get(b.professional_id).catch(() => null);
 //         if (!cancelled) { setBooking(b); setProProfile(prof); }
 //       } catch (e) {
-//         if (!cancelled) setErrorMsg(e instanceof Error ? e.message : "Suivi indisponible.");
+//         if (!cancelled) setErrorMsg(e instanceof Error ? e.message : t("tracking_unavailable"));
 //       } finally {
 //         if (!cancelled) setLoading(false);
 //       }
@@ -316,7 +318,7 @@
 //         {/* Progress */}
 //         <View style={styles.progressHead}>
 //           <Text style={styles.progressLabel}>
-//             {arrived ? "Le professionnel est arrivé" : "En route vers vous"}
+//             {arrived ? t("pro_arrived") : t("en_route_to_you")}
 //           </Text>
 //           <Text style={styles.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
 //         </View>
@@ -705,7 +707,7 @@ export default function LiveTrackingScreen() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (!bookingId) { setLoading(false); setErrorMsg("Réservation introuvable."); return; }
+      if (!bookingId) { setLoading(false); setErrorMsg(t("reservation_not_found")); return; }
       setLoading(true);
       try {
         if (isDemoBooking) {
@@ -742,7 +744,7 @@ export default function LiveTrackingScreen() {
           }
         }
       } catch (e) {
-        if (!cancelled) setErrorMsg(e instanceof Error ? e.message : "Suivi indisponible.");
+        if (!cancelled) setErrorMsg(e instanceof Error ? e.message : t("tracking_unavailable"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1061,7 +1063,7 @@ export default function LiveTrackingScreen() {
           {/* Progress label + value */}
           <View style={s.progressRow}>
             <Text style={s.progressLabel}>
-              {arrived ? "Le professionnel est arrivé" : "En route vers vous"}
+              {arrived ? t("pro_arrived") : t("en_route_to_you")}
             </Text>
             <Text style={s.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
           </View>
