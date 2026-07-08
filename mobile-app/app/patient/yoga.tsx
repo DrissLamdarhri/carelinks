@@ -20,8 +20,6 @@ import { useYogaSessions, useSessionEnrollments } from "@/lib/yoga-realtime";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
-<<<<<<< HEAD
-=======
 // Fallback sessions for when database is unavailable
 const fallbackSessions = [
   {
@@ -68,7 +66,6 @@ const fallbackSessions = [
   },
 ];
 
->>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
 export default function YogaCatalogScreen() {
   const { t } = useI18n();
   const router = useRouter();
@@ -78,6 +75,16 @@ export default function YogaCatalogScreen() {
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
+
+  // Log yoga sessions state
+  useEffect(() => {
+    if (error) {
+      console.error("[YogaCatalogScreen] Error loading sessions:", error);
+    }
+    if (yogaSessions && yogaSessions.length > 0) {
+      console.log("[YogaCatalogScreen] Sessions loaded:", yogaSessions.length);
+    }
+  }, [yogaSessions, error, loading]);
 
   // Load enrollment counts for all sessions
   useEffect(() => {
@@ -180,7 +187,6 @@ export default function YogaCatalogScreen() {
         .eq("patient_id", user.id)
         .limit(1);
 
-<<<<<<< HEAD
       if (existingErr) {
         console.warn("Warning checking existing enrollment:", existingErr);
       }
@@ -195,12 +201,7 @@ export default function YogaCatalogScreen() {
           setEnrollmentCounts((prev) => ({ ...prev, [session.id]: count ?? 0 }));
         } catch (e) {
           console.warn("Could not refresh enrollment count", e);
-        }
-=======
-      if (existing) {
-        Alert.alert(t("already_enrolled"), t("already_enrolled_msg"));
->>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
-        setLoadingSessionId(null);
+        }        setLoadingSessionId(null);
         return;
       }
 
@@ -274,26 +275,7 @@ export default function YogaCatalogScreen() {
 
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
-<<<<<<< HEAD
-        .insert([bookingData])
-=======
-        .insert([
-          {
-            patient_id: user.id,
-            professional_id: null, // No professional for yoga
-            specialty: "yoga_instructor",
-            status: "matched",
-            urgency: "normal",
-            scheduled_at: session.date || new Date().toISOString(),
-            address: t("yoga_class"),
-            notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
-            budget_min_mad: session.price,
-            budget_max_mad: session.price,
-            final_price_mad: session.price,
-          },
-        ])
->>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
-        .select()
+        .insert([bookingData])        .select()
         .single();
 
       if (bookingError) {
@@ -310,17 +292,11 @@ export default function YogaCatalogScreen() {
         `Vous êtes inscrit à "${session.name}".\n\nVous pouvez voir cette séance dans vos réservations.`,
         [
           {
-<<<<<<< HEAD
             text: "Voir mes réservations",
             onPress: () => {
               setLoadingSessionId(null);
               router.push("/patient/bookings");
-            },
-=======
-            text: t("see_my_bookings"),
-            onPress: () => router.push("/patient/bookings"),
->>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
-          },
+            },          },
           {
             text: "Fermer",
             onPress: () => setLoadingSessionId(null),

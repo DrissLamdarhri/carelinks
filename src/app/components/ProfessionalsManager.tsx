@@ -30,6 +30,8 @@ type Professional = {
   avatar_url: string | null;
 };
 
+const ITEMS_PER_PAGE = 50;
+
 export function ProfessionalsManager() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,7 @@ export function ProfessionalsManager() {
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     loadProfessionals();
@@ -117,6 +120,11 @@ export function ProfessionalsManager() {
       window.removeEventListener('pro-status-changed', handleProStatusChanged);
     };
   }, [filter, specialtyFilter, experienceFilter, selectedCities]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, specialtyFilter, experienceFilter, selectedCities, searchQ]);
 
   const loadProfessionals = async () => {
     try {
@@ -539,6 +547,13 @@ export function ProfessionalsManager() {
     new Set(professionals.map((p) => p.city).filter(Boolean))
   ).sort();
 
+  // Pagination logic
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedItems = filtered.slice(startIndex, endIndex);
+
 
   return (
     <div>
@@ -733,7 +748,7 @@ export function ProfessionalsManager() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((pro) => (
+                {paginatedItems.map((pro) => (
                   <tr key={pro.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
@@ -827,6 +842,36 @@ export function ProfessionalsManager() {
             </table>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {!loading && filtered.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-[#F0F0F0]">
+            <p className="text-sm text-[#888780]">
+              {totalItems === 0 ? "0" : startIndex + 1}–{Math.min(endIndex, totalItems)} sur {totalItems}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E0E0E0] text-[#888780] hover:bg-[#F3F3F5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Page précédente"
+              >
+                ‹
+              </button>
+              <div className="text-xs text-[#888780]">
+                Page {currentPage} / {totalPages || 1}
+              </div>
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E0E0E0] text-[#888780] hover:bg-[#F3F3F5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Page suivante"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>

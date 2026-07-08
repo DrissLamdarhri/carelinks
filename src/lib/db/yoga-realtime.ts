@@ -10,8 +10,7 @@ export type YogaSession = {
   id: UUID;
   title: string;
   description?: string;
-  instructor_id: UUID;
-  instructor_name?: string;
+  instructor_name: string;
   level?: string;
   capacity: number;
   price_mad: number;
@@ -87,7 +86,7 @@ export function useAllYogaSessions() {
             id,
             title,
             description,
-            instructor_id,
+            instructor_name,
             level,
             capacity,
             price_mad,
@@ -184,7 +183,11 @@ export function useSessionEnrollmentsWithCount(sessionId: UUID | null) {
           void refresh();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("Channel error for yoga_enrollments:", sessionId);
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);
@@ -215,7 +218,7 @@ export function useYogaSessions() {
             id,
             title,
             description,
-            instructor_id,
+            instructor_name,
             level,
             capacity,
             price_mad,

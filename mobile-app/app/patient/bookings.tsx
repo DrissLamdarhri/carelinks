@@ -112,6 +112,47 @@ const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string 
   danger: { color: Colors.danger, bg: "#FDE8E8" },
 };
 
+// Helper to generate booking service name and subtitle
+function getBookingServiceLabel(booking: Booking): { name: string; subtitle: string } {
+  const specialtyLabels: Record<string, string> = {
+    nurse: "Soin infirmier",
+    psychologist: "Consultation psychologique",
+    physiotherapist: "Séance de kinésithérapie",
+    yoga_instructor: "Séance de yoga",
+  };
+
+  // Priority 1: Check if notes contains descriptive info
+  if (booking.notes && booking.notes.trim()) {
+    return {
+      name: booking.notes,
+      subtitle: booking.scheduled_at
+        ? new Date(booking.scheduled_at).toLocaleString("fr-MA", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Service à venir",
+    };
+  }
+
+  // Priority 2: Build label from specialty
+  const specialtyLabel = specialtyLabels[booking.specialty] || `Soin - ${booking.specialty}`;
+  
+  // Priority 3: Add location or time for differentiation
+  let subtitle = "Service à venir";
+  if (["completed", "cancelled"].includes(booking.status)) {
+    subtitle = "Soin terminé";
+  } else if (booking.address) {
+    subtitle = booking.address;
+  }
+
+  return {
+    name: specialtyLabel,
+    subtitle,
+  };
+}
+
 export default function PatientBookingsScreen() {
   const router = useRouter();
   const { t } = useI18n();
@@ -147,6 +188,8 @@ export default function PatientBookingsScreen() {
               ? "primary"
               : "neutral";
 
+      const { name, subtitle } = getBookingServiceLabel(booking);
+
       return {
         id: booking.id,
         bookingId: booking.id,
@@ -154,8 +197,8 @@ export default function PatientBookingsScreen() {
         specialtyLabel: booking.specialty.replaceAll("_", " "),
         statusLabel,
         statusTone: tone,
-        name: booking.professional_id ? `Professionnel ${booking.professional_id.slice(0, 4)}` : `Réservation ${index + 1}`,
-        subtitle: isPast ? "Soin terminé" : "Service à venir",
+        name,
+        subtitle,
         avatar: null,
         price: booking.final_price_mad ?? booking.budget_max_mad ?? booking.budget_min_mad ?? 0,
         dateLabel: booking.scheduled_at

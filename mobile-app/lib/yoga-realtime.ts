@@ -5,13 +5,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import type { UUID } from "./types";
+
+type UUID = string;
 
 export type YogaSession = {
   id: UUID;
   title: string;
   description?: string;
-  instructor_id: UUID;
   instructor_name?: string;
   level?: string;
   capacity: number;
@@ -90,7 +90,7 @@ export function useYogaSessions() {
             id,
             title,
             description,
-            instructor_id,
+            instructor_name,
             level,
             capacity,
             price_mad,
@@ -106,7 +106,11 @@ export function useYogaSessions() {
           .gte("starts_at", now)
           .order("starts_at", { ascending: true });
 
-        if (error) throw error;
+        if (error) {
+          console.error("[useYogaSessions] Supabase error:", error);
+          throw error;
+        }
+        console.log("[useYogaSessions] Loaded sessions:", data?.length ?? 0);
         return (data ?? []) as YogaSession[];
       },
       []
@@ -149,14 +153,16 @@ export function useSessionEnrollments(sessionId: UUID | null) {
     useAsyncList<YogaEnrollment>(
       () =>
         sessionId
-          ? supabase
-              .from("yoga_enrollments")
-              .select("session_id, patient_id, enrolled_at")
-              .eq("session_id", sessionId)
-              .then((r) => {
-                if (r.error) throw r.error;
-                return (r.data ?? []) as YogaEnrollment[];
-              })
+          ? Promise.resolve(
+              supabase
+                .from("yoga_enrollments")
+                .select("session_id, patient_id, enrolled_at")
+                .eq("session_id", sessionId)
+                .then((r) => {
+                  if (r.error) throw r.error;
+                  return (r.data ?? []) as YogaEnrollment[];
+                })
+            )
           : Promise.resolve([]),
       [sessionId]
     );
@@ -206,7 +212,7 @@ export function useAllYogaSessions() {
             id,
             title,
             description,
-            instructor_id,
+            instructor_name,
             level,
             capacity,
             price_mad,

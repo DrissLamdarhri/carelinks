@@ -13,7 +13,7 @@ export function YogaSessionsManager() {
     title: "",
     description: "",
     level: "Tous niveaux",
-    instructor_id: "",
+    instructor_name: "",
     capacity: 10,
     price_mad: 120,
     starts_at: "",
@@ -25,31 +25,6 @@ export function YogaSessionsManager() {
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [professionals, setProfessionals] = useState<any[]>([]);
-  const [loadingPros, setLoadingPros] = useState(false);
-
-  // Load professionals on mount
-  React.useEffect(() => {
-    loadProfessionals();
-  }, []);
-
-  const loadProfessionals = async () => {
-    setLoadingPros(true);
-    try {
-      const { data, error } = await supabase
-        .from("professionals")
-        .select("id, user_id, specialty, profiles!fk_user_id(full_name)")
-        .eq("specialty", "yoga_instructor");
-      
-      if (error) throw error;
-      setProfessionals((data ?? []) as any[]);
-    } catch (err: any) {
-      toast.error("Erreur lors du chargement des instructeurs");
-      console.error(err);
-    } finally {
-      setLoadingPros(false);
-    }
-  };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,7 +66,7 @@ export function YogaSessionsManager() {
         title: formData.title,
         description: formData.description,
         level: formData.level,
-        instructor_id: formData.instructor_id || null,
+        instructor_name: formData.instructor_name || null,
         capacity: formData.capacity,
         price_mad: formData.price_mad,
         starts_at: new Date(formData.starts_at).toISOString(),
@@ -136,7 +111,7 @@ export function YogaSessionsManager() {
       title: "",
       description: "",
       level: "Tous niveaux",
-      instructor_id: "",
+      instructor_name: "",
       capacity: 10,
       price_mad: 120,
       starts_at: "",
@@ -156,7 +131,7 @@ export function YogaSessionsManager() {
       title: session.title,
       description: session.description || "",
       level: session.level || "Tous niveaux",
-      instructor_id: session.instructor_id || "",
+      instructor_name: session.instructor_name || "",
       capacity: session.capacity,
       price_mad: session.price_mad,
       starts_at: session.starts_at.slice(0, 16), // Format for datetime-local
@@ -350,21 +325,15 @@ export function YogaSessionsManager() {
                   <label className="text-sm font-medium text-[#1A1A1A] block mb-2">
                     Instructeur yoga
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={formData.instructor_id}
                     onChange={(e) =>
-                      setFormData({ ...formData, instructor_id: e.target.value })
+                      setFormData({ ...formData, instructor_name: e.target.value })
                     }
+                    placeholder="Ex: Hatha Flow Matinal"
                     className="w-full px-4 py-2.5 rounded-lg border border-[#E0E0E0] focus:outline-none focus:border-[#0D0870]"
-                    disabled={loadingPros}
-                  >
-                    <option value="">-- Sélectionner un instructeur --</option>
-                    {professionals.map((pro: any) => (
-                      <option key={pro.id} value={pro.id}>
-                        {pro.profiles?.full_name || "Instructeur"}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 {/* Start Date & Time */}

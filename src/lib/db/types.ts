@@ -155,7 +155,7 @@ export interface Rating {
 // ── Table 10 : yoga_sessions ──────────────────────────────────────────────────
 export interface YogaSession {
   id: UUID;
-  instructor_id: UUID;
+  instructor_name: string;
   title: string;
   description: string | null;
   starts_at: ISODate;

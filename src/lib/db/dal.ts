@@ -377,16 +377,6 @@ export const yoga = {
     );
   },
 
-  async listForInstructor(proId: UUID): Promise<YogaSession[]> {
-    return unwrap(
-      await supabase
-        .from("yoga_sessions")
-        .select("*")
-        .eq("instructor_id", proId)
-        .order("starts_at", { ascending: false })
-    );
-  },
-
   async createSession(
     input: Omit<YogaSession, "id" | "created_at">
   ): Promise<YogaSession> {
