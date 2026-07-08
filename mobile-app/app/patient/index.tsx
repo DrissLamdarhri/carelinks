@@ -137,6 +137,8 @@ export default function PatientHomeScreen() {
                       ? "/patient/psychologists"
                       : s.key === "yoga"
                       ? "/patient/yoga"
+                      : s.key === "kine"
+                      ? "/patient/kine"
                       : `/patient/request?service=${s.key}`
                   )
                 }

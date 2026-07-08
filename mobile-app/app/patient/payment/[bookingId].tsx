@@ -57,6 +57,7 @@ export default function PaymentScreen() {
 
   const [prestation, setPrestation] = useState(0);
   const [proId, setProId] = useState<string | null>(null);
+  const [isProgram, setIsProgram] = useState(false); // scheduled series/subscription → confirmation, not tracking
   const [proName, setProName] = useState("Professionnel");
   const [specialty, setSpecialty] = useState("nurse");
   const [city, setCity] = useState("");
@@ -85,6 +86,7 @@ export default function PaymentScreen() {
         setPrestation(Math.round(Number(b.final_price_mad ?? b.budget_max_mad ?? b.budget_min_mad ?? 0)));
         setProId(b.professional_id);
         setSpecialty(b.specialty);
+        setIsProgram(!!b.series_id || b.plan_type === "subscription" || b.plan_type === "recurring");
         setCity((b.address ?? "").split(",").pop()?.trim() || (b.address ?? ""));
         if (b.professional_id) {
           try {
@@ -284,13 +286,13 @@ export default function PaymentScreen() {
                     // Psychologist → appointment confirmation (Meet/Zoom links / directions);
                     // other services → live tracking.
                     router.replace(
-                      specialty === "psychologist"
+                      specialty === "psychologist" || isProgram
                         ? `/patient/appointment/${encodeURIComponent(bookingId)}`
                         : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`
                     );
                   }}
                 >
-                  <Text style={s.ctaTxt}>{specialty === "psychologist" ? t("view_appointment") : t("see_my_bookings")}</Text>
+                  <Text style={s.ctaTxt}>{specialty === "psychologist" || isProgram ? t("view_appointment") : t("see_my_bookings")}</Text>
                 </TouchableOpacity>
               </>
             )}

@@ -123,7 +123,7 @@ export const bookings = {
     opts: { count: number; recurrence: Exclude<Booking["recurrence"], null | "none">; firstDateISO: string }
   ): Promise<Booking[]> {
     const seriesId = uuidv4();
-    const stepDays = opts.recurrence === "weekly" ? 7 : opts.recurrence === "biweekly" ? 14 : 0;
+    const stepDays = opts.recurrence === "daily" ? 1 : opts.recurrence === "weekly" ? 7 : opts.recurrence === "biweekly" ? 14 : 0;
     const rows = Array.from({ length: opts.count }, (_, i) => {
       const d = new Date(opts.firstDateISO);
       if (opts.recurrence === "monthly") d.setMonth(d.getMonth() + i);
