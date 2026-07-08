@@ -5,7 +5,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import { getUser } from "./api";
 
 export type UserRole = "patient" | "pro" | "admin" | null;
 
@@ -58,8 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const data = await getUser(userId);
-      if (data?.user) setProfile(data.user);
+      const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      if (data) {
+        const p = data as any;
+        const full = (p.full_name ?? "").trim();
+        setProfile({
+          ...p,
+          role: p.role,
+          firstName: p.firstName ?? full.split(" ")[0] ?? "",
+          lastName: p.lastName ?? full.split(" ").slice(1).join(" ") ?? "",
+          avatar: p.avatar ?? p.avatar_url ?? "",
+        } as UserProfile);
+      }
     } catch (err) {
       console.log("fetchProfile error:", err);
     }
