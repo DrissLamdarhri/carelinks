@@ -79,6 +79,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     reset_sent: "تم إرسال بريد إعادة التعيين ✓", enter_email_first: "أدخل بريدك الإلكتروني أولاً",
     pro_not_found: "لم يتم العثور على حساب مهني. يرجى التسجيل أولاً.",
     pro_not_verified: "لم يتم التحقق من حسابك بعد. أكمل التسجيل.",
+    first_name: "الاسم الشخصي", last_name: "الاسم العائلي", confirm_password: "تأكيد كلمة المرور", create_my_account: "إنشاء حسابي",
   },
   fr: {
     welcome: "Bienvenue", booking: "Réservation", bookings_mine: "Mes réservations", new_request: "Nouvelle demande",
@@ -113,6 +114,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     reset_sent: "Email de réinitialisation envoyé ✓", enter_email_first: "Entrez votre email d'abord",
     pro_not_found: "Compte professionnel non trouvé. Veuillez d'abord vous inscrire.",
     pro_not_verified: "Votre compte n'est pas encore vérifié. Complétez l'inscription.",
+    first_name: "Prénom", last_name: "Nom", confirm_password: "Confirmer mot de passe", create_my_account: "Créer mon compte",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",
