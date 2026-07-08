@@ -118,6 +118,7 @@ function PatientTabs() {
 
 
       <Tabs.Screen name="request" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="urgent" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="waiting/[bookingId]" options={hiddenFullScreenOptions} />
