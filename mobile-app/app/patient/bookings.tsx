@@ -9,13 +9,31 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Calendar, CalendarClock, ChevronRight, MapPin, Star } from "lucide-react-native";
-import { Colors } from "@/lib/colors";
+import { LinearGradient } from "expo-linear-gradient";
+import { Activity, Brain, Calendar, CalendarClock, ChevronRight, Flower2, MapPin, Star, Syringe, X } from "lucide-react-native";
+import { Colors, Gradients, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import type { Booking } from "@/lib/db/types";
 import { CancellationDialog } from "@/components/CancellationDialog";
+
+// Colored status pills (key → i18n key handled elsewhere; here just the colors).
+const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
+  open: { color: "#B45309", bg: "#FFF7E6" },
+  matched: { color: "#2563EB", bg: "#DBEAFE" },
+  en_route: { color: "#7C3AED", bg: "#F3EEFE" },
+  in_progress: { color: "#0891B2", bg: "#CFFAFE" },
+  completed: { color: "#16A34A", bg: "#DCFCE7" },
+  cancelled: { color: "#E24B4A", bg: "#FDE8E8" },
+};
+const SPECIALTY_META: Record<string, { grad: readonly [string, string]; icon: typeof Syringe }> = {
+  nurse: { grad: Gradients.nurse, icon: Syringe },
+  psychologist: { grad: Gradients.psy, icon: Brain },
+  yoga_instructor: { grad: Gradients.yoga, icon: Flower2 },
+  physiotherapist: { grad: Gradients.kine, icon: Activity },
+};
+const metaFor = (sp: string) => SPECIALTY_META[sp] ?? SPECIALTY_META.nurse;
 
 type CardItem = {
   id: string;
@@ -191,7 +209,10 @@ export default function PatientBookingsScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{t("my_appointments_full")}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{t("my_appointments_full")}</Text>
+        <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{t("realtime_active")}</Text></View>
+      </View>
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -199,7 +220,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("upcoming")}
         >
           <Text style={[styles.tabText, tab === "upcoming" && styles.tabTextActive]}>
-            {t("tab_upcoming")}
+            {t("tab_upcoming")} ({upcoming.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -207,7 +228,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("past")}
         >
           <Text style={[styles.tabText, tab === "past" && styles.tabTextActive]}>
-            {t("tab_history")}
+            {t("tab_history")} ({past.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -236,126 +257,117 @@ export default function PatientBookingsScreen() {
 
       {!loading &&
         displayed.map((item) => {
-          const tone = statusToneMap[item.statusTone];
+          const sm = metaFor(item.specialty);
+          const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.open;
+          const SIcon = sm.icon;
           return (
             <View key={item.id} style={styles.card}>
-              <View style={styles.headRow}>
-                <Text style={[styles.badge, { backgroundColor: tone.bg, color: tone.color }]}>
-                  {item.specialtyLabel}
-                </Text>
-                <Text style={[styles.badge, { backgroundColor: "#F3F3F5", color: Colors.textMuted }]}>
-                  {t(STATUS_KEY[item.status] ?? "status_open")}
-                </Text>
-              </View>
-
-              <View style={styles.bodyRow}>
-                {item.avatar ? (
-                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarFallback]}>
-                    <Text style={styles.avatarFallbackText}>
-                      {item.name
-                        .split(" ")
-                        .map((part) => part[0])
-                        .join("")
-                        .slice(0, 2)}
-                    </Text>
+              <View style={[styles.accent, { backgroundColor: st.color }]} />
+              <View style={styles.cardInner}>
+                <View style={styles.bodyRow}>
+                  {item.avatar ? (
+                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                  ) : (
+                    <LinearGradient colors={sm.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
+                      <SIcon size={22} color="#fff" strokeWidth={2} />
+                    </LinearGradient>
+                  )}
+                  <View style={styles.infoWrap}>
+                    <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.subtitle} numberOfLines={1}>{item.specialtyLabel} · {item.subtitle}</Text>
                   </View>
-                )}
-
-                <View style={styles.infoWrap}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.subtitle} numberOfLines={1}>
-                    {item.subtitle}
-                  </Text>
+                  <View style={[styles.statusPill, { backgroundColor: st.bg }]}>
+                    <View style={[styles.statusDot, { backgroundColor: st.color }]} />
+                    <Text style={[styles.statusPillTxt, { color: st.color }]}>{t(STATUS_KEY[item.status] ?? "status_open")}</Text>
+                  </View>
                 </View>
 
-                <View style={styles.priceWrap}>
-                  <Text style={styles.price}>{item.price} MAD</Text>
+                <View style={styles.metaRow}>
+                  <CalendarClock size={13} color={Colors.textMuted} />
+                  <Text style={styles.metaText}>{item.dateLabel}</Text>
+                  <View style={styles.metaDot} />
+                  <MapPin size={13} color={Colors.textMuted} />
+                  <Text style={styles.metaText} numberOfLines={1}>{item.isCompleted ? t("tab_history") : t("at_home")}</Text>
                 </View>
-              </View>
 
-              <View style={styles.metaRow}>
-                <CalendarClock size={12} color={Colors.textMuted} />
-                <Text style={styles.metaText}>{item.dateLabel}</Text>
-                <MapPin size={12} color={Colors.textMuted} />
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {item.isCompleted ? "Historique" : "Adresse enregistrée"}
-                </Text>
-              </View>
+                <View style={styles.divider} />
 
-              <View style={styles.footerRow}>
-                {item.isCompleted ? (
-                  <View style={styles.ratingWrap}>
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star
-                        key={s}
-                        size={12}
-                        color={s <= (item.rating ?? 0) ? "#FBBF24" : "#E0E0E0"}
-                        fill={s <= (item.rating ?? 0) ? "#FBBF24" : "transparent"}
-                      />
-                    ))}
+                <View style={styles.footerRow}>
+                  <View>
+                    {item.isCompleted ? (
+                      <View style={styles.ratingWrap}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} size={13} color={star <= (item.rating ?? 0) ? "#FBBF24" : "#E0E0E0"} fill={star <= (item.rating ?? 0) ? "#FBBF24" : "transparent"} />
+                        ))}
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={styles.priceLbl}>{t("total_to_pay")}</Text>
+                        <Text style={styles.price}>{item.price} MAD</Text>
+                      </>
+                    )}
                   </View>
-                ) : (
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={() => {
-                    if (!item.bookingId) return;
-                    setCancelTarget({
-                      id: item.bookingId,
-                      patient_id: user?.id ?? "demo-patient",
-                      service_id: null,
-                      specialty: item.specialty,
-                      professional_id: null,
-                      status: item.status,
-                      urgency: "normal",
-                      scheduled_at: item.scheduledAt,
-                      address: null,
-                      notes: null,
-                      budget_min_mad: null,
-                      budget_max_mad: null,
-                      final_price_mad: item.price,
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString(),
-                      completed_at: null,
-                      cancelled_at: null,
-                      cancel_reason: null,
-                      cancel_case: null,
-                      refund_mad: null,
-                      cancelled_by: null,
-                      session_mode: null,
-                      plan_type: null,
-                      recurrence: null,
-                      series_id: null,
-                      session_index: null,
-                      session_total: null,
-                      meet_link: null,
-                      zoom_link: null,
-                    });
-                  }}
-                >
-                  <Text style={styles.secondaryBtnText}>{t("cancel")}</Text>
-                </TouchableOpacity>
-                )}
 
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={() => {
-                    if (!item.bookingId) return;
-                    router.push(
-                      item.isCompleted
-                        ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}`
-                        : `/patient/tracking?bookingId=${encodeURIComponent(item.bookingId)}`
-                    );
-                  }}
-                >
-                  <Text style={styles.primaryBtnText}>
-                    {item.isCompleted ? t("book_again") : t("see_details")}
-                  </Text>
-                  {!item.isCompleted ? <ChevronRight size={14} color="white" /> : null}
-                </TouchableOpacity>
+                  <View style={styles.actions}>
+                    {!item.isCompleted ? (
+                      <TouchableOpacity
+                        style={styles.secondaryBtn}
+                        onPress={() => {
+                          if (!item.bookingId) return;
+                          setCancelTarget({
+                            id: item.bookingId,
+                            patient_id: user?.id ?? "demo-patient",
+                            service_id: null,
+                            specialty: item.specialty,
+                            professional_id: null,
+                            status: item.status,
+                            urgency: "normal",
+                            scheduled_at: item.scheduledAt,
+                            address: null,
+                            notes: null,
+                            budget_min_mad: null,
+                            budget_max_mad: null,
+                            final_price_mad: item.price,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            completed_at: null,
+                            cancelled_at: null,
+                            cancel_reason: null,
+                            cancel_case: null,
+                            refund_mad: null,
+                            cancelled_by: null,
+                            session_mode: null,
+                            plan_type: null,
+                            recurrence: null,
+                            series_id: null,
+                            session_index: null,
+                            session_total: null,
+                            meet_link: null,
+                            zoom_link: null,
+                          });
+                        }}
+                      >
+                        <X size={13} color={Colors.danger} />
+                        <Text style={styles.secondaryBtnText}>{t("cancel")}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={styles.primaryBtn}
+                      onPress={() => {
+                        if (!item.bookingId) return;
+                        router.push(
+                          item.isCompleted
+                            ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}`
+                            : `/patient/tracking?bookingId=${encodeURIComponent(item.bookingId)}`
+                        );
+                      }}
+                    >
+                      <Text style={styles.primaryBtnText}>{item.isCompleted ? t("book_again") : t("see_details")}</Text>
+                      {!item.isCompleted ? <ChevronRight size={14} color="white" /> : null}
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </View>
           );
@@ -425,61 +437,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   emptyCtaText: { color: "white", fontSize: 13, fontWeight: "600" },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-  },
-  headRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  badge: {
-    fontSize: 11,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden",
-    fontWeight: "600",
-  },
-  bodyRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatar: { width: 42, height: 42, borderRadius: 21 },
-  avatarFallback: {
-    backgroundColor: "#F7F9FC",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#EDE5CC",
-  },
-  avatarFallbackText: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#EAF7EF", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#16A34A" },
+  liveTxt: { color: "#16A34A", fontSize: 11, fontWeight: "700" },
+  card: { backgroundColor: "white", borderRadius: 20, marginBottom: 12, flexDirection: "row", overflow: "hidden", ...Shadows.md },
+  accent: { width: 5 },
+  cardInner: { flex: 1, padding: 15 },
+  bodyRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   infoWrap: { flex: 1, minWidth: 0 },
-  name: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  subtitle: { color: Colors.textMuted, fontSize: 12, marginTop: 1 },
-  priceWrap: { alignItems: "flex-end" },
-  price: { color: Colors.primary, fontSize: 15, fontWeight: "700" },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 10 },
+  name: { color: Colors.textPrimary, fontSize: 15, fontWeight: "800" },
+  subtitle: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusPillTxt: { fontSize: 11, fontWeight: "800" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
   metaText: { color: Colors.textMuted, fontSize: 12, flexShrink: 1 },
-  footerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
-  secondaryBtn: {
-    flex: 1,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "white",
-  },
-  secondaryBtnText: { color: Colors.textMuted, fontSize: 12, fontWeight: "600" },
-  primaryBtn: {
-    flex: 1.2,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 4,
-  },
-  primaryBtnText: { color: "white", fontSize: 12, fontWeight: "600" },
-  ratingWrap: { flexDirection: "row", gap: 3, flex: 1 },
+  metaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: Colors.textSubtle, marginHorizontal: 2 },
+  divider: { height: 1, backgroundColor: "#F2F2F4", marginVertical: 13 },
+  footerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  priceLbl: { color: Colors.textMuted, fontSize: 10.5, fontWeight: "600" },
+  price: { color: Colors.primary, fontSize: 18, fontWeight: "800" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  secondaryBtn: { flexDirection: "row", alignItems: "center", gap: 5, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: "#F1D9D9", paddingHorizontal: 14, backgroundColor: "#FEF5F5" },
+  secondaryBtnText: { color: Colors.danger, fontSize: 12.5, fontWeight: "700" },
+  primaryBtn: { flexDirection: "row", alignItems: "center", gap: 4, height: 40, borderRadius: 12, backgroundColor: Colors.primary, paddingHorizontal: 16 },
+  primaryBtnText: { color: "white", fontSize: 12.5, fontWeight: "700" },
+  ratingWrap: { flexDirection: "row", gap: 3 },
   errorText: { marginTop: 8, color: Colors.danger, fontSize: 12 },
 });
