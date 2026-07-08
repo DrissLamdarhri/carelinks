@@ -7,12 +7,14 @@ import { Tabs } from "expo-router";
 import { Calendar, Home, MessageCircle, Search, User } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useI18n } from "@/lib/i18n";
 
 const PRIMARY = "#0D0870";
 const INACTIVE = "#B0B0B0";
 
 function PatientTabs() {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   // Normalize bottom inset: ensure a small minimum and cap to avoid excess space on some Android devices
   const safeInset = Math.min(Math.max(insets.bottom || 0, 8), 18);
   const tabBottomPadding = Platform.OS === "ios" ? Math.max(safeInset, 8) : safeInset;
@@ -61,7 +63,7 @@ function PatientTabs() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Accueil",
+          title: t("home"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Home color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
@@ -72,7 +74,7 @@ function PatientTabs() {
       <Tabs.Screen
         name="yoga"
         options={{
-          title: "Explorer",
+          title: t("explore"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Search color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
@@ -83,7 +85,7 @@ function PatientTabs() {
       <Tabs.Screen
         name="bookings"
         options={{
-          title: "Mes RDV",
+          title: t("my_appointments"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Calendar color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
@@ -94,7 +96,7 @@ function PatientTabs() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: "Chat",
+          title: t("chat"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
@@ -105,7 +107,7 @@ function PatientTabs() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
+          title: t("profile"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
