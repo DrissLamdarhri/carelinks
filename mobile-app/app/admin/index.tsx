@@ -74,7 +74,7 @@ export default function AdminLoginScreen() {
           <View style={styles.inputWrap}>
             <Mail size={18} color={Colors.textMuted} />
             <TextInput
-              placeholder="Votre email administrateur"
+              placeholder={t("admin_email_ph")}
               value={email}
               onChangeText={setEmail}
               style={styles.input}
@@ -119,14 +119,14 @@ export default function AdminLoginScreen() {
             ) : (
               <>
                 <Shield size={18} color="white" />
-                <Text style={styles.submitText}>Accéder au tableau de bord</Text>
+                <Text style={styles.submitText}>{t("access_dashboard")}</Text>
               </>
             )}
           </TouchableOpacity>
 
           <View style={styles.securityRow}>
             <Shield size={14} color="#B0B0B0" />
-            <Text style={styles.securityText}>Connexion sécurisée · Accès protégé</Text>
+            <Text style={styles.securityText}>{t("secure_login_note")}</Text>
           </View>
         </View>
       </ScrollView>

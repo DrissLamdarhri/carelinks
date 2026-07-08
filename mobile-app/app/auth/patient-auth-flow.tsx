@@ -324,8 +324,8 @@ export default function PatientAuthFlowScreen() {
         {/* REGISTRATION SCREEN */}
         <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
-            <Text style={styles.screenTitle}>Bienvenue !</Text>
-            <Text style={styles.screenSubtitle}>Créez votre compte pour débuter votre parcours</Text>
+            <Text style={styles.screenTitle}>{t("welcome_excl")}</Text>
+            <Text style={styles.screenSubtitle}>{t("create_account_subtitle")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -370,7 +370,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* Phone field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Téléphone</Text>
+            <Text style={styles.label}>{t("phone")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput

@@ -134,8 +134,8 @@ export default function KycUploaderScreen() {
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Vérification KYC</Text>
-          <Text style={styles.subtitle}>Téléversez vos documents professionnels</Text>
+          <Text style={styles.title}>{t("kyc_verification")}</Text>
+          <Text style={styles.subtitle}>{t("upload_pro_docs")}</Text>
         </View>
       </View>
 
@@ -188,7 +188,7 @@ export default function KycUploaderScreen() {
                   ) : (
                     <>
                       <Upload size={15} color="white" />
-                      <Text style={styles.uploadBtnText}>Téléverser</Text>
+                      <Text style={styles.uploadBtnText}>{t("upload")}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -196,10 +196,10 @@ export default function KycUploaderScreen() {
             );
           })}
 
-          <Text style={styles.listTitle}>Documents envoyés</Text>
+          <Text style={styles.listTitle}>{t("docs_sent")}</Text>
           {documents.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>Aucun document envoyé pour le moment.</Text>
+              <Text style={styles.emptyText}>{t("no_docs_sent")}</Text>
             </View>
           ) : (
             documents.map((doc) => (

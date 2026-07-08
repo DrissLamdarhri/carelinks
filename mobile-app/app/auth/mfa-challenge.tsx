@@ -205,7 +205,7 @@ export default function MfaChallengeScreen() {
 
         {mode === "sms" && !canSendSms ? (
           <View style={styles.alertCard}>
-            <Text style={styles.alertText}>Aucun numéro enregistré pour recevoir un SMS.</Text>
+            <Text style={styles.alertText}>{t("no_number_for_sms")}</Text>
           </View>
         ) : null}
 
@@ -228,7 +228,7 @@ export default function MfaChallengeScreen() {
               {smsSent ? "Code SMS envoyé." : "Envoi du code en cours…"}
             </Text>
             <TouchableOpacity disabled={loading} onPress={handleResendSms}>
-              <Text style={styles.smsResend}>Renvoyer</Text>
+              <Text style={styles.smsResend}>{t("resend")}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -248,19 +248,19 @@ export default function MfaChallengeScreen() {
           {loading ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={styles.submitText}>Vérifier</Text>
+            <Text style={styles.submitText}>{t("verify")}</Text>
           )}
         </TouchableOpacity>
 
         {totpAvailable && mode !== "backup" ? (
           <TouchableOpacity onPress={() => setMode("backup")} style={styles.altButton}>
-            <Text style={styles.altText}>Utiliser un code de secours</Text>
+            <Text style={styles.altText}>{t("use_backup_code")}</Text>
           </TouchableOpacity>
         ) : null}
 
         {totpAvailable && mode === "backup" ? (
           <TouchableOpacity onPress={() => setMode("totp")} style={styles.altButton}>
-            <Text style={styles.altText}>Utiliser l'authentificateur</Text>
+            <Text style={styles.altText}>{t("use_authenticator")}</Text>
           </TouchableOpacity>
         ) : null}
 

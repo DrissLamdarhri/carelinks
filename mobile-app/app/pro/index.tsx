@@ -133,7 +133,7 @@ export default function ProHomeScreen() {
           <View style={styles.userWrap}>
             <Image key={avatar} source={typeof avatar === "string" ? { uri: avatar } : avatar} style={styles.avatar} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.greeting}>Bonjour 👋</Text>
+              <Text style={styles.greeting}>{t("hello")}</Text>
               <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
           </View>
@@ -164,9 +164,9 @@ export default function ProHomeScreen() {
 
         {/* Real stats */}
         <View style={styles.statsRow}>
-          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label="Aujourd'hui" />
+          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label={t("today")} />
           <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
-          <Stat icon={Activity} value={`${monthMissions}`} label="Ce mois" />
+          <Stat icon={Activity} value={`${monthMissions}`} label={t("this_month")} />
         </View>
       </LinearGradient>
 
@@ -216,7 +216,7 @@ export default function ProHomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
           <FileText size={16} color={Colors.primary} />
-          <Text style={styles.quickTxt}>Documents KYC</Text>
+          <Text style={styles.quickTxt}>{t("kyc_documents")}</Text>
         </TouchableOpacity>
       </View>
 

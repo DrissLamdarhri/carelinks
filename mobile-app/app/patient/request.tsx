@@ -414,7 +414,7 @@ export default function PatientRequestScreen() {
               value={address}
               onChangeText={setAddress}
               style={styles.addressInput}
-              placeholder="Entrez votre adresse..."
+              placeholder={t("enter_address_ph")}
               placeholderTextColor={Colors.textSubtle}
             />
             <TouchableOpacity onPress={handleLocate} disabled={locating} style={styles.gpsBtn}>
@@ -498,7 +498,7 @@ export default function PatientRequestScreen() {
           <View style={styles.kineBadgeRow}>
             <View style={styles.kinePill}>
               <View style={styles.kinePillDot} />
-              <Text style={styles.kinePillText}>Kinésithérapie</Text>
+              <Text style={styles.kinePillText}>{t("spec_physio")}</Text>
             </View>
             <Text style={styles.kinePillSub}>{t("home_rehab")}</Text>
           </View>
@@ -666,7 +666,7 @@ export default function PatientRequestScreen() {
         </ScrollView>
 
         {/* ── Notes ── */}
-        <Text style={styles.label}>Notes (optionnel)</Text>
+        <Text style={styles.label}>{t("notes_optional")}</Text>
         <TextInput
           value={notes}
           onChangeText={setNotes}

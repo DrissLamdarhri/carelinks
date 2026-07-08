@@ -200,7 +200,7 @@ export default function YogaCatalogScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Séances de Yoga</Text>
+          <Text style={styles.headerTitle}>{t("yoga_sessions")}</Text>
         </View>
 
         <ScrollView
@@ -227,12 +227,12 @@ export default function YogaCatalogScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Chargement des séances...</Text>
+            <Text style={styles.loadingText}>{t("loading_sessions")}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>❌ Erreur lors du chargement des séances</Text>
-            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>Veuillez vérifier votre connexion et réessayer.</Text>
+            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>{t("check_connection_retry")}</Text>
           </View>
         ) : filteredSessions.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -302,7 +302,7 @@ export default function YogaCatalogScreen() {
                   {loadingSessionId === session.id ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
-                    <Text style={styles.bookBtnText}>Réserver</Text>
+                    <Text style={styles.bookBtnText}>{t("reserve")}</Text>
                   )}
                 </TouchableOpacity>
               </View>

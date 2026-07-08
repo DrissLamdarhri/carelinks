@@ -288,13 +288,13 @@ export default function WaitingOffersScreen() {
                 if (bookingId) router.replace(`/patient/offers/${bookingId}`);
               }}
             >
-              <Text style={styles.offersBtnText}>Voir toutes les offres</Text>
+              <Text style={styles.offersBtnText}>{t("see_all_offers")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.waitingRow}>
             <Loader2 size={14} color={Colors.textMuted} />
-            <Text style={styles.waitingText}>En attente de réponses…</Text>
+            <Text style={styles.waitingText}>{t("waiting_responses")}</Text>
           </View>
         )}
       </ScrollView>
@@ -302,7 +302,7 @@ export default function WaitingOffersScreen() {
       <View style={styles.footer}>
         <TouchableOpacity onPress={handleCancel} disabled={cancelling} style={styles.cancelBtn}>
           {cancelling ? <ActivityIndicator size="small" color={Colors.textMuted} /> : null}
-          <Text style={styles.cancelBtnText}>Annuler la demande</Text>
+          <Text style={styles.cancelBtnText}>{t("cancel_request")}</Text>
         </TouchableOpacity>
         {bookingError ? <Text style={styles.errorText}>{bookingError}</Text> : null}
         {cancelError ? <Text style={styles.errorText}>{cancelError}</Text> : null}
