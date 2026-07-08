@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
 import { ProfessionalsManager } from "./ProfessionalsManager";
+import { YogaSessionsManager } from "./YogaSessionsManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -180,6 +181,7 @@ export function AdminPanel() {
   const [specialtyFilter, setSpecialtyFilter] = useState<string | null>(null); // e.g. 'nurse', 'psychologist', 'physiotherapist', 'yoga_instructor'
   const [urgentOnly, setUrgentOnly] = useState<boolean>(false);
   const [bookingSearch, setBookingSearch] = useState<string>("");
+  const [myBookingsOnly, setMyBookingsOnly] = useState<boolean>(false); // Filter for "Mes réservations"
   const [liveYoga, setLiveYoga] = useState<any[]>([]);
   const [serviceTypes, setServiceTypes] = useState<any[]>([]);
   const [selectedServiceTypeCategory, setSelectedServiceTypeCategory] = useState<string>("Infirmier");
@@ -201,6 +203,12 @@ export function AdminPanel() {
     loginAlerts: true,
     autoExpiration: false,
   });
+
+  // Pagination states
+  const [usersPage, setUsersPage] = useState(1);
+  const [prosPage, setProPage] = useState(1);
+  const [bookingsPage, setBookingsPage] = useState(1);
+  const pageSize = 10;
 
   // Live KPIs straight from Supabase (replaces hardcoded numbers)
   useEffect(() => {
@@ -352,6 +360,9 @@ export function AdminPanel() {
         };
       }));
 
+      // NOTE: Bookings are now loaded by the realtime subscription below (useEffect at line ~726)
+      // This section is commented out to avoid race conditions and duplicate updates
+      /*
       // Fetch bookings directly from the bookings table (don't rely solely on admin_booking_logs)
       const { data: bookings } = await supabase
         .from("bookings")
@@ -425,8 +436,12 @@ export function AdminPanel() {
         urgency: b.urgency ?? "normal",
         address: b.address,
       })));
+      */
 
       // Also load yoga enrollments as bookings
+      // NOTE: Yoga enrollments are also now loaded by the realtime subscription
+      // This section is commented out to avoid race conditions
+      /*
       const { data: yogaEnrollmentsData } = await supabase
         .from("yoga_enrollments")
         .select(`
@@ -479,6 +494,7 @@ export function AdminPanel() {
         alertLevel: b.alert_level ?? "normal",
         urgency: b.urgency,
       })), ...yogaBookings]);
+      */
 
       // Yoga sessions — instructor_id → professionals → profiles (two-hop join)
       const { data: yogaData } = await supabase
@@ -609,115 +625,211 @@ export function AdminPanel() {
     
     channels.push(yogaChannel);
     
-    // Subscribe to yoga_enrollments changes (for real-time reservation updates)
-    const enrollmentChannel = supabase
-      .channel("yoga_enrollments:changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => {
-        // When enrollments change, reload all bookings
-        (async () => {
-          const { data: bookingsData } = await supabase
-            .from("bookings")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(30)
-            .catch(() => ({ data: [] }));
-          
-          if (!mounted) return;
-          
-          const merged = new Map();
-          (bookingsData ?? []).forEach((b: any) => {
-            const key = b.id;
-            merged.set(key, { ...b, booking_id: b.id });
+    
+    return () => {
+     mounted = false;
+     channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [isAdminAuthed]);
+
+  // Real-time subscription to bookings table (all booking changes: create, update, delete)
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+    
+    const loadAllBookings = async () => {
+      try {
+        console.log("[Admin Bookings] Reloading all bookings from realtime change");
+        
+        // Fetch bookings directly from the bookings table
+        // No user.id filter needed - RLS will handle access control
+        const { data: bookings, error: bkError } = await supabase
+          .from("bookings")
+          .select("id,patient_id,professional_id,specialty,status,urgency,scheduled_at,address,final_price_mad,budget_max_mad,created_at")
+          .order("created_at", { ascending: false })
+          .limit(1000);
+        
+        if (bkError) {
+          console.error("[Admin Bookings] Error fetching bookings:", bkError);
+          console.error("[Admin Bookings] Error details:", { 
+            code: (bkError as any)?.code,
+            message: bkError?.message,
+            hint: (bkError as any)?.hint
           });
-          const mergedBookings = Array.from(merged.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           
-          // Fetch patient names
-          const patientIds = [...new Set(mergedBookings.map((b: any) => b.patient_id))];
-          const { data: patientProfiles } = patientIds.length > 0 ? await supabase
-            .from("profiles")
-            .select("id,full_name")
-            .in("id", patientIds) : { data: [] };
-          const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          // Check if it's an RLS error
+          const isRLSError = (bkError as any)?.code === '42501' || 
+                            bkError?.message?.includes('violates row level security');
           
-          // Fetch professional names
-          const proIds = [...new Set(mergedBookings.map((b: any) => b.professional_id).filter(Boolean))];
-          const { data: proProfiles } = proIds.length > 0 ? await supabase
-            .from("profiles")
-            .select("id,full_name")
-            .in("id", proIds) : { data: [] };
-          const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+          if (isRLSError) {
+            console.error("[Admin Bookings] ⚠️ RLS Policy blocking admin access!");
+            console.error("[Admin Bookings] FIX: Admin user must have role='admin' in profiles table");
+            console.error("[Admin Bookings] Run: supabase/ensure-admin-profile.sql");
+          }
           
-          const labelMap: Record<string, string> = { 
-            nurse: "Infirmier", kine: "Kinésithérapeute", yoga_instructor: "Yoga", psychologist: "Psychologue",
-          };
-          const statusFr: Record<string, string> = {
-            open: "En attente", matched: "Confirmé", in_progress: "Confirmé",
-            completed: "Terminé", cancelled: "Annulé",
-          };
-          
-          const bookingsList = mergedBookings.map((b: any) => ({
-            id: "#" + (b.booking_id ?? b.id).slice(0, 6).toUpperCase(),
-            patient: patientMap[b.patient_id] ?? "—",
-            pro: b.professional_id ? (proMap[b.professional_id] ?? "—") : "—",
-            service: labelMap[b.specialty] ?? b.specialty,
-            specialtyKey: b.specialty,
-            date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-            price: (b.price ?? 0) + " MAD",
-            status: statusFr[b.status] ?? b.status,
-            alertLevel: b.alert_level ?? "normal",
-            urgency: b.urgency,
-          }));
-          
-          // Load yoga enrollments
-          const { data: yogaEnrollmentsData } = await supabase
-            .from("yoga_enrollments")
-            .select(`
-              session_id,
-              patient_id,
-              enrolled_at,
-              yoga_sessions!session_id(
-                id,
-                title,
-                starts_at,
-                price_mad,
-                description
-              )
-            `)
-            .order("enrolled_at", { ascending: false })
-            .limit(50)
-            .catch(() => ({ data: [] }));
-          
-          // Get patient names for yoga enrollments
-          const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
-          const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
-            .from("profiles")
-            .select("id,full_name")
-            .in("id", yogaPatientIds) : { data: [] };
-          const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
-          
-          const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => ({
+          // Set empty bookings so UI doesn't show error state
+          setLiveAllBookings([]);
+          return;
+        }
+        
+        const rawCount = bookings?.length ?? 0;
+        console.log(`[Admin Bookings] Raw count from DB: ${rawCount} bookings`);
+        
+        if (!bookings || bookings.length === 0) {
+          console.warn("[Admin Bookings] No bookings returned from Supabase query");
+          setLiveAllBookings([]);
+          return;
+        }
+        
+        // Also fetch any admin log metadata (alert_level) if present
+        const { data: adminLogs } = await supabase
+          .from("admin_booking_logs")
+          .select("booking_id,alert_level")
+          .limit(2000);
+        const alertMap = Object.fromEntries((adminLogs ?? []).map((a: any) => [a.booking_id, a.alert_level]));
+        
+        // Start with bookings
+        const merged: any[] = (bookings ?? []).map((b: any) => ({
+          booking_id: b.id,
+          id: "#" + (b.id ?? "").slice(0, 6).toUpperCase(),
+          patient_id: b.patient_id,
+          professional_id: b.professional_id,
+          specialty: b.specialty,
+          status: b.status,
+          statusLabel: b.status,
+          urgency: b.urgency,
+          scheduled_at: b.scheduled_at,
+          address: b.address,
+          price: b.final_price_mad ?? b.budget_max_mad ?? 0,
+          created_at: b.created_at,
+          alert_level: alertMap[b.id] ?? "normal",
+          source: "bookings",
+        }));
+        
+        // Fetch patient profiles
+        const patientIds = [...new Set(merged.map((b: any) => b.patient_id))].filter(Boolean);
+        const { data: patientProfiles } = patientIds.length > 0 ? await supabase
+          .from("profiles")
+          .select("id,full_name,email,city")
+          .in("id", patientIds) : { data: [] };
+        const patientMap = Object.fromEntries((patientProfiles ?? []).map((p: any) => [p.id, { name: p.full_name, email: p.email, city: p.city }]));
+        
+        // Fetch professional profiles
+        const proIds = [...new Set(merged.map((b: any) => b.professional_id).filter(Boolean))];
+        const { data: proProfiles } = proIds.length > 0 ? await supabase
+          .from("profiles")
+          .select("id,full_name")
+          .in("id", proIds) : { data: [] };
+        const proMap = Object.fromEntries((proProfiles ?? []).map((p: any) => [p.id, { name: p.full_name }]));
+        
+        const labelMap: Record<string, string> = { 
+          nurse: "Infirmier", 
+          psychologist: "Psychologue", 
+          yoga_instructor: "Yoga",
+          physiotherapist: "Kinésithérapeute"
+        };
+        const statusFr: Record<string, string> = {
+          open: "En attente", matched: "Confirmé", in_progress: "En cours",
+          completed: "Terminé", cancelled: "Annulé",
+        };
+        
+        const bookingsList = merged.map((b: any) => ({
+          id: b.id,
+          bookingId: b.booking_id,
+          patient: patientMap[b.patient_id]?.name ?? "—",
+          patientEmail: patientMap[b.patient_id]?.email ?? "",
+          patientCity: patientMap[b.patient_id]?.city ?? "",
+          pro: b.professional_id ? (proMap[b.professional_id]?.name ?? "—") : "—",
+          service: labelMap[b.specialty] ?? b.specialty,
+          specialtyKey: b.specialty,
+          date: new Date(b.scheduled_at ?? b.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+          price: (b.price ?? 0) + " MAD",
+          status: b.status,
+          statusLabel: statusFr[b.status] ?? b.status,
+          alertLevel: b.alert_level ?? "normal",
+          urgency: b.urgency ?? "normal",
+          address: b.address,
+        }));
+        
+        console.log(`[Admin Bookings] Formatted ${bookingsList.length} bookings for display`);
+        
+        // Also load yoga enrollments to include with bookings
+        const { data: yogaEnrollmentsData } = await supabase
+          .from("yoga_enrollments")
+          .select(`
+            session_id,
+            patient_id,
+            enrolled_at,
+            yoga_sessions!session_id(
+              id,
+              title,
+              starts_at,
+              price_mad,
+              description
+            )
+          `)
+          .order("enrolled_at", { ascending: false })
+          .limit(50);
+        
+        const yogaPatientIds = [...new Set((yogaEnrollmentsData ?? []).map((e: any) => e.patient_id))];
+        const { data: yogaPatientProfiles } = yogaPatientIds.length > 0 ? await supabase
+          .from("profiles")
+          .select("id,full_name")
+          .in("id", yogaPatientIds) : { data: [] };
+        const yogaPatientMap = Object.fromEntries((yogaPatientProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+        
+        const yogaBookings = (yogaEnrollmentsData ?? []).map((e: any) => {
+          const sessionDate = new Date(e.yoga_sessions?.starts_at);
+          const isSessionPast = sessionDate < new Date();
+          return {
             id: "#YOGA-" + (e.session_id ?? "").slice(0, 6).toUpperCase(),
+            bookingId: e.session_id,
             patient: yogaPatientMap[e.patient_id] ?? "—",
+            patientEmail: "",
+            patientCity: "",
             pro: "Instructeur Yoga",
-            service: "Yoga",
+            service: e.yoga_sessions?.title ?? "Séance de yoga",
             specialtyKey: "yoga_instructor",
-            date: new Date(e.yoga_sessions?.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+            date: sessionDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
             price: (e.yoga_sessions?.price_mad ?? 0) + " MAD",
-            status: "Confirmé",
+            status: isSessionPast ? "completed" : "in_progress",
+            statusLabel: isSessionPast ? "Terminé" : "Confirmé",
             alertLevel: "normal",
             urgency: "normal",
-          }));
-          
-          setLiveAllBookings([...bookingsList, ...yogaBookings]);
-        })();
+            address: "",
+          };
+        });
+        
+        console.log(`[Admin Bookings] Loaded ${yogaBookings.length} yoga enrollments`);
+        setLiveAllBookings([...bookingsList, ...yogaBookings]);
+      } catch (err) {
+        console.error("[Admin Bookings] Error in loadAllBookings:", err);
+      }
+    };
+    
+    // Initial load
+    loadAllBookings();
+    
+    // Subscribe to bookings table changes
+    const bookingsChannel = supabase
+      .channel("admin:bookings:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+        console.log("[Admin Bookings] postgres_changes event received on bookings table");
+        loadAllBookings();
       })
       .subscribe();
     
-    channels.push(enrollmentChannel);
+    // Subscribe to yoga_enrollments changes (new enrollments should trigger reload)
+    const yogaEnrollmentsChannel = supabase
+      .channel("admin:yoga_enrollments:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => {
+        console.log("[Admin Bookings] postgres_changes event received on yoga_enrollments table");
+        loadAllBookings();
+      })
+      .subscribe();
     
     return () => {
-      mounted = false;
-      channels.forEach((ch) => supabase.removeChannel(ch));
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(yogaEnrollmentsChannel);
     };
   }, [isAdminAuthed]);
 
@@ -1003,16 +1115,19 @@ export function AdminPanel() {
       
       const insertData: any = {
         title: newSession.title,
+        level: newSession.level, // Include level
         starts_at,
         price_mad: newSession.price,
+        capacity: newSession.maxSpots, // Include capacity
+        duration_min: 60, // Include duration
       };
       
-      // Add optional columns carefully
+      // Add optional columns
       if (newSession.instructor) {
         insertData.description = `Instructeur: ${newSession.instructor}`;
       }
       
-      // Store image in address as base64 (workaround)
+      // Store image in address as base64
       if (imageBase64) {
         insertData.address = `data:image/jpeg;base64,${imageBase64.substring(imageBase64.indexOf(',') + 1)}`;
       }
@@ -1279,6 +1394,8 @@ export function AdminPanel() {
   // Derived booking filters and counters (used by the Bookings tab)
   const bookingQuery = (bookingSearch || "").trim().toLowerCase();
   const bookingsFiltered = (liveAllBookings ?? []).filter((b: any) => {
+    // Filter for "My bookings" (open/unassigned bookings)
+    if (myBookingsOnly && b.status !== "open") return false;
     if (specialtyFilter && b.specialtyKey !== specialtyFilter) return false;
     if (urgentOnly && !(b.urgency === "urgent" || b.urgency === "emergency")) return false;
     if (!bookingQuery) return true;
@@ -1293,11 +1410,55 @@ export function AdminPanel() {
   const bookingCounts = {
     total: bookingsFiltered.length,
     open: bookingsFiltered.filter((b: any) => b.status === "open").length,
+    matched: bookingsFiltered.filter((b: any) => b.status === "matched").length,
     in_progress: bookingsFiltered.filter((b: any) => b.status === "in_progress").length,
     completed: bookingsFiltered.filter((b: any) => b.status === "completed").length,
+    cancelled: bookingsFiltered.filter((b: any) => b.status === "cancelled").length,
   };
 
   const displayedBookings = bookingsFiltered.filter((b: any) => !bookingFilter || b.status === bookingFilter);
+
+  // Pagination logic for all three tables
+  const paginateData = (data: any[], page: number, size: number) => {
+    const start = (page - 1) * size;
+    return data.slice(start, start + size);
+  };
+
+  const getTotalPages = (data: any[], size: number) => Math.ceil(data.length / size);
+
+  // Reset page when user filters change
+  useEffect(() => {
+    setUsersPage(1);
+  }, [searchQ, userStatusFilter, userBookingRateFilter]);
+
+  // Reset page when booking filter changes
+  useEffect(() => {
+    setBookingsPage(1);
+  }, [bookingFilter]);
+
+  // Users pagination
+  const filteredUsers = (liveUsers ?? []).filter((u) => {
+    const matchesSearch = u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase());
+    const matchesStatus = userStatusFilter === "all" || u.status === (userStatusFilter === "active" ? "Actif" : "Inactif");
+    let matchesBookingRate = true;
+    if (userBookingRateFilter !== "all") {
+      if (userBookingRateFilter === "0") matchesBookingRate = u.bookings === 0;
+      else if (userBookingRateFilter === "1-3") matchesBookingRate = u.bookings >= 1 && u.bookings <= 3;
+      else if (userBookingRateFilter === "4-10") matchesBookingRate = u.bookings >= 4 && u.bookings <= 10;
+      else if (userBookingRateFilter === "10+") matchesBookingRate = u.bookings > 10;
+    }
+    return matchesSearch && matchesStatus && matchesBookingRate;
+  });
+  const usersTotalPages = getTotalPages(filteredUsers, pageSize);
+  const displayedUsers = paginateData(filteredUsers, usersPage, pageSize);
+
+  // Professionals pagination
+  const prosTotalPages = getTotalPages(liveAllPros, pageSize);
+  const displayedPros = paginateData(liveAllPros, prosPage, pageSize);
+
+  // Bookings pagination
+  const bookingsTotalPages = getTotalPages(displayedBookings, pageSize);
+  const paginatedBookings = paginateData(displayedBookings, bookingsPage, pageSize);
 
   return (
     <div
@@ -1830,30 +1991,7 @@ export function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(liveUsers ?? [])
-                        .filter((u) => {
-                          // Search filter
-                          const matchesSearch = u.name.toLowerCase().includes(searchQ.toLowerCase()) || u.email.toLowerCase().includes(searchQ.toLowerCase());
-                          
-                          // Status filter
-                          const matchesStatus = userStatusFilter === "all" || u.status === (userStatusFilter === "active" ? "Actif" : "Inactif");
-                          
-                          // Booking rate filter
-                          let matchesBookingRate = true;
-                          if (userBookingRateFilter !== "all") {
-                            if (userBookingRateFilter === "0") {
-                              matchesBookingRate = u.bookings === 0;
-                            } else if (userBookingRateFilter === "1-3") {
-                              matchesBookingRate = u.bookings >= 1 && u.bookings <= 3;
-                            } else if (userBookingRateFilter === "4-10") {
-                              matchesBookingRate = u.bookings >= 4 && u.bookings <= 10;
-                            } else if (userBookingRateFilter === "10+") {
-                              matchesBookingRate = u.bookings > 10;
-                            }
-                          }
-                          
-                          return matchesSearch && matchesStatus && matchesBookingRate;
-                        })
+                      {displayedUsers
                         .map((u) => (
                           <tr key={u.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
                             <td className="px-5 py-4">
@@ -1893,14 +2031,124 @@ export function AdminPanel() {
                           </tr>
                         ))}
                     </tbody>
-                  </table>
+                   </table>
+                </div>
+
+                {/* Pagination for Users */}
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
+                  <p className="text-sm text-[#888780]">
+                    {filteredUsers.length > 0 ? `${(usersPage - 1) * pageSize + 1} sur ${filteredUsers.length}` : "0 patients"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setUsersPage(Math.max(1, usersPage - 1))}
+                      disabled={usersPage === 1}
+                      className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                      style={{ color: usersPage === 1 ? "#D0D0D0" : "#888780" }}
+                    >
+                      ← Précédent
+                    </button>
+                    <span className="text-xs text-[#888780]">
+                      Page {usersPage} / {usersTotalPages || 1}
+                    </span>
+                    <button
+                      onClick={() => setUsersPage(Math.min(usersTotalPages, usersPage + 1))}
+                      disabled={usersPage >= usersTotalPages}
+                      className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                      style={{ color: usersPage >= usersTotalPages ? "#D0D0D0" : "#888780" }}
+                    >
+                      Suivant →
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {/* ======= PROFESSIONALS ======= */}
-          {tab === "professionals" && <ProfessionalsManager />}
+          {tab === "professionals" && (
+            <div>
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-sm text-[#888780]">
+                  {liveAllPros.length} professionnel{liveAllPros.length !== 1 ? 's' : ''} inscrit{liveAllPros.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr style={{ background: "#F8F8FC" }}>
+                      {["Nom", "Email", "Spécialité", "Vérification", "Revenus", "Actions"].map((h) => (
+                        <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedPros
+                      .map((p: any) => (
+                        <tr key={p.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
+                                style={{ background: "#8B5CF6", fontWeight: 700 }}
+                              >
+                                {p.name?.charAt(0).toUpperCase() ?? "?"}
+                              </div>
+                              <span className="text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>
+                                {p.name ?? "—"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-[#888780]">{p.email ?? "—"}</td>
+                          <td className="px-5 py-4 text-sm text-[#1A1A1A]">{p.specialty ?? "—"}</td>
+                          <td className="px-5 py-4"><StatusBadge status={p.status ?? "Vérifié"} /></td>
+                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{p.revenue ?? "—"}</td>
+                          <td className="px-5 py-4">
+                            <button onClick={() => setSelectedProForView(p)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors">
+                              <Eye size={15} className="text-[#888780]" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination for Professionals */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
+                <p className="text-sm text-[#888780]">
+                  {liveAllPros.length > 0 ? `${(prosPage - 1) * pageSize + 1} sur ${liveAllPros.length}` : "0 professionnels"}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setProPage(Math.max(1, prosPage - 1))}
+                    disabled={prosPage === 1}
+                    className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                    style={{ color: prosPage === 1 ? "#D0D0D0" : "#888780" }}
+                  >
+                    ← Précédent
+                  </button>
+                  <span className="text-xs text-[#888780]">
+                    Page {prosPage} / {prosTotalPages || 1}
+                  </span>
+                  <button
+                    onClick={() => setProPage(Math.min(prosTotalPages, prosPage + 1))}
+                    disabled={prosPage >= prosTotalPages}
+                    className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                    style={{ color: prosPage >= prosTotalPages ? "#D0D0D0" : "#888780" }}
+                  >
+                    Suivant →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======= PROFESSIONALS (OLD) - REMOVE THIS ======= */}
+          {false && tab === "professionals" && <ProfessionalsManager />}
 
 
           {/* ======= SERVICE TYPES ======= */}
@@ -2031,14 +2279,29 @@ export function AdminPanel() {
                   <select
                     value={specialtyFilter ?? ""}
                     onChange={(e) => setSpecialtyFilter(e.target.value || null)}
-                    className="text-sm px-3 py-1 rounded-lg border"
+                    className="text-sm px-3 py-2 rounded-lg border"
                     style={{ borderColor: "#EDEFF3", background: "white" }}
                   >
                     <option value="">Tous spécialités</option>
-                    <option value="nurse">Infirmier</option>
-                    <option value="psychologist">Psychologue</option>
-                    <option value="physiotherapist">Kinésithérapeute</option>
-                    <option value="yoga_instructor">Yoga</option>
+                    <option value="nurse">💉 Infirmier</option>
+                    <option value="psychologist">🧠 Psychologue</option>
+                    <option value="physiotherapist">🦴 Kinésithérapeute</option>
+                    <option value="yoga_instructor">🧘 Yoga</option>
+                  </select>
+
+                  {/* Status filter as dropdown */}
+                  <select
+                    value={bookingFilter ?? ""}
+                    onChange={(e) => setBookingFilter(e.target.value || null)}
+                    className="text-sm px-3 py-2 rounded-lg border"
+                    style={{ borderColor: "#EDEFF3", background: "white" }}
+                  >
+                    <option value="">Tous les statuts</option>
+                    <option value="open">En attente</option>
+                    <option value="matched">Confirmé</option>
+                    <option value="in_progress">En cours</option>
+                    <option value="completed">Complétées</option>
+                    <option value="cancelled">Annulé</option>
                   </select>
 
                   {/* Urgent toggle */}
@@ -2047,32 +2310,8 @@ export function AdminPanel() {
                     className="px-3 py-1.5 rounded-lg text-sm transition-all"
                     style={{ background: urgentOnly ? "#FEF2F2" : "transparent", color: urgentOnly ? "#B91C1C" : "#888780", border: urgentOnly ? "1px solid #FCA5A5" : "1px solid transparent" }}
                   >
-                    🔴 Urgences
+                  🔴 Urgences
                   </button>
-
-                  {/* Status Filter */}
-                  <div className="flex gap-1 rounded-xl p-1" style={{ background: "#F3F3F5" }}>
-                    {[
-                      { key: null, label: "Tous", icon: null },
-                      { key: "open", label: "Ouvertes", icon: Clock },
-                      { key: "in_progress", label: "En cours", icon: Activity },
-                      { key: "completed", label: "Complétées", icon: CheckCircle2 },
-                    ].map((f) => (
-                      <button
-                        key={String(f.key)}
-                        onClick={() => setBookingFilter(f.key)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
-                        style={{
-                          background: bookingFilter === f.key ? "white" : "transparent",
-                          color: bookingFilter === f.key ? "#0D0870" : "#888780",
-                          fontWeight: bookingFilter === f.key ? 600 : 400,
-                        }}
-                      >
-                        {f.icon && <f.icon size={12} />}
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
 
                   <button onClick={exportBookingsToCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[#888780] hover:bg-[#F3F3F5] transition-colors" style={{ background: "#F3F3F5" }}>
                     <Download size={14} /> Exporter
@@ -2087,175 +2326,132 @@ export function AdminPanel() {
                   <p className="text-[#888780]">Aucune réservation pour cette période</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {displayedBookings.map((b: any) => {
-                    const statusColors: Record<string, { bg: string; color: string; icon: any }> = {
-                      open: { bg: "#FEF3C7", color: "#92400E", icon: Clock },
-                      in_progress: { bg: "#D1FAE5", color: "#065F46", icon: Activity },
-                      completed: { bg: "#E9D5FF", color: "#581C87", icon: CheckCircle2 },
-                      cancelled: { bg: "#FEE2E2", color: "#991B1B", icon: X },
-                    };
-                    const urgencyColors: Record<string, string> = {
-                      normal: "#10B981",
-                      urgent: "#F59E0B",
-                      emergency: "#EF4444",
-                    };
+                <>
+                  <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+                   <div className="overflow-x-auto">
+                     <table className="w-full">
+                       <thead>
+                         <tr style={{ background: "#F8F8FC", borderBottom: "1px solid #F0F0F0" }}>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Patient</th>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Service</th>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Professionnel</th>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Date</th>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Prix</th>
+                           <th className="text-left text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Statut</th>
+                           <th className="text-center text-xs px-5 py-4 text-[#888780]" style={{ fontWeight: 600 }}>Actions</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {paginatedBookings.map((b: any) => {
+                           const statusColors: Record<string, { bg: string; color: string; icon: any }> = {
+                             open: { bg: "#FEF3C7", color: "#92400E", icon: Clock },
+                             matched: { bg: "#DBEAFE", color: "#1E40AF", icon: CheckCircle2 },
+                             in_progress: { bg: "#D1FAE5", color: "#065F46", icon: Activity },
+                             completed: { bg: "#E9D5FF", color: "#581C87", icon: CheckCircle2 },
+                             cancelled: { bg: "#FEE2E2", color: "#991B1B", icon: X },
+                           };
 
-                    const specialtyMeta: Record<string, { label: string; color: string; emoji: string }> = {
-                      nurse: { label: "Infirmier", color: "#0D87D0", emoji: "💉" },
-                      psychologist: { label: "Psychologue", color: "#8B5CF6", emoji: "🧠" },
-                      physiotherapist: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
-                      yoga_instructor: { label: "Yoga", color: "#06B6D4", emoji: "🧘" },
-                      kine: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
-                    };
+                           const specialtyMeta: Record<string, { label: string; color: string; emoji: string }> = {
+                             nurse: { label: "Infirmier", color: "#0D87D0", emoji: "💉" },
+                             psychologist: { label: "Psychologue", color: "#8B5CF6", emoji: "🧠" },
+                             physiotherapist: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
+                             yoga_instructor: { label: "Yoga", color: "#06B6D4", emoji: "🧘" },
+                             kine: { label: "Kinésithérapeute", color: "#10B981", emoji: "🦴" },
+                           };
 
-                    const sColors = statusColors[b.status] || statusColors.open;
-                    const StatusIcon = sColors.icon;
-                    const smeta = specialtyMeta[b.specialtyKey] ?? { label: b.service ?? b.specialtyKey ?? '—', color: '#888780', emoji: '🏷️' };
+                           const sColors = statusColors[b.status] || statusColors.open;
+                           const StatusIcon = sColors.icon;
+                           const smeta = specialtyMeta[b.specialtyKey] ?? { label: b.service ?? b.specialtyKey ?? '—', color: '#888780', emoji: '🏷️' };
 
-                    return (
-                      <div
-                        key={b.id}
-                        className="bg-white rounded-2xl p-5 border border-[#F0F0F0] hover:border-[#E0E0E0] hover:shadow-md transition-all"
-                        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className="text-xs px-3 py-1 rounded-full font-mono" style={{ background: "#F3F3F5", color: "#888780" }}>{b.id}</span>
+                           return (
+                             <tr key={b.id} className="border-b border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
+                               <td className="px-5 py-4">
+                                 <div className="flex items-center gap-3">
+                                   <div
+                                     className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
+                                     style={{ background: "#8B5CF6", fontWeight: 700 }}
+                                   >
+                                     {b.patient?.charAt(0).toUpperCase() ?? "?"}
+                                   </div>
+                                   <div>
+                                     <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{b.patient}</p>
+                                     <p className="text-xs text-[#888780]">{b.patientEmail}</p>
+                                   </div>
+                                 </div>
+                               </td>
+                               <td className="px-5 py-4">
+                                 <span className="text-xs px-2 py-1 rounded-full flex items-center gap-1" style={{ background: `${smeta.color}15`, color: smeta.color, fontWeight: 600, width: "fit-content" }}>
+                                   <span>{smeta.emoji}</span>
+                                   <span>{smeta.label}</span>
+                                 </span>
+                               </td>
+                               <td className="px-5 py-4">
+                                 <p className="text-sm text-[#1A1A1A]">{b.pro || "—"}</p>
+                               </td>
+                               <td className="px-5 py-4">
+                                 <p className="text-sm text-[#888780]">{b.date}</p>
+                               </td>
+                               <td className="px-5 py-4">
+                                 <p className="text-sm text-[#0D0870]" style={{ fontWeight: 700 }}>{b.price} MAD</p>
+                               </td>
+                               <td className="px-5 py-4">
+                                 <span className="text-xs px-3 py-1 rounded-full flex items-center gap-1" style={{ background: sColors.bg, color: sColors.color, fontWeight: 600, width: "fit-content" }}>
+                                   <StatusIcon size={12} />
+                                   {b.statusLabel ?? (b.status || '').toUpperCase()}
+                                 </span>
+                               </td>
+                               <td className="px-5 py-4 text-center">
+                                 <button
+                                   onClick={() => setSelectedBookingForView(b)}
+                                   className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
+                                 >
+                                   <Eye size={14} className="text-[#888780]" />
+                                 </button>
+                               </td>
+                             </tr>
+                           );
+                         })}
+                       </tbody>
+                     </table>
+                   </div>
+                  </div>
 
-                              <span
-                                className="text-xs px-3 py-1 rounded-full flex items-center gap-1.5"
-                                style={{ background: sColors.bg, color: sColors.color, fontWeight: 600 }}
-                              >
-                                <StatusIcon size={12} /> {b.statusLabel ?? (b.status || '').toUpperCase()}
-                              </span>
-
-                              <span
-                                className="text-xs px-3 py-1 rounded-full flex items-center gap-1"
-                                style={{ background: `${smeta.color}15`, color: smeta.color, fontWeight: 700 }}
-                              >
-                                <span>{smeta.emoji}</span>
-                                <span>{smeta.label}</span>
-                              </span>
-
-                              { (b.urgency && b.urgency !== 'normal') && (
-                                <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: `#FEE2E2`, color: `#991B1B` }}>
-                                  URGENT
-                                </span>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-3 gap-6 text-sm">
-                              <div>
-                                <p className="text-[#888780] text-xs mb-1">Patient</p>
-                                <p className="text-[#1A1A1A] font-semibold">{b.patient}</p>
-                                <p className="text-xs text-[#888780]">{b.patientCity} · {b.patientEmail}</p>
-                              </div>
-                              <div>
-                                <p className="text-[#888780] text-xs mb-1">Professionnel</p>
-                                <p className="text-[#1A1A1A] font-semibold">{b.pro || "—"}</p>
-                              </div>
-                              <div>
-                                <p className="text-[#888780] text-xs mb-1">Service</p>
-                                <p className="text-[#1A1A1A] font-semibold">{b.service}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl text-[#0D0870] font-bold">{b.price}</p>
-                            <p className="text-xs text-[#888780]">MAD</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-4 border-t border-[#F0F0F0]">
-                          <div className="flex items-center gap-4 text-xs text-[#888780]">
-                            <span className="flex items-center gap-1"><Calendar size={12} /> {b.date}</span>
-                            <span className="flex items-center gap-1"><MapPin size={12} /> {b.address || "—"}</span>
-                          </div>
-                          <button
-                            onClick={() => setSelectedBookingForView(b)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors"
-                          >
-                            <Eye size={14} className="text-[#888780]" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                {/* Pagination for Bookings */}
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
+                  <p className="text-sm text-[#888780]">
+                    {displayedBookings.length > 0 ? `${(bookingsPage - 1) * pageSize + 1} sur ${displayedBookings.length}` : "0 réservations"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setBookingsPage(Math.max(1, bookingsPage - 1))}
+                      disabled={bookingsPage === 1}
+                      className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                      style={{ color: bookingsPage === 1 ? "#D0D0D0" : "#888780" }}
+                    >
+                      ← Précédent
+                    </button>
+                    <span className="text-xs text-[#888780]">
+                      Page {bookingsPage} / {bookingsTotalPages || 1}
+                    </span>
+                    <button
+                      onClick={() => setBookingsPage(Math.min(bookingsTotalPages, bookingsPage + 1))}
+                      disabled={bookingsPage >= bookingsTotalPages}
+                      className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
+                      style={{ color: bookingsPage >= bookingsTotalPages ? "#D0D0D0" : "#888780" }}
+                    >
+                      Suivant →
+                    </button>
+                  </div>
                 </div>
-              )}
+              </>
+            )}
             </div>
           )}
 
           {/* ======= YOGA ======= */}
-          {tab === "yoga" && (
-            <div>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-[#888780]">{sessions.length} séances</p>
-                <button
-                  onClick={() => setShowYogaModal(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm"
-                  style={{ background: "#0D0870", fontWeight: 600 }}
-                >
-                  <Plus size={16} /> Ajouter une s��ance
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {sessions.map((s) => (
-                  <div
-                    key={s.id}
-                    className="bg-white rounded-2xl p-5"
-                    style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#D8F0F4" }}>
-                        <Flower2 size={20} className="text-[#5BB8D4]" />
-                      </div>
-                      <StatusBadge status={s.status} />
-                    </div>
-                    <p className="text-sm text-[#1A1A1A] mb-1" style={{ fontWeight: 600 }}>{s.title}</p>
-                    <p className="text-xs text-[#888780] mb-3">{s.instructor}</p>
-                    <div className="flex items-center gap-3 text-xs text-[#888780] mb-4">
-                      <span className="flex items-center gap-1"><Calendar size={12} /> {s.date}</span>
-                      <span className="flex items-center gap-1"><Users size={12} /> {s.spots}/{s.maxSpots}</span>
-                    </div>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex-1 h-1.5 rounded-full mr-3" style={{ background: "#F0F0F0" }}>
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${(s.spots / s.maxSpots) * 100}%`,
-                            background: "#5BB8D4",
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-[#888780]">{s.maxSpots - s.spots} places</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleSessionStatus(s.id)}
-                        className="flex-1 py-2 rounded-xl text-xs text-center transition-all"
-                        style={{
-                          background: s.status === "Publié" ? "#F3F3F5" : "#0D0870",
-                          color: s.status === "Publié" ? "#888780" : "white",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {s.status === "Publié" ? "Mettre en brouillon" : "Publier"}
-                      </button>
-                      <button
-                        onClick={() => deleteSession(s.id)}
-                        className="w-9 py-2 rounded-xl flex items-center justify-center"
-                        style={{ background: "#FDE8E8" }}
-                      >
-                        <Trash2 size={13} className="text-[#E24B4A]" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {tab === "yoga" && <YogaSessionsManager />}
+
+          {/* ======= SETTINGS ======= */}
 
           {/* ======= SETTINGS ======= */}
           {tab === "settings" && (

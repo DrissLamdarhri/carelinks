@@ -246,16 +246,14 @@ export default function ProRegistrationScreen() {
 
       console.log(`📋 Signup successful for user ${uid}. Starting document uploads...`);
 
-      // 2) Upload all documents directly to Supabase Storage via REST API (more reliable for React Native)
-      const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
-      const STORAGE_BUCKET = "pro-documents";
+      // 2) Upload all documents directly to Supabase Storage using SDK (most reliable)
       const uploadResults: Array<{ type: string; doc_type: string; storage_path: string }> = [];
       const failedUploads: string[] = [];
 
       for (const pending of pendingUploads) {
         const docLabel = pending.type === "diploma" ? getDiplomaTitle() : pending.type === "cin" ? "CIN" : "Selfie";
         console.log(`🔄 Uploading ${pending.type} (${docLabel})...`);
-        
+         
         try {
           // Generate storage path: userId/docType-timestamp.ext (respects RLS policy)
           const ext = pending.name.split(".").pop() || "jpg";
@@ -264,26 +262,20 @@ export default function ProRegistrationScreen() {
 
           console.log(`🔄 Uploading ${pending.type} to Storage path: ${storagePath}`);
 
-          // ✅ Upload via REST API using FormData (more reliable in React Native than SDK)
-          const formData = new FormData();
-          formData.append("file", {
-            uri: pending.uri,
-            name: pending.name,
-            type: pending.type === "selfie" ? "image/jpeg" : "image/jpeg",
-          } as any);
+          // ✅ Use Supabase SDK to upload (automatically handles auth token & RLS)
+          const { error: uploadError, data: uploadData } = await supabase.storage
+            .from("pro-documents")
+            .upload(storagePath, {
+              uri: pending.uri,
+              name: pending.name,
+              type: pending.mimeType ?? "application/octet-stream",
+            } as any, {
+              contentType: pending.mimeType ?? "application/octet-stream",
+              upsert: false,
+            });
 
-          const storageUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${storagePath}`;
-          const uploadResponse = await fetch(storageUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          });
-
-          if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            console.error(`❌ Storage upload failed for ${pending.type}: HTTP ${uploadResponse.status}`, errorText);
+          if (uploadError) {
+            console.error(`❌ Storage upload failed for ${pending.type}:`, uploadError.message);
             failedUploads.push(docLabel);
             continue;
           }
@@ -323,12 +315,21 @@ export default function ProRegistrationScreen() {
       // 3) Check if all uploads succeeded
       if (failedUploads.length > 0) {
         const failedList = failedUploads.join(", ");
-        const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer.`;
+        const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer l'inscription.`;
         console.error(`❌ Upload failures detected: ${failedList}`);
         Alert.alert("Erreur lors de l'envoi des documents", errorMsg);
         setSubmitting(false);
         setErrorMessage(errorMsg);
-        return; // Don't proceed to success screen
+        return; // ⚠️ Don't proceed to success screen if any upload fails
+      }
+
+      if (uploadResults.length === 0) {
+        const errorMsg = "Aucun document n'a été envoyé. Veuillez réessayer.";
+        console.error(`❌ No documents were uploaded (uploadResults is empty)`);
+        Alert.alert("Erreur", errorMsg);
+        setSubmitting(false);
+        setErrorMessage(errorMsg);
+        return;
       }
 
       console.log(`✅ All documents uploaded successfully! ${uploadResults.length} documents inserted.`);

@@ -15,55 +15,9 @@ import { Colors } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
-import { useYogaSessions } from "@/lib/yoga-sessions";
+import { useYogaSessions, useSessionEnrollments } from "@/lib/yoga-realtime";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
-
-// Fallback sessions for when database is unavailable
-const fallbackSessions = [
-  {
-    id: "s1",
-    name: "Hatha Flow Matinal",
-    level: "Débutant",
-    instructor: "Sara Bennani",
-    instructorImg:
-      "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "60 min",
-    price: 80,
-    date: "18 Avr. — 09h00",
-    spots: 4,
-    rating: 4.8,
-    img: "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-  {
-    id: "s2",
-    name: "Vinyasa Dynamique",
-    level: "Intermédiaire",
-    instructor: "Omar Tazi",
-    instructorImg:
-      "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "75 min",
-    price: 100,
-    date: "19 Avr. — 10h30",
-    spots: 2,
-    rating: 4.9,
-    img: "https://images.unsplash.com/photo-1667890785988-8da12fd0989b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-  {
-    id: "s3",
-    name: "Yin Yoga Profond",
-    level: "Tous niveaux",
-    instructor: "Nadia Filali",
-    instructorImg:
-      "https://images.unsplash.com/photo-1670191247079-f9713ae06dcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "90 min",
-    price: 90,
-    date: "20 Avr. — 18h00",
-    spots: 6,
-    rating: 4.7,
-    img: "https://images.unsplash.com/photo-1559185590-fcf099ac62c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-];
 
 export default function YogaCatalogScreen() {
   const router = useRouter();
@@ -72,29 +26,80 @@ export default function YogaCatalogScreen() {
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Tous");
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
 
-  // Only use database sessions - don't fall back to mock data
-  // (Mock data has invalid IDs for enrollment)
-  const sessions = yogaSessions.length > 0 
-    ? yogaSessions.map((s) => ({
-        id: s.id, // Keep UUID from database
-        name: s.title,
-        level: s.level || "Tous niveaux",
-        instructor: s.instructor,
-        instructorImg: "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-        duration: `${s.durationMin} min`,
-        price: s.priceMad,
-        date: new Date(s.startsAt).toLocaleDateString("fr-FR", { 
-          day: "2-digit", 
-          month: "short", 
-          hour: "2-digit", 
-          minute: "2-digit" 
-        }),
-        spots: s.capacity - s.enrolledCount,
-        rating: 4.8,
-        img: s.imageUrl || "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-      }))
-    : []; // Empty array, not fallback
+  // Load enrollment counts for all sessions
+  useEffect(() => {
+    if (!yogaSessions || yogaSessions.length === 0) return;
+
+    const loadEnrollments = async () => {
+      const counts: Record<string, number> = {};
+      for (const session of yogaSessions) {
+        const { count, error } = await supabase
+          .from("yoga_enrollments")
+          .select("*", { count: "exact", head: true })
+          .eq("session_id", session.id);
+        
+        if (!error) {
+          counts[session.id] = count ?? 0;
+        }
+      }
+      setEnrollmentCounts(counts);
+    };
+
+    loadEnrollments();
+
+    // Subscribe to enrollment changes
+    const channels = yogaSessions.map((session) => {
+      return supabase
+        .channel(`yoga_enrollments:${session.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "yoga_enrollments",
+            filter: `session_id=eq.${session.id}`,
+          },
+          () => {
+            loadEnrollments();
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      channels.forEach((channel) => supabase.removeChannel(channel));
+    };
+  }, [yogaSessions]);
+
+  // Transform sessions to display format
+  const sessions = yogaSessions.map((s) => {
+    const enrolled = enrollmentCounts[s.id] || 0;
+    const remaining = Math.max(0, s.capacity - enrolled);
+
+    return {
+      id: s.id,
+      name: s.title,
+      level: s.level || "Tous niveaux",
+      instructor: s.instructor_name || "Instructeur",
+      instructorImg: "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+      duration: `${s.duration_min || 60} min`,
+      price: s.price_mad,
+      date: new Date(s.starts_at).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      spots: remaining,
+      rating: 4.8,
+      img: s.image_url || "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+      enrolled,
+      capacity: s.capacity,
+      startsAt: s.starts_at,
+    };
+  });
 
   const filteredSessions = useMemo(() => {
     if (activeFilter === "Tous") return sessions;
@@ -109,16 +114,36 @@ export default function YogaCatalogScreen() {
 
     setLoadingSessionId(session.id);
     try {
-      // Check if already enrolled
-      const { data: existing } = await supabase
+      // Check if capacity is full
+      if (session.enrolled >= session.capacity) {
+        Alert.alert("Séance complète", "Toutes les places sont prises pour cette séance");
+        setLoadingSessionId(null);
+        return;
+      }
+
+      // Check if already enrolled (safer: use limit(1))
+      const { data: existingArr, error: existingErr } = await supabase
         .from("yoga_enrollments")
-        .select("*")
+        .select("session_id")
         .eq("session_id", session.id)
         .eq("patient_id", user.id)
-        .single();
+        .limit(1);
 
-      if (existing) {
+      if (existingErr) {
+        console.warn("Warning checking existing enrollment:", existingErr);
+      }
+      if (existingArr && existingArr.length > 0) {
         Alert.alert("Déjà inscrit", "Vous êtes déjà inscrit à cette séance de yoga");
+        // refresh counts for this session
+        try {
+          const { count } = await supabase
+            .from("yoga_enrollments")
+            .select("*", { count: "exact", head: true })
+            .eq("session_id", session.id);
+          setEnrollmentCounts((prev) => ({ ...prev, [session.id]: count ?? 0 }));
+        } catch (e) {
+          console.warn("Could not refresh enrollment count", e);
+        }
         setLoadingSessionId(null);
         return;
       }
@@ -136,47 +161,86 @@ export default function YogaCatalogScreen() {
         .single();
 
       if (enrollmentError) {
+        // Handle duplicate key (race condition) gracefully
+        const msg = enrollmentError.message || "";
+        const code = (enrollmentError.code || "").toString();
+        if (code === "23505" || msg.toLowerCase().includes("duplicate key")) {
+          Alert.alert("Déjà inscrit", "Vous êtes déjà inscrit à cette séance de yoga");
+          try {
+            const { count } = await supabase
+              .from("yoga_enrollments")
+              .select("*", { count: "exact", head: true })
+              .eq("session_id", session.id);
+            setEnrollmentCounts((prev) => ({ ...prev, [session.id]: count ?? 0 }));
+          } catch (e) {
+            console.warn("Could not refresh enrollment count", e);
+          }
+
+          setLoadingSessionId(null);
+          return;
+        }
         throw new Error(`Erreur lors de l'inscription: ${enrollmentError.message}`);
       }
 
-      // 2. Create booking for admin tracking
+      // refresh enrollment count after successful insert
+      try {
+        const { count } = await supabase
+          .from("yoga_enrollments")
+          .select("*", { count: "exact", head: true })
+          .eq("session_id", session.id);
+        setEnrollmentCounts((prev) => ({ ...prev, [session.id]: count ?? 0 }));
+      } catch (e) {
+        console.warn("Could not refresh enrollment count", e);
+      }
+
+      // 2. Create booking for admin tracking (optional, for bookings history)
+      const bookingData = {
+        patient_id: user.id,
+        professional_id: null,
+        specialty: "yoga_instructor",
+        status: "matched",
+        urgency: "normal" as const,
+        scheduled_at: (() => {
+          try {
+            const t = session.startsAt ? new Date(session.startsAt) : null;
+            if (t && !Number.isNaN(t.getTime())) return t.toISOString();
+            return new Date().toISOString();
+          } catch (e) {
+            return new Date().toISOString();
+          }
+        })(),
+        address: "Séance de yoga",
+        notes: `Séance: ${session.name}`,
+        budget_min_mad: session.price,
+        budget_max_mad: session.price,
+        final_price_mad: session.price,
+      };
+
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
-        .insert([
-          {
-            patient_id: user.id,
-            professional_id: null, // No professional for yoga
-            specialty: "yoga_instructor",
-            status: "matched",
-            urgency: "normal",
-            scheduled_at: session.date || new Date().toISOString(),
-            address: "Classe de yoga",
-            notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
-            budget_min_mad: session.price,
-            budget_max_mad: session.price,
-            final_price_mad: session.price,
-          },
-        ])
+        .insert([bookingData])
         .select()
         .single();
 
       if (bookingError) {
-        // Even if booking fails, enrollment succeeded
-        console.warn("Booking creation failed but enrollment succeeded:", bookingError);
+        // Log but don't fail - enrollment is what matters
+        console.warn("Warning: booking creation failed:", bookingError);
       }
 
       if (booking) {
-        // Notifier l'admin automatiquement
         await notifyAdminNewBooking(booking);
       }
 
       Alert.alert(
         "✅ Inscription confirmée!",
-        `Vous êtes inscrit à "${session.name}" avec ${session.instructor}.\n\nVous pouvez voir cette séance dans vos réservations.`,
+        `Vous êtes inscrit à "${session.name}".\n\nVous pouvez voir cette séance dans vos réservations.`,
         [
           {
             text: "Voir mes réservations",
-            onPress: () => router.push("/patient/bookings"),
+            onPress: () => {
+              setLoadingSessionId(null);
+              router.push("/patient/bookings");
+            },
           },
           {
             text: "Fermer",

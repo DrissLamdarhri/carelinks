@@ -46,13 +46,25 @@ export function ProfessionalsManager() {
   const [experienceFilter, setExperienceFilter] = useState<string>("all");
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfessionals();
     
-    // Subscribe to real-time changes on professionals table
+    // Subscribe to real-time changes on professionals table (INSERT + UPDATE)
     const subscription = supabase
       .channel('professionals_changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'professionals' },
+        (payload: any) => {
+          console.log('🆕 New professional registered:', payload.new);
+          // Show notification to admin
+          toast.success(`Nouvelle inscription: ${payload.new.specialty}`);
+          // Reload list to show new professional
+          setTimeout(() => loadProfessionals(), 500);
+        }
+      )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'professionals' },
@@ -304,6 +316,8 @@ export function ProfessionalsManager() {
 
       // Show success immediately (optimistic update succeeded and DB update confirmed)
       toast.success(`${target.full_name} a été approuvé(e)`);
+      setSuccessMessage(`${target.full_name} a été approuvé(e)`);
+      setTimeout(() => setSuccessMessage(null), 5000);
 
       // Send notification (non-blocking)
       try {
@@ -564,6 +578,23 @@ export function ProfessionalsManager() {
 
   return (
     <div>
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-4 p-3 rounded-lg flex items-center gap-2"
+            style={{ background: "#DCFCE7", borderLeft: "4px solid #16A34A" }}
+          >
+            <CheckCircle2 size={18} className="text-[#16A34A]" />
+            <span className="text-sm text-[#16A34A]" style={{ fontWeight: 500 }}>
+              {successMessage}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between mb-5">
         <div>
           <p className="text-sm text-[#888780]">{(professionals ?? []).length} professionnels inscrits</p>
@@ -941,39 +972,69 @@ export function ProfessionalsManager() {
                 </div>
 
                 <div className="mb-3">
-                  <p className="text-xs text-[#888780] mb-2" style={{ fontWeight: 600 }}>Documents</p>
+                  <p className="text-xs text-[#888780] mb-2" style={{ fontWeight: 600 }}>Documents requis</p>
                   {docsLoading ? (
                     <div className="flex items-center justify-center py-4">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0D0870]"></div>
                       <span className="ml-2 text-xs text-[#888780]">Chargement des documents...</span>
                     </div>
                   ) : proDocuments.length === 0 ? (
-                    <div style={{ background: "#F8F8FC", borderRadius: 12, padding: 12 }}>
-                      <p className="text-sm text-[#888780]">Aucun document téléchargé</p>
+                    <div style={{ background: "#FDE8E8", borderRadius: 12, padding: 12, border: "1px solid #F5D6D6" }}>
+                      <p className="text-sm text-[#E24B4A]" style={{ fontWeight: 600 }}>⚠️ Aucun document téléchargé</p>
+                      <p className="text-xs text-[#C24240] mt-1">Le professionnel doit soumettre ses documents pour validation.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-2">
-                      {proDocuments.map((d: any) => (
-                        <div key={d.id} style={{ background: "#F8F8FC", borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <p className="text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{d.doc_type}</p>
-                            <p className="text-xs text-[#888780]">{new Date(d.uploaded_at).toLocaleDateString("fr-FR")}</p>
+                    <div className="space-y-2">
+                      {proDocuments.map((d: any) => {
+                        const docIcon = d.doc_type === "diploma" ? "📄" : d.doc_type === "cin" ? "🪪" : "🤳";
+                        const isImage = d.doc_type === "cin" || d.doc_type === "selfie";
+                        const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
+                        const docUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
+                        
+                        return (
+                          <div key={d.id} className="relative" style={{ background: "#F8F8FC", borderRadius: 12, padding: 12, border: "1px solid #E0E0E0" }}>
+                            <div className="flex gap-3">
+                              {/* Preview thumbnail for images */}
+                              {isImage && (
+                                <div
+                                  className="w-12 h-12 rounded-lg flex-shrink-0 border border-[#E0E0E0] overflow-hidden bg-white flex items-center justify-center"
+                                >
+                                  <img 
+                                    src={docUrl} 
+                                    alt={d.doc_type} 
+                                    className="w-full h-full object-cover"
+                                    onError={() => console.error("Failed to load image:", docUrl)}
+                                  />
+                                </div>
+                              )}
+                              
+                              {/* Document info */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-lg">{docIcon}</span>
+                                  <p className="text-sm text-[#1A1A1A] font-semibold">
+                                    {d.doc_type === "diploma" ? "Diplôme" : d.doc_type === "cin" ? "Carte d'Identité" : "Photo d'Identité"}
+                                  </p>
+                                  {d.is_verified && (
+                                    <span className="inline-block px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#16A34A] text-xs font-semibold">✓ Vérifié</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-[#888780]">
+                                  Uploadé le {new Date(d.uploaded_at).toLocaleDateString("fr-FR", {day: "numeric", month: "long", year: "numeric"})}
+                                </p>
+                              </div>
+                              
+                              {/* Open button */}
+                              <button 
+                                onClick={() => window.open(docUrl, "_blank")}
+                                className="px-3 h-8 bg-[#0D0870] text-white rounded-lg text-[12px] font-semibold hover:opacity-90 flex-shrink-0 flex items-center gap-1"
+                              >
+                                <ExternalLink size={12} /> Voir
+                              </button>
+                            </div>
                           </div>
-                          <button onClick={async () => {
-                            try {
-                              // Bucket is public - use direct URL
-                              const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
-                              const directUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
-                              window.open(directUrl, "_blank");
-                            } catch (e) {
-                              console.error("Error opening doc:", e);
-                              toast.error("Erreur lors de l'ouverture du document");
-                            }
-                          }} className="inline-flex items-center gap-1.5 px-3 h-8 bg-[#0D0870] text-white rounded-xl text-[12px] hover:opacity-90" style={{ fontWeight: 600 }}>
-                            <FileText size={12} /> Ouvrir
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1015,24 +1076,32 @@ export function ProfessionalsManager() {
 
                 {selectedPro.verification_status === "pending" && (
                   <div className="flex gap-3 pt-4 border-t border-[#F0F0F0]">
-                    <button
-                      onClick={() => handleApprovePro(selectedPro)}
-                      disabled={actionLoading}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
-                      style={{ background: "#16A34A" }}
-                    >
-                      {actionLoading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          En cours...
-                        </>
-                      ) : (
-                        <>
-                          <Check size={16} />
-                          Approuver
-                        </>
+                    <div className="flex-1 relative group">
+                      <button
+                        onClick={() => handleApprovePro(selectedPro)}
+                        disabled={actionLoading || proDocuments.length === 0}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ background: proDocuments.length === 0 ? "#CCCCCC" : "#16A34A" }}
+                        title={proDocuments.length === 0 ? "Veuillez vérifier que les documents sont téléchargés" : ""}
+                      >
+                        {actionLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            En cours...
+                          </>
+                        ) : (
+                          <>
+                            <Check size={16} />
+                            Approuver
+                          </>
+                        )}
+                      </button>
+                      {proDocuments.length === 0 && (
+                        <div className="absolute bottom-full left-0 mb-2 w-max text-xs bg-gray-800 text-white px-2 py-1 rounded hidden group-hover:block whitespace-nowrap">
+                          Ajoutez les documents avant d'approuver
+                        </div>
                       )}
-                    </button>
+                    </div>
                     <button
                       onClick={() => setShowRejectModal(true)}
                       disabled={actionLoading}
