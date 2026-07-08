@@ -80,6 +80,8 @@ const DICT: Record<Locale, Record<string, string>> = {
     pro_not_found: "لم يتم العثور على حساب مهني. يرجى التسجيل أولاً.",
     pro_not_verified: "لم يتم التحقق من حسابك بعد. أكمل التسجيل.",
     first_name: "الاسم الشخصي", last_name: "الاسم العائلي", confirm_password: "تأكيد كلمة المرور", create_my_account: "إنشاء حسابي",
+    hello: "مرحبا 👋", what_care: "ما الرعاية التي تبحث عنها؟", choose_service: "اختر خدمتك",
+    request_care_now: "اطلب رعاية الآن", next_appointment: "الموعد القادم", confirmed: "مؤكد", see_all: "عرض الكل",
   },
   fr: {
     welcome: "Bienvenue", booking: "Réservation", bookings_mine: "Mes réservations", new_request: "Nouvelle demande",
@@ -115,6 +117,8 @@ const DICT: Record<Locale, Record<string, string>> = {
     pro_not_found: "Compte professionnel non trouvé. Veuillez d'abord vous inscrire.",
     pro_not_verified: "Votre compte n'est pas encore vérifié. Complétez l'inscription.",
     first_name: "Prénom", last_name: "Nom", confirm_password: "Confirmer mot de passe", create_my_account: "Créer mon compte",
+    hello: "Bonjour 👋", what_care: "Quel soin recherchez-vous ?", choose_service: "Choisissez votre service",
+    request_care_now: "Demander un soin maintenant", next_appointment: "Prochain rendez-vous", confirmed: "Confirmé", see_all: "Voir tout",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",
