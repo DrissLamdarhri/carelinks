@@ -276,7 +276,15 @@ export default function PaymentScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => router.replace("/patient/bookings")}>
+                <TouchableOpacity
+                  style={s.cta}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    router.replace(
+                      bookingId ? `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}` : "/patient/bookings"
+                    )
+                  }
+                >
                   <Text style={s.ctaTxt}>{t("see_my_bookings")}</Text>
                 </TouchableOpacity>
               </>
