@@ -179,7 +179,7 @@ export default function RegistrationScreen() {
           </View>
         </View>
 
-        <Text style={styles.label}>Téléphone</Text>
+        <Text style={styles.label}>{t("phone")}</Text>
         <View style={styles.phoneWrap}>
           <Text style={styles.country}>+212</Text>
           <TextInput
@@ -192,7 +192,7 @@ export default function RegistrationScreen() {
           />
         </View>
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>{t("email")}</Text>
         <View style={styles.inputWrap}>
           <Mail size={16} color={Colors.textMuted} />
           <TextInput
@@ -206,7 +206,7 @@ export default function RegistrationScreen() {
           />
         </View>
 
-        <Text style={styles.label}>Ville</Text>
+        <Text style={styles.label}>{t("city")}</Text>
         <View style={styles.inputWrap}>
           <MapPin size={16} color={Colors.textMuted} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -227,14 +227,14 @@ export default function RegistrationScreen() {
           </ScrollView>
         </View>
 
-        <Text style={styles.label}>Mot de passe</Text>
+        <Text style={styles.label}>{t("password")}</Text>
         <View style={styles.inputWrap}>
           <Lock size={16} color={Colors.textMuted} />
           <TextInput
             value={password}
             onChangeText={setPassword}
             style={styles.input}
-            placeholder="Min. 6 caractères"
+            placeholder={t("min_6_chars")}
             secureTextEntry={!showPassword}
             placeholderTextColor={Colors.textSubtle}
           />
@@ -266,7 +266,7 @@ export default function RegistrationScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.label}>Confirmer le mot de passe</Text>
+        <Text style={styles.label}>{t("confirm_password")}</Text>
         <View style={styles.inputWrap}>
           <Lock size={16} color={Colors.textMuted} />
           <TextInput
@@ -280,7 +280,7 @@ export default function RegistrationScreen() {
           {confirm.length > 0 && confirm === password ? <CheckCircle2 size={18} color={Colors.primary} /> : null}
         </View>
 
-        {confirm.length > 0 && confirm !== password ? <Text style={styles.mismatch}>Les mots de passe ne correspondent pas</Text> : null}
+        {confirm.length > 0 && confirm !== password ? <Text style={styles.mismatch}>{t("passwords_no_match")}</Text> : null}
 
         <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed((v) => !v)}>
           <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
@@ -301,7 +301,7 @@ export default function RegistrationScreen() {
             <ActivityIndicator size="small" color="white" />
           ) : (
             <>
-              <Text style={styles.submitText}>Créer mon compte</Text>
+              <Text style={styles.submitText}>{t("create_my_account")}</Text>
               <ChevronRight size={18} color="white" />
             </>
           )}

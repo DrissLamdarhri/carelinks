@@ -157,7 +157,7 @@ export default function ProProfileInfosScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Profil professionnel</Text>
+        <Text style={styles.title}>{t("pro_profile")}</Text>
       </View>
 
       {loading ? (
@@ -187,11 +187,11 @@ export default function ProProfileInfosScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarHint}>Appuyez pour changer votre photo</Text>
+            <Text style={styles.avatarHint}>{t("tap_change_photo")}</Text>
           </View>
 
           <View style={styles.card}>
-          <Text style={styles.label}>Prénom</Text>
+          <Text style={styles.label}>{t("first_name")}</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
             <TextInput
@@ -212,7 +212,7 @@ export default function ProProfileInfosScreen() {
             style={styles.simpleInput}
           />
 
-          <Text style={styles.label}>Téléphone</Text>
+          <Text style={styles.label}>{t("phone")}</Text>
           <View style={styles.inputWrap}>
             <Phone size={16} color={Colors.textMuted} />
             <TextInput
@@ -225,7 +225,7 @@ export default function ProProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Ville</Text>
+          <Text style={styles.label}>{t("city")}</Text>
           <View style={styles.inputWrap}>
             <MapPin size={16} color={Colors.textMuted} />
             <TextInput
@@ -237,10 +237,10 @@ export default function ProProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t("email")}</Text>
           <TextInput value={email} editable={false} style={styles.simpleInputMuted} />
 
-          <Text style={styles.label}>Spécialité</Text>
+          <Text style={styles.label}>{t("specialty")}</Text>
           <View style={styles.chipsRow}>
             {specialtyOptions.map((option) => {
               const active = specialty === option.value;
@@ -256,7 +256,7 @@ export default function ProProfileInfosScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Années d'expérience</Text>
+          <Text style={styles.label}>{t("years_experience_lbl")}</Text>
           <TextInput
             value={experience}
             onChangeText={setExperience}
@@ -265,13 +265,13 @@ export default function ProProfileInfosScreen() {
             keyboardType="numeric"
             style={styles.simpleInput}
           />
-          {!isExperienceValid ? <Text style={styles.errorText}>Veuillez entrer un nombre valide.</Text> : null}
+          {!isExperienceValid ? <Text style={styles.errorText}>{t("enter_valid_number")}</Text> : null}
 
           <Text style={styles.label}>Bio</Text>
           <TextInput
             value={bio}
             onChangeText={setBio}
-            placeholder="Présentez votre expérience..."
+            placeholder={t("describe_experience_ph")}
             placeholderTextColor={Colors.textSubtle}
             style={styles.textArea}
             multiline
@@ -283,7 +283,7 @@ export default function ProProfileInfosScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || loading}>
-        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Enregistrer</Text>}
+        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("save")}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
