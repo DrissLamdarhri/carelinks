@@ -20,20 +20,21 @@ the patient accepts a bid, then gets live tracking, chat, payment, and rating. P
 
 **Supabase project ref:** `wjhzrovmktekfcjohhrw`. Edge Function base path: `make-server-aa5d1aa6`.
 
-## Backend: Postgres is the single source of truth (KV is legacy demo-only)
+## Backend: one source of truth — Postgres
 
-**Path B — Direct Postgres tables** is the production backend and is now used by
-**everything real**: the **mobile app** (the product) and the **web admin panel**.
-A typed DAL (`mobile-app/lib/db/dal.ts`, `src/lib/db/dal.ts`) reads/writes relational
-tables (`bookings`, `bids`, `payments`, …) under RLS, with Supabase Realtime for live
-updates. **Build here.**
+The **entire product runs on direct Postgres tables** under RLS + Realtime: the
+**mobile app** (the product) and the **web admin panel** (`/admin`). A typed DAL
+(`mobile-app/lib/db/dal.ts`, `src/lib/db/dal.ts`) reads/writes relational tables
+(`bookings`, `bids`, `payments`, `professionals`, …). **Build here.**
 
-**Path A — KV Edge Function** (`make-server-aa5d1aa6`, `supabase/functions/server/index.tsx`,
-blobs in `kv_store_aa5d1aa6`) is the **Figma-Make demo backend — LEGACY**. It is no longer
-used by mobile or by the web admin. Its **only** remaining caller is the web *"iPhone preview"*
-patient/pro **demo** (`src/app` routes `/app/*`, `/nurse/*`, via the non-admin functions in
-`src/lib/api.ts`). When that demo is retired, delete the function + the `kv_store_aa5d1aa6`
-table. **Do not build new features on Path A.** Details: [`docs/architecture.md`](docs/architecture.md).
+The old **Figma-Make KV edge function** (`make-server-aa5d1aa6`) + its
+`kv_store_aa5d1aa6` blob table + the web "iPhone preview" patient/pro demo have
+been **retired** — there is no second backend. The only edge functions left are
+`send-approval-email` / `send-rejection-email`. Details: [`docs/architecture.md`](docs/architecture.md).
+
+> One leftover cleanup on the Supabase side: the deployed `server` function + the
+> `kv_store_aa5d1aa6` table still physically exist in the project — drop them when
+> convenient (`supabase functions delete server`; `drop table kv_store_aa5d1aa6;`).
 
 ## Commands
 
