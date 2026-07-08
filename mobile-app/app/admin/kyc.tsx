@@ -203,19 +203,19 @@ export default function KycModerationQueueScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.proName}>{item.profile?.full_name ?? "Professionnel"}</Text>
                 <Text style={styles.proMeta}>
-                  {item.professional.specialty} · {item.profile?.city ?? "Ville non définie"}
+                  {item.professional.specialty} · {item.profile?.city ?? t("city_undefined")}
                 </Text>
               </View>
             </View>
 
             {item.documents.length === 0 ? (
-              <Text style={styles.emptyDocText}>Aucun document téléversé.</Text>
+              <Text style={styles.emptyDocText}>{t("no_doc_uploaded")}</Text>
             ) : (
               item.documents.map((doc) => (
                 <View key={doc.id} style={styles.docRow}>
                   <TouchableOpacity onPress={() => openDocument(doc.storage_path)} style={styles.docLink}>
                     <Text style={styles.docLabel}>{doc.doc_type}</Text>
-                    <Text style={styles.docPath}>Prévisualiser</Text>
+                    <Text style={styles.docPath}>{t("preview")}</Text>
                   </TouchableOpacity>
 
                   <View style={styles.actions}>

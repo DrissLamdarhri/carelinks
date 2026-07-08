@@ -12,10 +12,10 @@ import type { ProSpecialty, VerificationStatus } from "@/lib/db/types";
 const NAVY = "#0D0870";
 
 const SPEC_LABEL: Record<string, string> = {
-  nurse: "Soins infirmiers",
-  physiotherapist: "Kinésithérapie",
-  psychologist: "Psychologie",
-  yoga_instructor: "Yoga",
+  nurse: "spec_nurse",
+  physiotherapist: "spec_physio",
+  psychologist: "spec_psy",
+  yoga_instructor: "spec_yoga",
 };
 
 type LiveBookingsFeedProps = { specialty: ProSpecialty };
@@ -49,7 +49,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
     }
     const n = Number(amount);
     if (!Number.isFinite(n) || n < 50) {
-      setErrorMessage("Montant minimum 50 MAD.");
+      setErrorMessage(t("min_amount_50"));
       return;
     }
     setErrorMessage(null);
@@ -122,7 +122,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.title}>{t("care_request")}</Text>
-                <Text style={styles.subtitle}>{SPEC_LABEL[booking.specialty] ?? "Nouveau patient"}</Text>
+                <Text style={styles.subtitle}>{SPEC_LABEL[booking.specialty] ? t(SPEC_LABEL[booking.specialty]) : t("new_patient")}</Text>
               </View>
               <View style={styles.priceBadge}>
                 <Text style={styles.priceVal}>
@@ -135,7 +135,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
             {urgent ? (
               <View style={styles.urgent}>
                 <Zap size={12} color="#E24B4A" fill="#E24B4A" />
-                <Text style={styles.urgentTxt}>Urgent</Text>
+                <Text style={styles.urgentTxt}>{t("urgent")}</Text>
               </View>
             ) : null}
 

@@ -279,12 +279,12 @@ export default function ProTrackingScreen() {
 
         {status === "matched" ? (
           <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("in_progress", t("mission_started"))}>
-            <Text style={s.statusTxt}>Démarrer la mission</Text>
+            <Text style={s.statusTxt}>{t("start_mission")}</Text>
           </TouchableOpacity>
         ) : status === "in_progress" ? (
-          <TouchableOpacity style={[s.statusBtn, s.statusDone]} disabled={busy} onPress={() => advance("completed", "Mission terminée")}>
+          <TouchableOpacity style={[s.statusBtn, s.statusDone]} disabled={busy} onPress={() => advance("completed", t("mission_completed"))}>
             <CheckCircle2 size={18} color="#FFFFFF" />
-            <Text style={s.statusTxt}>Terminer la mission</Text>
+            <Text style={s.statusTxt}>{t("end_mission")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>

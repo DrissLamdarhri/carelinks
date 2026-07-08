@@ -102,7 +102,7 @@ export default function ProHomeScreen() {
   const toggleOnline = async () => {
     if (!user?.id || busy) return;
     if (!specialty) {
-      showToast("Choisissez d'abord votre spécialité");
+      showToast(t("choose_specialty_first"));
       router.push("/pro/bids");
       return;
     }
@@ -113,13 +113,13 @@ export default function ProHomeScreen() {
         const coords = await geo.getCurrentPosition();
         await db.pros.upsert({ id: user.id, specialty, is_available: true });
         await geo.setProLocation(user.id, coords.lat, coords.lng);
-        showToast("Vous êtes en ligne — visible par les patients");
+        showToast(t("you_online_visible"));
       } else {
         await db.pros.upsert({ id: user.id, specialty, is_available: false });
       }
       setIsOnline(next);
     } catch {
-      showToast("Action impossible");
+      showToast(t("action_failed"));
     } finally {
       setBusy(false);
     }
@@ -154,7 +154,7 @@ export default function ProHomeScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.onlineTitle}>{isOnline ? "En ligne" : "Hors ligne"}</Text>
             <Text style={styles.onlineSub}>
-              {isOnline ? "Vous recevez des demandes près de vous" : "Activez pour recevoir des demandes"}
+              {isOnline ? t("you_receive_nearby") : "Activez pour recevoir des demandes"}
             </Text>
           </View>
           <View style={[styles.switchTrack, isOnline && styles.switchTrackOn]}>

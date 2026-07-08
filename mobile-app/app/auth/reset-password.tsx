@@ -107,7 +107,7 @@ export default function ResetPasswordScreen() {
         <Lock size={26} color={Colors.primary} />
       </View>
       <Text style={s.title}>{t("new_password")}</Text>
-      <Text style={s.sub}>Choisissez un mot de passe d&apos;au moins 6 caractères.</Text>
+      <Text style={s.sub}>{t("password_min_6")}</Text>
 
       <View style={s.field}>
         <Lock size={18} color={Colors.textMuted} />
@@ -139,7 +139,7 @@ export default function ResetPasswordScreen() {
       {error ? <Text style={s.error}>{error}</Text> : null}
 
       <TouchableOpacity style={[s.primaryBtn, !valid && { opacity: 0.5 }]} disabled={!valid || submitting} onPress={submit}>
-        {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.primaryTxt}>Mettre à jour</Text>}
+        {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.primaryTxt}>{t("update_action")}</Text>}
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );

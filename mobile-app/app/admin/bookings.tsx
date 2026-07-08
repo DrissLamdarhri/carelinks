@@ -258,7 +258,7 @@ export default function AdminBookingsScreen() {
         </View>
         <View style={[styles.statCard, styles.statCardSpan]}>
           <Text style={[styles.statValue, { color: "#0284C7" }]}>{stats.today}</Text>
-          <Text style={styles.statLabel}>Aujourd'hui</Text>
+          <Text style={styles.statLabel}>{t("today")}</Text>
         </View>
       </View>
 
@@ -317,7 +317,7 @@ export default function AdminBookingsScreen() {
       ) : filteredBookings.length === 0 ? (
         <View style={styles.emptyState}>
           <Calendar size={40} color={Colors.textMuted} />
-          <Text style={styles.emptyStateText}>Aucune réservation</Text>
+          <Text style={styles.emptyStateText}>{t("no_bookings")}</Text>
           <Text style={styles.emptyStateSubtext}>
             Les réservations apparaîtront ici automatiquement
           </Text>
