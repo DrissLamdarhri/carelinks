@@ -234,7 +234,7 @@ export default function PatientProfileInfosScreen() {
             style={styles.simpleInput}
           />
 
-          <Text style={styles.label}>Téléphone</Text>
+          <Text style={styles.label}>{t("phone")}</Text>
           <View style={styles.inputWrap}>
             <Phone size={16} color={Colors.textMuted} />
             <TextInput
@@ -247,7 +247,7 @@ export default function PatientProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Ville</Text>
+          <Text style={styles.label}>{t("city")}</Text>
           <View style={styles.inputWrap}>
             <MapPin size={16} color={Colors.textMuted} />
             <TextInput
@@ -259,10 +259,10 @@ export default function PatientProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t("email")}</Text>
           <TextInput value={email} editable={false} style={styles.simpleInputMuted} />
 
-          <Text style={styles.label}>Date de naissance</Text>
+          <Text style={styles.label}>{t("birthdate")}</Text>
           <View style={styles.inputWrap}>
             <Calendar size={16} color={Colors.textMuted} />
             <TextInput
@@ -273,9 +273,9 @@ export default function PatientProfileInfosScreen() {
               style={styles.input}
             />
           </View>
-          {!validDob ? <Text style={styles.errorText}>Format attendu : YYYY-MM-DD.</Text> : null}
+          {!validDob ? <Text style={styles.errorText}>{t("date_format_hint")}</Text> : null}
 
-          <Text style={styles.label}>Genre</Text>
+          <Text style={styles.label}>{t("gender")}</Text>
           <View style={styles.chipsRow}>
             {genderOptions.map((option) => {
               const active = gender === option.value;
@@ -296,7 +296,7 @@ export default function PatientProfileInfosScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || loading}>
-        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Enregistrer</Text>}
+        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("save")}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );

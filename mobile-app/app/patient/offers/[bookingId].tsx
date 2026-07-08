@@ -247,7 +247,7 @@ export default function NurseOffersScreen() {
         {loading ? (
           <View style={styles.loadingRow}>
             <Loader2 size={15} color={Colors.textMuted} />
-            <Text style={styles.countText}>Chargement des offres…</Text>
+            <Text style={styles.countText}>{t("loading_offers")}</Text>
           </View>
         ) : (
           <Text style={styles.countText}>
@@ -265,8 +265,8 @@ export default function NurseOffersScreen() {
             <View style={styles.emptyIcon}>
               <Clock3 size={24} color={Colors.textSubtle} />
             </View>
-            <Text style={styles.emptyTitle}>Aucune offre pour le moment</Text>
-            <Text style={styles.emptyText}>Les professionnels consultent votre demande…</Text>
+            <Text style={styles.emptyTitle}>{t("no_offers_yet")}</Text>
+            <Text style={styles.emptyText}>{t("pros_reviewing")}</Text>
           </View>
         ) : null}
 
@@ -283,7 +283,7 @@ export default function NurseOffersScreen() {
                 {!isCounterOffer ? (
                   <>
                     <CheckCircle size={12} color={Colors.primary} />
-                    <Text style={styles.bannerAcceptText}>Accepte votre prix</Text>
+                    <Text style={styles.bannerAcceptText}>{t("accepts_your_price")}</Text>
                   </>
                 ) : (
                   <Text style={styles.bannerCounterText}>
@@ -351,7 +351,7 @@ export default function NurseOffersScreen() {
                     ) : (
                       <>
                         <CheckCircle size={15} color="white" />
-                        <Text style={styles.acceptBtnText}>Accepter</Text>
+                        <Text style={styles.acceptBtnText}>{t("accept")}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -364,7 +364,7 @@ export default function NurseOffersScreen() {
                     {actionId === `${offer.id}:reject` ? (
                       <ActivityIndicator size="small" color={Colors.textMuted} />
                     ) : (
-                      <Text style={styles.rejectBtnText}>Refuser</Text>
+                      <Text style={styles.rejectBtnText}>{t("reject")}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -385,7 +385,7 @@ export default function NurseOffersScreen() {
           }}
           style={styles.footerBtn}
         >
-          <Text style={styles.footerBtnText}>Modifier mon prix</Text>
+          <Text style={styles.footerBtnText}>{t("edit_my_price")}</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -133,7 +133,7 @@ export default function ProEarningsScreen() {
             ) : (
               <>
                 <Text style={s.walletActionLbl}>{t("action")}</Text>
-                <View style={s.walletActionRow}><ArrowUpRight size={15} color={NAVY} strokeWidth={2.4} /><Text style={s.walletActionTxt}>Retirer</Text></View>
+                <View style={s.walletActionRow}><ArrowUpRight size={15} color={NAVY} strokeWidth={2.4} /><Text style={s.walletActionTxt}>{t("withdraw_short")}</Text></View>
               </>
             )}
           </TouchableOpacity>
@@ -146,21 +146,21 @@ export default function ProEarningsScreen() {
         <View style={s.statCard}>
           <CheckCircle2 size={17} color={NAVY} />
           <Text style={s.statVal}>{captured.length}</Text>
-          <Text style={s.statLbl}>Prestations payées</Text>
+          <Text style={s.statLbl}>{t("paid_services")}</Text>
         </View>
         <View style={s.statCard}>
           <ArrowUpRight size={17} color={GREEN} />
           <Text style={s.statVal}>{earned} MAD</Text>
-          <Text style={s.statLbl}>Total gagné (net)</Text>
+          <Text style={s.statLbl}>{t("total_earned_net")}</Text>
         </View>
       </View>
 
       {/* Movements */}
-      <Text style={s.sectionTitle}>Mouvements du portefeuille</Text>
+      <Text style={s.sectionTitle}>{t("wallet_movements")}</Text>
       {movements.length === 0 ? (
         <View style={s.emptyCard}>
-          <Text style={s.emptyTxt}>Aucun mouvement pour l'instant.</Text>
-          <Text style={s.emptySub}>Vos prestations payées apparaîtront ici.</Text>
+          <Text style={s.emptyTxt}>{t("no_movements")}</Text>
+          <Text style={s.emptySub}>{t("paid_services_hint")}</Text>
         </View>
       ) : (
         movements.map((m) => {

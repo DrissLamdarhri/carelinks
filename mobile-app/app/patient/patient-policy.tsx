@@ -123,13 +123,13 @@ export default function PatientPolicyScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Consentements</Text>
+            <Text style={styles.sectionTitle}>{t("consents")}</Text>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Partage des données médicales</Text>
-                  <Text style={styles.helper}>Autoriser les professionnels à accéder à votre dossier.</Text>
+                  <Text style={styles.label}>{t("share_medical_data")}</Text>
+                  <Text style={styles.helper}>{t("allow_pro_access")}</Text>
                 </View>
               </View>
               <Switch
@@ -143,8 +143,8 @@ export default function PatientPolicyScreen() {
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Rappels et notifications</Text>
-                  <Text style={styles.helper}>Recevoir des rappels de rendez-vous et soins.</Text>
+                  <Text style={styles.label}>{t("reminders_notifications")}</Text>
+                  <Text style={styles.helper}>{t("receive_reminders")}</Text>
                 </View>
               </View>
               <Switch
@@ -158,7 +158,7 @@ export default function PatientPolicyScreen() {
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Analyse anonyme</Text>
+                  <Text style={styles.label}>{t("anonymous_analytics")}</Text>
                   <Text style={styles.helper}>Aider à améliorer CareLink sans données identifiantes.</Text>
                 </View>
               </View>
@@ -176,7 +176,7 @@ export default function PatientPolicyScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || loading}>
-        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Accepter & enregistrer</Text>}
+        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("accept_and_save")}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );

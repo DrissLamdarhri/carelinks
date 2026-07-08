@@ -357,7 +357,7 @@ import { useI18n } from "@/lib/i18n";
 //               onPress={() => void Linking.openURL(`tel:${proPhone}`)}
 //             >
 //               <Phone size={18} color={Colors.primary} />
-//               <Text style={styles.secondaryBtnText}>Appeler</Text>
+//               <Text style={styles.secondaryBtnText}>{t("call")}</Text>
 //             </TouchableOpacity>
 //           ) : null}
 
@@ -366,7 +366,7 @@ import { useI18n } from "@/lib/i18n";
 //             onPress={() => { if (bookingId) router.push(`/patient/chat/${bookingId}`); }}
 //           >
 //             <MessageCircle size={18} color={Colors.primary} />
-//             <Text style={styles.secondaryBtnText}>Message</Text>
+//             <Text style={styles.secondaryBtnText}>{t("message_action")}</Text>
 //           </TouchableOpacity>
 
 //           {arrived && (
@@ -374,7 +374,7 @@ import { useI18n } from "@/lib/i18n";
 //               style={styles.completeBtn}
 //               onPress={() => { if (bookingId) router.replace(`/patient/rating/${bookingId}`); }}
 //             >
-//               <Text style={styles.completeBtnText}>Terminer</Text>
+//               <Text style={styles.completeBtnText}>{t("finish")}</Text>
 //             </TouchableOpacity>
 //           )}
 //         </View>
@@ -382,7 +382,7 @@ import { useI18n } from "@/lib/i18n";
 //         {loading && (
 //           <View style={styles.loadingRow}>
 //             <ActivityIndicator size="small" color={Colors.primary} />
-//             <Text style={styles.loadingText}>Mise à jour du trajet…</Text>
+//             <Text style={styles.loadingText}>{t("updating_route")}</Text>
 //           </View>
 //         )}
 //         {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
@@ -1120,7 +1120,7 @@ export default function LiveTrackingScreen() {
               }}
             >
               <Phone size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>Appeler</Text>
+              <Text style={s.actionTxt}>{t("call")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1133,7 +1133,7 @@ export default function LiveTrackingScreen() {
               }
             >
               <Share2 size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>Partager</Text>
+              <Text style={s.actionTxt}>{t("share")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1144,7 +1144,7 @@ export default function LiveTrackingScreen() {
               onPress={() => { if (bookingId) router.push(`/patient/chat/${bookingId}`); }}
             >
               <MessageCircle size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>Message</Text>
+              <Text style={s.actionTxt}>{t("message_action")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1154,14 +1154,14 @@ export default function LiveTrackingScreen() {
               style={s.completeBtn}
               onPress={() => { if (bookingId) router.replace(`/patient/rating/${bookingId}`); }}
             >
-              <Text style={s.completeTxt}>Terminer la session</Text>
+              <Text style={s.completeTxt}>{t("end_session")}</Text>
             </TouchableOpacity>
           )}
 
           {loading && (
             <View style={s.loadRow}>
               <ActivityIndicator size="small" color={NAVY} />
-              <Text style={s.loadTxt}>Mise à jour…</Text>
+              <Text style={s.loadTxt}>{t("updating")}</Text>
             </View>
           )}
           {errorMsg ? <Text style={s.errTxt}>{errorMsg}</Text> : null}
