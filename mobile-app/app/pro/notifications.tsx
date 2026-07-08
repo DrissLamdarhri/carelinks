@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 
 type Notif = {
   id: string;
@@ -62,6 +63,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function ProNotificationsScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [items, setItems] = useState<Notif[]>([]);
@@ -123,13 +125,13 @@ export default function ProNotificationsScreen() {
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={s.title}>Notifications</Text>
+          <Text style={s.title}>{t("notifications")}</Text>
           {unread > 0 ? <Text style={s.sub}>{unread} non lue{unread > 1 ? "s" : ""}</Text> : null}
         </View>
         {unread > 0 ? (
           <TouchableOpacity style={s.markAll} onPress={markAllRead}>
             <CheckCheck size={15} color={Colors.primary} />
-            <Text style={s.markAllTxt}>Tout lire</Text>
+            <Text style={s.markAllTxt}>{t("mark_all_read")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -139,7 +141,7 @@ export default function ProNotificationsScreen() {
       ) : items.length === 0 ? (
         <View style={s.center}>
           <Bell size={34} color={Colors.textSubtle} />
-          <Text style={s.emptyTxt}>Aucune notification pour le moment.</Text>
+          <Text style={s.emptyTxt}>{t("no_notifications")}</Text>
         </View>
       ) : (
         <ScrollView

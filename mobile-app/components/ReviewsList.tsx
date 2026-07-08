@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 
 type ReviewsListProps = {
@@ -21,6 +22,7 @@ type ReviewItem = RatingRow & {
 };
 
 export function ReviewsList({ professionalId }: ReviewsListProps) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
 
@@ -63,7 +65,7 @@ export function ReviewsList({ professionalId }: ReviewsListProps) {
           }))
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Impossible de charger les avis.";
+        const message = error instanceof Error ? error.message : t("cannot_load_reviews");
         Alert.alert("Erreur", message);
       } finally {
         if (active) setLoading(false);
@@ -92,7 +94,7 @@ export function ReviewsList({ professionalId }: ReviewsListProps) {
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text style={styles.headTitle}>Avis patients</Text>
+        <Text style={styles.headTitle}>{t("patient_reviews")}</Text>
         <View style={styles.averageWrap}>
           <Star size={14} color="#FBBF24" fill="#FBBF24" />
           <Text style={styles.averageText}>
@@ -102,7 +104,7 @@ export function ReviewsList({ professionalId }: ReviewsListProps) {
       </View>
 
       {reviews.length === 0 ? (
-        <Text style={styles.emptyText}>Aucun avis pour le moment.</Text>
+        <Text style={styles.emptyText}>{t("no_reviews")}</Text>
       ) : (
         <ScrollView style={styles.list} contentContainerStyle={{ gap: 10 }}>
           {reviews.map((review) => (
@@ -124,7 +126,7 @@ export function ReviewsList({ professionalId }: ReviewsListProps) {
                 ))}
               </View>
               <Text style={styles.commentText}>
-                {review.comment?.trim() || "Aucun commentaire."}
+                {review.comment?.trim() || t("no_comment")}
               </Text>
             </View>
           ))}

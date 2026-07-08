@@ -33,6 +33,7 @@ import {
   X,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
@@ -58,6 +59,7 @@ const infirmierServices = ["Pansement", "Injection", "Perfusion", "Bilan sanguin
 const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Traitement de l'arthrose", "Drainage lymphatique", "Traumatologie"];
 
 export default function ProRegistrationScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { signUpWithEmail } = useAuth();
   const [step, setStep] = useState(0);
@@ -168,7 +170,7 @@ export default function ProRegistrationScreen() {
         setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: "image/jpeg" }]);
         setSelfie(true);
         setSelfieUrl(photo.uri);
-        showToast("Selfie ajouté (upload après inscription)");
+        showToast(t("selfie_added"));
       } else {
         const doc = await usePickDocument();
         if (!doc) { setUploading(null); return; }
@@ -180,7 +182,7 @@ export default function ProRegistrationScreen() {
           setCin(true);
           setCinUrl(doc.uri);
         }
-        showToast("Document ajouté (upload après inscription)");
+        showToast(t("document_added"));
       }
 
       // Trigger OCR check if diploma and CIN are both present locally
@@ -195,7 +197,7 @@ export default function ProRegistrationScreen() {
       }
     } catch (error) {
       console.error("handleUpload error:", error);
-      showToast("Erreur lors de la sélection du document");
+      showToast(t("doc_pick_error"));
     } finally {
       setUploading(null);
     }
@@ -251,7 +253,7 @@ export default function ProRegistrationScreen() {
       const failedUploads: string[] = [];
 
       for (const pending of pendingUploads) {
-        const docLabel = pending.type === "diploma" ? getDiplomaTitle() : pending.type === "cin" ? "CIN" : "Selfie";
+        const docLabel = pending.type === "diploma" ? getDiplomaTitle() : pending.type === "cin" ? "CIN" : t("verification_selfie");
         console.log(`🔄 Uploading ${pending.type} (${docLabel})...`);
          
         try {
@@ -317,7 +319,7 @@ export default function ProRegistrationScreen() {
         const failedList = failedUploads.join(", ");
         const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer l'inscription.`;
         console.error(`❌ Upload failures detected: ${failedList}`);
-        Alert.alert("Erreur lors de l'envoi des documents", errorMsg);
+        Alert.alert(t("doc_upload_error"), errorMsg);
         setSubmitting(false);
         setErrorMessage(errorMsg);
         return; // ⚠️ Don't proceed to success screen if any upload fails
@@ -335,7 +337,7 @@ export default function ProRegistrationScreen() {
       console.log(`✅ All documents uploaded successfully! ${uploadResults.length} documents inserted.`);
       setSubmitted(true);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Erreur lors de l'inscription.";
+      const msg = error instanceof Error ? error.message : t("signup_error");
       console.error("Signup error:", msg);
       setErrorMessage(msg);
       Alert.alert("Erreur", msg);
@@ -350,18 +352,18 @@ export default function ProRegistrationScreen() {
         <View style={styles.successIconWrap}>
           <CheckCircle2 size={50} color={Colors.primary} />
         </View>
-        <Text style={styles.successTitle}>Demande envoyée !</Text>
+        <Text style={styles.successTitle}>{t("request_sent_excl")}</Text>
         <Text style={styles.successSubtitle}>
           Votre dossier est en cours de vérification. Vous recevrez une notification après validation.
         </Text>
         <View style={styles.successList}>
-          <SuccessRow label="Informations personnelles" ok />
-          <SuccessRow label="Documents vérifiés" ok />
-          <SuccessRow label="Validation admin" loading />
-          <SuccessRow label="Activation du compte" />
+          <SuccessRow label={t("step_personal_info")} ok />
+          <SuccessRow label={t("docs_verified")} ok />
+          <SuccessRow label={t("admin_validation")} loading />
+          <SuccessRow label={t("account_activation")} />
         </View>
         <TouchableOpacity style={styles.successBtn} onPress={() => router.replace("/auth/pro-login")}>
-          <Text style={styles.successBtnText}>Retour à la connexion</Text>
+          <Text style={styles.successBtnText}>{t("back_to_login")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -377,7 +379,7 @@ export default function ProRegistrationScreen() {
           >
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Inscription Professionnel</Text>
+          <Text style={styles.headerTitle}>{t("pro_registration_title")}</Text>
           <Text style={styles.stepBadge}>
             {step + 1}/{totalSteps}
           </Text>
@@ -394,8 +396,8 @@ export default function ProRegistrationScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {step === 0 ? (
           <View>
-            <Text style={styles.bigTitle}>Vos informations</Text>
-            <Text style={styles.bigSubtitle}>Renseignez vos coordonnées professionnelles</Text>
+            <Text style={styles.bigTitle}>{t("your_info")}</Text>
+            <Text style={styles.bigSubtitle}>{t("enter_pro_details")}</Text>
 
             <View style={styles.avatarWrap}>
               <View style={styles.avatarCircle}>
@@ -408,7 +410,7 @@ export default function ProRegistrationScreen() {
 
             <View style={styles.row}>
               <View style={styles.col}>
-                <Text style={styles.label}>Prénom</Text>
+                <Text style={styles.label}>{t("first_name")}</Text>
                 <TextInput
                   value={form.firstName}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, firstName: value }))}
@@ -418,7 +420,7 @@ export default function ProRegistrationScreen() {
                 />
               </View>
               <View style={styles.col}>
-                <Text style={styles.label}>Nom</Text>
+                <Text style={styles.label}>{t("last_name")}</Text>
                 <TextInput
                   value={form.lastName}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, lastName: value }))}
@@ -429,7 +431,7 @@ export default function ProRegistrationScreen() {
               </View>
             </View>
 
-            <Text style={styles.label}>Téléphone</Text>
+            <Text style={styles.label}>{t("phone")}</Text>
             <View style={styles.phoneWrap}>
               <Text style={styles.country}>+212</Text>
               <TextInput
@@ -441,7 +443,7 @@ export default function ProRegistrationScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t("email")}</Text>
             <View style={styles.inputWithIcon}>
               <Mail size={16} color={Colors.textMuted} />
               <TextInput
@@ -455,7 +457,7 @@ export default function ProRegistrationScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Ville</Text>
+            <Text style={styles.label}>{t("city")}</Text>
             <View style={styles.inputWithIcon}>
               <MapPin size={16} color={Colors.textMuted} />
               <TextInput
@@ -467,11 +469,11 @@ export default function ProRegistrationScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Profession</Text>
+            <Text style={styles.label}>{t("profession")}</Text>
             <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowProfessionMenu((v) => !v)}>
               <Briefcase size={16} color={Colors.textMuted} />
               <Text style={[styles.inputInner, { color: profession ? Colors.textPrimary : Colors.textMuted }]}>
-                {profession || "Choisir..."}
+                {profession || t("choose_dots")}
               </Text>
               <ChevronDown size={16} color={Colors.textMuted} />
             </TouchableOpacity>
@@ -499,11 +501,11 @@ export default function ProRegistrationScreen() {
 
             {profession && (profession === "Infirmier" || profession === "Kinésithérapeute") ? (
               <>
-                <Text style={styles.label}>Types de service</Text>
+                <Text style={styles.label}>{t("service_types")}</Text>
                 <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowServiceMenu((v) => !v)}>
                   <Briefcase size={16} color={Colors.textMuted} />
                   <Text style={[styles.inputInner, { color: selectedServices.length ? Colors.textPrimary : Colors.textMuted }]}>
-                    {selectedServices.length ? `${selectedServices.length} sélectionnés` : "Choisir..."}
+                    {selectedServices.length ? `${selectedServices.length} sélectionnés` : t("choose_dots")}
                   </Text>
                   <ChevronDown size={16} color={Colors.textMuted} />
                 </TouchableOpacity>
@@ -542,7 +544,7 @@ export default function ProRegistrationScreen() {
               </>
             ) : null}
 
-            <Text style={styles.label}>Années d'expérience</Text>
+            <Text style={styles.label}>{t("years_experience_lbl")}</Text>
             <TextInput
               value={form.experience}
               onChangeText={(value) => setForm((prev) => ({ ...prev, experience: value }))}
@@ -552,7 +554,7 @@ export default function ProRegistrationScreen() {
               placeholderTextColor={Colors.textSubtle}
             />
 
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{t("password")}</Text>
             <View style={styles.inputWithIcon}>
               <Lock size={16} color={Colors.textMuted} />
               <TextInput
@@ -572,8 +574,8 @@ export default function ProRegistrationScreen() {
 
         {step === 1 ? (
           <View>
-            <Text style={styles.bigTitle}>Documents officiels</Text>
-            <Text style={styles.bigSubtitle}>Téléchargez vos documents pour la vérification KYC</Text>
+            <Text style={styles.bigTitle}>{t("official_docs")}</Text>
+            <Text style={styles.bigSubtitle}>{t("upload_kyc_docs")}</Text>
 
             <View style={styles.warningCard}>
               <AlertTriangle size={18} color={Colors.accent} />
@@ -584,23 +586,23 @@ export default function ProRegistrationScreen() {
 
             <UploadCard
               title={diploma ? `${getDiplomaTitle()} téléchargé ✓` : getDiplomaTitle()}
-              subtitle="Recto & verso · PDF ou image · max 5MB"
+              subtitle={t("doc_format_hint")}
               done={diploma}
               loading={uploading === "diploma"}
               icon={FileText}
               onPress={() => handleUpload("diploma")}
             />
             <UploadCard
-              title={cin ? "CIN téléchargée ✓" : "Carte d'Identité Nationale"}
-              subtitle="Recto & verso · PDF ou image · max 5MB"
+              title={cin ? "CIN téléchargée ✓" : t("national_id")}
+              subtitle={t("doc_format_hint")}
               done={cin}
               loading={uploading === "cin"}
               icon={CreditCard}
               onPress={() => handleUpload("cin")}
             />
             <UploadCard
-              title={selfie ? "Selfie pris ✓" : "Selfie de vérification"}
-              subtitle="Appuyez pour prendre une photo avec caméra"
+              title={selfie ? t("selfie_taken") : t("verification_selfie")}
+              subtitle={t("tap_take_photo")}
               done={selfie}
               loading={uploading === "selfie"}
               icon={Camera}
@@ -611,8 +613,8 @@ export default function ProRegistrationScreen() {
               <View style={styles.ocrCard}>
                 <ActivityIndicator size="small" color={Colors.primary} />
                 <View>
-                  <Text style={styles.ocrTitle}>Analyse en cours...</Text>
-                  <Text style={styles.ocrText}>Vérification OCR des documents</Text>
+                  <Text style={styles.ocrTitle}>{t("analyzing")}</Text>
+                  <Text style={styles.ocrText}>{t("ocr_verification")}</Text>
                 </View>
               </View>
             ) : null}
@@ -621,8 +623,8 @@ export default function ProRegistrationScreen() {
               <View style={styles.verifiedCard}>
                 <CheckCircle2 size={18} color={Colors.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.verifiedTitle}>Documents vérifiés automatiquement</Text>
-                  <Text style={styles.verifiedText}>Les informations correspondent.</Text>
+                  <Text style={styles.verifiedTitle}>{t("docs_auto_verified")}</Text>
+                  <Text style={styles.verifiedText}>{t("info_matches")}</Text>
                 </View>
               </View>
             ) : null}
@@ -631,10 +633,10 @@ export default function ProRegistrationScreen() {
 
         {step === 2 ? (
           <View>
-            <Text style={styles.bigTitle}>Disponibilité & tarifs</Text>
-            <Text style={styles.bigSubtitle}>Configurez quand et où vous souhaitez travailler</Text>
+            <Text style={styles.bigTitle}>{t("availability_rates")}</Text>
+            <Text style={styles.bigSubtitle}>{t("config_when_where")}</Text>
 
-            <Text style={styles.sectionLabel}>Jours de disponibilité</Text>
+            <Text style={styles.sectionLabel}>{t("availability_days")}</Text>
             <View style={styles.daysRow}>
               {weekDays.map((day) => {
                 const active = availDays.includes(day);
@@ -652,7 +654,7 @@ export default function ProRegistrationScreen() {
               })}
             </View>
 
-            <Text style={styles.sectionLabel}>Horaires de travail</Text>
+            <Text style={styles.sectionLabel}>{t("work_hours")}</Text>
             <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>De</Text>
@@ -697,10 +699,10 @@ export default function ProRegistrationScreen() {
               </View>
             </View>
 
-            <Text style={styles.sectionLabel}>Tarif minimum accepté</Text>
+            <Text style={styles.sectionLabel}>{t("min_rate_accepted")}</Text>
             <CounterCard value={`${minPrice} MAD`} onMinus={() => setMinPrice((v) => Math.max(40, v - 10))} onPlus={() => setMinPrice((v) => Math.min(300, v + 10))} />
 
-            <Text style={styles.sectionLabel}>Distance maximale</Text>
+            <Text style={styles.sectionLabel}>{t("max_distance")}</Text>
             <CounterCard value={`${maxDistance} km`} onMinus={() => setMaxDistance((v) => Math.max(1, v - 1))} onPlus={() => setMaxDistance((v) => Math.min(30, v + 1))} />
 
             <View style={styles.zoneCard}>
@@ -708,7 +710,7 @@ export default function ProRegistrationScreen() {
                 <MapPin size={17} color={Colors.primary} />
               </View>
               <View>
-                <Text style={styles.zoneTitle}>Zone de couverture</Text>
+                <Text style={styles.zoneTitle}>{t("coverage_zone")}</Text>
                 <Text style={styles.zoneText}>
                   {form.city || "Fès"} — rayon de {maxDistance} km
                 </Text>
@@ -719,8 +721,8 @@ export default function ProRegistrationScreen() {
 
         {step === 3 ? (
           <View>
-            <Text style={styles.bigTitle}>Récapitulatif</Text>
-            <Text style={styles.bigSubtitle}>Vérifiez vos informations avant de soumettre</Text>
+            <Text style={styles.bigTitle}>{t("summary")}</Text>
+            <Text style={styles.bigSubtitle}>{t("verify_before_submit")}</Text>
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryHead}>
@@ -735,22 +737,22 @@ export default function ProRegistrationScreen() {
               </View>
 
               <SummaryRow label="Ville" value={form.city || "Fès"} />
-              <SummaryRow label="Expérience" value={`${form.experience || "6"} ans`} />
-              <SummaryRow label="Profession" value={profession || "Non sélectionnée"} />
+              <SummaryRow label={t("experience")} value={`${form.experience || "6"} ans`} />
+              <SummaryRow label={t("profession")} value={profession || t("not_selected_f")} />
               {profession && (profession === "Infirmier" || profession === "Kinésithérapeute") ? (
-                <SummaryRow label="Types de service" value={selectedServices.length ? selectedServices.join(", ") : "Non sélectionné"} />
+                <SummaryRow label={t("service_types")} value={selectedServices.length ? selectedServices.join(", ") : t("not_selected_m")} />
               ) : null}
-              <SummaryRow label="Disponibilité" value={`${availDays.join(", ")} · ${startTime}-${endTime}`} />
-              <SummaryRow label="Tarif minimum" value={`${minPrice} MAD`} />
+              <SummaryRow label={t("availability")} value={`${availDays.join(", ")} · ${startTime}-${endTime}`} />
+              <SummaryRow label={t("min_rate")} value={`${minPrice} MAD`} />
               <SummaryRow label="Zone" value={`${maxDistance} km autour de ${form.city || "Fès"}`} />
             </View>
 
             <View style={styles.docsStatusCard}>
-              <Text style={styles.docsStatusTitle}>Documents</Text>
+              <Text style={styles.docsStatusTitle}>{t("documents")}</Text>
               <DocStatus label={getDiplomaTitle()} ok={diploma} />
-              <DocStatus label="Carte d'identité" ok={cin} />
-              <DocStatus label="Selfie de vérification" ok={selfie} />
-              <DocStatus label="Vérification OCR" ok={ocrDone} />
+              <DocStatus label={t("id_card")} ok={cin} />
+              <DocStatus label={t("verification_selfie")} ok={selfie} />
+              <DocStatus label={t("ocr_verification_short")} ok={ocrDone} />
             </View>
 
             <TouchableOpacity style={styles.termsCard} onPress={() => setAgreed((v) => !v)}>
@@ -780,15 +782,15 @@ export default function ProRegistrationScreen() {
           {submitting ? (
             <>
               <ActivityIndicator size="small" color="white" />
-              <Text style={styles.nextText}>Envoi en cours...</Text>
+              <Text style={styles.nextText}>{t("sending")}</Text>
             </>
           ) : step < 3 ? (
             <>
-              <Text style={styles.nextText}>Continuer</Text>
+              <Text style={styles.nextText}>{t("continue_btn")}</Text>
               <ChevronRight size={18} color="white" />
             </>
           ) : (
-            <Text style={styles.nextText}>Soumettre ma candidature</Text>
+            <Text style={styles.nextText}>{t("submit_application")}</Text>
           )}
         </TouchableOpacity>
       </View>

@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle2, ChevronRight, Eye, EyeOff, Lock, Mail, MapPin, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
@@ -18,6 +19,7 @@ import { AppleAuthButton } from "@/components/AppleAuthButton";
 import { showToast } from "@/lib/toast";
 
 export default function RegistrationScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
@@ -79,7 +81,7 @@ export default function RegistrationScreen() {
       }
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription Google impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("google_signup_failed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -98,7 +100,7 @@ export default function RegistrationScreen() {
       }
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription Apple impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("apple_signup_failed"));
     } finally {
       setAppleLoading(false);
     }
@@ -115,7 +117,7 @@ export default function RegistrationScreen() {
       });
       goToMfaSetup();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Inscription impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -128,16 +130,16 @@ export default function RegistrationScreen() {
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.title}>Créer un compte</Text>
-          <Text style={styles.subtitle}>Inscrivez-vous pour commencer à utiliser CareLink</Text>
+          <Text style={styles.title}>{t("create_account")}</Text>
+          <Text style={styles.subtitle}>{t("signup_to_start")}</Text>
         </View>
 
         <View style={styles.tabWrap}>
           <TouchableOpacity style={styles.tabBtn} onPress={() => router.push("/auth/patient-login")}>
-            <Text style={styles.tabText}>Connexion</Text>
+            <Text style={styles.tabText}>{t("login")}</Text>
           </TouchableOpacity>
           <View style={[styles.tabBtn, styles.tabActive]}>
-            <Text style={styles.tabActiveText}>Inscription</Text>
+            <Text style={styles.tabActiveText}>{t("signup")}</Text>
           </View>
         </View>
 
@@ -153,7 +155,7 @@ export default function RegistrationScreen() {
 
         <View style={styles.row}>
           <View style={styles.col}>
-            <Text style={styles.label}>Prénom</Text>
+            <Text style={styles.label}>{t("first_name")}</Text>
             <View style={styles.inputWrap}>
               <User size={16} color={Colors.textMuted} />
               <TextInput
@@ -177,7 +179,7 @@ export default function RegistrationScreen() {
           </View>
         </View>
 
-        <Text style={styles.label}>Téléphone</Text>
+        <Text style={styles.label}>{t("phone")}</Text>
         <View style={styles.phoneWrap}>
           <Text style={styles.country}>+212</Text>
           <TextInput
@@ -190,7 +192,7 @@ export default function RegistrationScreen() {
           />
         </View>
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>{t("email")}</Text>
         <View style={styles.inputWrap}>
           <Mail size={16} color={Colors.textMuted} />
           <TextInput
@@ -204,7 +206,7 @@ export default function RegistrationScreen() {
           />
         </View>
 
-        <Text style={styles.label}>Ville</Text>
+        <Text style={styles.label}>{t("city")}</Text>
         <View style={styles.inputWrap}>
           <MapPin size={16} color={Colors.textMuted} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -225,14 +227,14 @@ export default function RegistrationScreen() {
           </ScrollView>
         </View>
 
-        <Text style={styles.label}>Mot de passe</Text>
+        <Text style={styles.label}>{t("password")}</Text>
         <View style={styles.inputWrap}>
           <Lock size={16} color={Colors.textMuted} />
           <TextInput
             value={password}
             onChangeText={setPassword}
             style={styles.input}
-            placeholder="Min. 6 caractères"
+            placeholder={t("min_6_chars")}
             secureTextEntry={!showPassword}
             placeholderTextColor={Colors.textSubtle}
           />
@@ -264,7 +266,7 @@ export default function RegistrationScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.label}>Confirmer le mot de passe</Text>
+        <Text style={styles.label}>{t("confirm_password")}</Text>
         <View style={styles.inputWrap}>
           <Lock size={16} color={Colors.textMuted} />
           <TextInput
@@ -278,7 +280,7 @@ export default function RegistrationScreen() {
           {confirm.length > 0 && confirm === password ? <CheckCircle2 size={18} color={Colors.primary} /> : null}
         </View>
 
-        {confirm.length > 0 && confirm !== password ? <Text style={styles.mismatch}>Les mots de passe ne correspondent pas</Text> : null}
+        {confirm.length > 0 && confirm !== password ? <Text style={styles.mismatch}>{t("passwords_no_match")}</Text> : null}
 
         <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed((v) => !v)}>
           <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
@@ -299,7 +301,7 @@ export default function RegistrationScreen() {
             <ActivityIndicator size="small" color="white" />
           ) : (
             <>
-              <Text style={styles.submitText}>Créer mon compte</Text>
+              <Text style={styles.submitText}>{t("create_my_account")}</Text>
               <ChevronRight size={18} color="white" />
             </>
           )}

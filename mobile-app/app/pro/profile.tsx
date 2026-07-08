@@ -5,6 +5,7 @@ import {
   User,
   FileText,
   CreditCard,
+  Globe,
   MapPin,
   Clock,
   Bell,
@@ -15,15 +16,21 @@ import {
 } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { useI18n } from "@/lib/i18n";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Professional } from "@/lib/db/types";
 import { RadiusSlider } from "@/components/RadiusSlider";
+import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { toastSuccess } from "@/lib/toast";
+import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
-const menuItems = [
+const menuItems: { icon: typeof User; label: string; color: string; route?: string; action?: string }[] = [
   { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/pro/profile-infos" },
   { icon: FileText, label: "Mes documents", color: "#3B82F6", route: "/pro/kyc" },
+  { icon: Globe, label: "Langue / اللغة", color: "#0D0870", action: "language" },
   { icon: CreditCard, label: "Compte bancaire", color: "#6BB8C8" },
   { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
   { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
@@ -33,12 +40,31 @@ const menuItems = [
 ];
 
 export default function ProProfileScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [pro, setPro] = useState<Professional | null>(null);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleUploadAvatar = async () => {
+    if (!user?.id || uploadingAvatar) return;
+    setUploadingAvatar(true);
+    try {
+      const image = await usePickImage();
+      if (!image) return;
+      const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
+      if (avatarUrl && (await updateProfileAvatar(user.id, avatarUrl))) {
+        await refreshProfile();
+        toastSuccess("Photo de profil mise à jour ✓");
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Refresh profile when screen comes into focus
   useFocusEffect(
@@ -107,60 +133,32 @@ export default function ProProfileScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Mon profil pro</Text>
+      <ProfileHeaderCard
+        title="Mon profil pro"
+        name={displayName}
+        email={email}
+        phone={phone}
+        city={city || specialty}
+        avatarUrl={typeof avatar === "string" ? avatar : ""}
+        initials={displayName.split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase()}
+        uploading={uploadingAvatar}
+        onEditAvatar={handleUploadAvatar}
+        stats={[
+          { value: rating > 0 ? rating.toFixed(1) : "—", label: "Note", star: true },
+          { value: pro?.total_bookings ?? 0, label: "Missions" },
+          { value: isVerified ? "Vérifié" : "En attente", label: "Statut", accent: isVerified },
+        ]}
+      />
 
-      <View style={styles.headerCard}>
-        <View style={styles.profileRow}>
-          <Image
-            source={typeof avatar === "string" ? { uri: avatar } : avatar}
-            style={styles.avatar}
-            resizeMode="cover"
-          />
-          <View style={styles.profileMeta}>
-            <Text style={styles.name}>{displayName}</Text>
-            {email ? <Text style={styles.email}>{email}</Text> : null}
-            <View style={styles.contactRow}>
-              {phone ? <Text style={styles.phone}>{phone}</Text> : null}
-              {phone && city ? <Text style={styles.contactDot}>·</Text> : null}
-              {city ? <Text style={styles.city}>{city}</Text> : null}
-            </View>
-            <View style={styles.specialtyRow}>
-              <Text style={styles.specialty}>{specialty}</Text>
-              {isVerified ? <Shield size={14} color={Colors.primary} /> : null}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <View style={styles.ratingRow}>
-              <Star size={14} color="#FBBF24" fill="#FBBF24" />
-              <Text style={styles.statValue}>{rating > 0 ? rating.toFixed(1) : "—"}</Text>
-            </View>
-            <Text style={styles.statLabel}>Note</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{pro?.total_bookings ?? 0}</Text>
-            <Text style={styles.statLabel}>Missions</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: isVerified ? Colors.primary : "#D97706" }]}>
-              {isVerified ? "Vérifié" : "En attente"}
-            </Text>
-            <Text style={styles.statLabel}>Statut</Text>
-          </View>
-        </View>
-      </View>
-
+      <View style={styles.body}>
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
           <TouchableOpacity
             key={item.label}
             style={styles.menuItem}
             onPress={() => {
-              if (item.route) router.push(item.route as never);
+              if (item.action === "language") setLangOpen(true);
+              else if (item.route) router.push(item.route as never);
             }}
           >
             <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
@@ -205,17 +203,21 @@ export default function ProProfileScreen() {
         }}
       >
         <LogOut size={18} color={Colors.danger} />
-        <Text style={styles.signOutText}>Se déconnecter</Text>
+        <Text style={styles.signOutText}>{t("sign_out")}</Text>
       </TouchableOpacity>
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      </View>
+
+      <LanguageSelector visible={langOpen} onClose={() => setLangOpen(false)} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  content: { paddingBottom: 24 },
+  body: { paddingHorizontal: 20, paddingTop: 16, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surfaceWarm },
   title: {
     fontSize: 22,

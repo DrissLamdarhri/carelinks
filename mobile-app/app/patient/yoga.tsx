@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, Calendar, Clock3, Heart, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
@@ -19,7 +20,57 @@ import { useYogaSessions, useSessionEnrollments } from "@/lib/yoga-realtime";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
+<<<<<<< HEAD
+=======
+// Fallback sessions for when database is unavailable
+const fallbackSessions = [
+  {
+    id: "s1",
+    name: "Hatha Flow Matinal",
+    level: "level_beginner",
+    instructor: "Sara Bennani",
+    instructorImg:
+      "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    duration: "60 min",
+    price: 80,
+    date: "18 Avr. — 09h00",
+    spots: 4,
+    rating: 4.8,
+    img: "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+  },
+  {
+    id: "s2",
+    name: "Vinyasa Dynamique",
+    level: "level_intermediate",
+    instructor: "Omar Tazi",
+    instructorImg:
+      "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    duration: "75 min",
+    price: 100,
+    date: "19 Avr. — 10h30",
+    spots: 2,
+    rating: 4.9,
+    img: "https://images.unsplash.com/photo-1667890785988-8da12fd0989b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+  },
+  {
+    id: "s3",
+    name: "Yin Yoga Profond",
+    level: "level_all",
+    instructor: "Nadia Filali",
+    instructorImg:
+      "https://images.unsplash.com/photo-1670191247079-f9713ae06dcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+    duration: "90 min",
+    price: 90,
+    date: "20 Avr. — 18h00",
+    spots: 6,
+    rating: 4.7,
+    img: "https://images.unsplash.com/photo-1559185590-fcf099ac62c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+  },
+];
+
+>>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
 export default function YogaCatalogScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const { sessions: yogaSessions, loading, error } = useYogaSessions();
@@ -108,7 +159,7 @@ export default function YogaCatalogScreen() {
 
   const handleReserveYoga = async (session: typeof sessions[0]) => {
     if (!user?.id) {
-      Alert.alert("Erreur", "Veuillez vous connecter pour réserver");
+      Alert.alert("Erreur", t("please_login_book"));
       return;
     }
 
@@ -129,6 +180,7 @@ export default function YogaCatalogScreen() {
         .eq("patient_id", user.id)
         .limit(1);
 
+<<<<<<< HEAD
       if (existingErr) {
         console.warn("Warning checking existing enrollment:", existingErr);
       }
@@ -144,6 +196,10 @@ export default function YogaCatalogScreen() {
         } catch (e) {
           console.warn("Could not refresh enrollment count", e);
         }
+=======
+      if (existing) {
+        Alert.alert(t("already_enrolled"), t("already_enrolled_msg"));
+>>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
         setLoadingSessionId(null);
         return;
       }
@@ -218,7 +274,25 @@ export default function YogaCatalogScreen() {
 
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
+<<<<<<< HEAD
         .insert([bookingData])
+=======
+        .insert([
+          {
+            patient_id: user.id,
+            professional_id: null, // No professional for yoga
+            specialty: "yoga_instructor",
+            status: "matched",
+            urgency: "normal",
+            scheduled_at: session.date || new Date().toISOString(),
+            address: t("yoga_class"),
+            notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
+            budget_min_mad: session.price,
+            budget_max_mad: session.price,
+            final_price_mad: session.price,
+          },
+        ])
+>>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
         .select()
         .single();
 
@@ -236,11 +310,16 @@ export default function YogaCatalogScreen() {
         `Vous êtes inscrit à "${session.name}".\n\nVous pouvez voir cette séance dans vos réservations.`,
         [
           {
+<<<<<<< HEAD
             text: "Voir mes réservations",
             onPress: () => {
               setLoadingSessionId(null);
               router.push("/patient/bookings");
             },
+=======
+            text: t("see_my_bookings"),
+            onPress: () => router.push("/patient/bookings"),
+>>>>>>> 5b10d8c506d682db78e7a0dff991e92e61bc9769
           },
           {
             text: "Fermer",
@@ -262,7 +341,7 @@ export default function YogaCatalogScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Séances de Yoga</Text>
+          <Text style={styles.headerTitle}>{t("yoga_sessions")}</Text>
         </View>
 
         <ScrollView
@@ -289,12 +368,12 @@ export default function YogaCatalogScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Chargement des séances...</Text>
+            <Text style={styles.loadingText}>{t("loading_sessions")}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>❌ Erreur lors du chargement des séances</Text>
-            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>Veuillez vérifier votre connexion et réessayer.</Text>
+            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>{t("check_connection_retry")}</Text>
           </View>
         ) : filteredSessions.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -309,7 +388,7 @@ export default function YogaCatalogScreen() {
             <View style={styles.cardImageWrap}>
               <Image source={{ uri: session.img }} style={styles.cardImage} />
               <View style={styles.imageOverlay} />
-              <Text style={styles.levelBadge}>{session.level}</Text>
+              <Text style={styles.levelBadge}>{t(session.level)}</Text>
               <TouchableOpacity
                 onPress={() =>
                   setLikes((prev) => ({ ...prev, [session.id]: !prev[session.id] }))
@@ -364,7 +443,7 @@ export default function YogaCatalogScreen() {
                   {loadingSessionId === session.id ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
-                    <Text style={styles.bookBtnText}>Réserver</Text>
+                    <Text style={styles.bookBtnText}>{t("reserve")}</Text>
                   )}
                 </TouchableOpacity>
               </View>

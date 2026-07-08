@@ -9,12 +9,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThumbsUp } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { buildDemoBooking, buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { RatingForm } from "@/components/RatingForm";
 import type { Booking, Profile } from "@/lib/db/types";
 
 export default function RatingScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
@@ -31,7 +33,7 @@ export default function RatingScreen() {
     const loadBooking = async () => {
       if (!bookingId) {
         setLoading(false);
-        setErrorMessage("Réservation introuvable.");
+        setErrorMessage(t("reservation_not_found"));
         return;
       }
 
@@ -58,7 +60,7 @@ export default function RatingScreen() {
         }
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Impossible de charger la réservation.");
+        setErrorMessage(error instanceof Error ? error.message : t("cannot_load_booking"));
       } finally {
         if (active) setLoading(false);
       }
@@ -75,7 +77,7 @@ export default function RatingScreen() {
         <View style={styles.successIconWrap}>
           <ThumbsUp size={38} color={Colors.primary} />
         </View>
-        <Text style={styles.successTitle}>Merci pour votre avis !</Text>
+        <Text style={styles.successTitle}>{t("rating_thanks")}</Text>
         <Text style={styles.successSubtitle}>
           Votre évaluation aide à améliorer la qualité des soins sur CareLink.
         </Text>
@@ -83,7 +85,7 @@ export default function RatingScreen() {
           style={styles.successBtn}
           onPress={() => router.replace(bookingId ? `/patient/payment/${bookingId}` : "/patient")}
         >
-          <Text style={styles.successBtnText}>Procéder au paiement</Text>
+          <Text style={styles.successBtnText}>{t("proceed_payment")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -112,7 +114,7 @@ export default function RatingScreen() {
         {!loading && !professionalId ? (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>
-              {errorMessage ?? "Professionnel introuvable pour cette réservation."}
+              {errorMessage ?? t("pro_not_found_booking")}
             </Text>
           </View>
         ) : null}
@@ -124,7 +126,7 @@ export default function RatingScreen() {
             style={styles.skipBtn}
             onPress={() => router.replace(bookingId ? `/patient/payment/${bookingId}` : "/patient")}
           >
-            <Text style={styles.skipBtnText}>Passer</Text>
+            <Text style={styles.skipBtnText}>{t("skip")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}

@@ -12,6 +12,7 @@ import {
 import { ArrowLeft, MapPin, Trash2, Pencil, Home } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Address } from "@/lib/db/types";
@@ -39,6 +40,7 @@ const emptyForm: AddressForm = {
 };
 
 export default function PatientAddressesScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -63,7 +65,7 @@ export default function PatientAddressesScreen() {
         const rows = await db.addresses.listForUser(user.id);
         if (active) setAddresses(rows);
       } catch (error) {
-        if (active) setErrorMessage(error instanceof Error ? error.message : "Adresses indisponibles.");
+        if (active) setErrorMessage(error instanceof Error ? error.message : t("addresses_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -108,7 +110,7 @@ export default function PatientAddressesScreen() {
           await db.addresses.setDefault(user.id, updated.id);
         }
         setAddresses((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-        showToast("Adresse mise à jour.");
+        showToast(t("address_updated"));
       } else {
         const created = await db.addresses.create({
           user_id: user.id,
@@ -124,18 +126,18 @@ export default function PatientAddressesScreen() {
           await db.addresses.setDefault(user.id, created.id);
         }
         setAddresses((prev) => [created, ...prev]);
-        showToast("Adresse ajoutée.");
+        showToast(t("address_added"));
       }
       resetForm();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Impossible d'enregistrer l'adresse.");
+      setErrorMessage(error instanceof Error ? error.message : t("address_save_failed"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = (addressId: string) => {
-    Alert.alert("Supprimer", "Voulez-vous supprimer cette adresse ?", [
+    Alert.alert("Supprimer", t("confirm_delete_address"), [
       { text: "Annuler", style: "cancel" },
       {
         text: "Supprimer",
@@ -144,10 +146,10 @@ export default function PatientAddressesScreen() {
           try {
             await db.addresses.remove(addressId);
             setAddresses((prev) => prev.filter((row) => row.id !== addressId));
-            showToast("Adresse supprimée.");
+            showToast(t("address_deleted"));
             if (form.id === addressId) resetForm();
           } catch (error) {
-            setErrorMessage(error instanceof Error ? error.message : "Suppression impossible.");
+            setErrorMessage(error instanceof Error ? error.message : t("delete_failed"));
           }
         },
       },
@@ -161,9 +163,9 @@ export default function PatientAddressesScreen() {
       setAddresses((prev) =>
         prev.map((row) => ({ ...row, is_default: row.id === addressId }))
       );
-      showToast("Adresse par défaut mise à jour.");
+      showToast(t("default_address_updated"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     }
   };
 
@@ -173,7 +175,7 @@ export default function PatientAddressesScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Adresses enregistrées</Text>
+        <Text style={styles.title}>{t("saved_addresses")}</Text>
       </View>
 
       <View style={styles.card}>
@@ -181,14 +183,14 @@ export default function PatientAddressesScreen() {
         <TextInput
           value={form.label}
           onChangeText={(value) => setForm((prev) => ({ ...prev, label: value }))}
-          placeholder="Label (Maison, Travail...)"
+          placeholder={t("address_label_ph")}
           placeholderTextColor={Colors.textSubtle}
           style={styles.simpleInput}
         />
         <TextInput
           value={form.street}
           onChangeText={(value) => setForm((prev) => ({ ...prev, street: value }))}
-          placeholder="Rue et numéro"
+          placeholder={t("street_number_ph")}
           placeholderTextColor={Colors.textSubtle}
           style={styles.simpleInput}
         />
@@ -196,14 +198,14 @@ export default function PatientAddressesScreen() {
           <TextInput
             value={form.city}
             onChangeText={(value) => setForm((prev) => ({ ...prev, city: value }))}
-            placeholder="Ville"
+            placeholder={t("city")}
             placeholderTextColor={Colors.textSubtle}
             style={[styles.simpleInput, styles.rowInput]}
           />
           <TextInput
             value={form.postal_code}
             onChangeText={(value) => setForm((prev) => ({ ...prev, postal_code: value }))}
-            placeholder="Code postal"
+            placeholder={t("postal_code_ph")}
             placeholderTextColor={Colors.textSubtle}
             style={[styles.simpleInput, styles.rowInput]}
           />
@@ -218,7 +220,7 @@ export default function PatientAddressesScreen() {
         <TextInput
           value={form.notes}
           onChangeText={(value) => setForm((prev) => ({ ...prev, notes: value }))}
-          placeholder="Instructions (optionnel)"
+          placeholder={t("instructions_ph")}
           placeholderTextColor={Colors.textSubtle}
           style={styles.textArea}
           multiline
@@ -235,7 +237,7 @@ export default function PatientAddressesScreen() {
         <View style={styles.actionsRow}>
           {isEditing ? (
             <TouchableOpacity style={styles.cancelBtn} onPress={resetForm}>
-              <Text style={styles.cancelText}>Annuler</Text>
+              <Text style={styles.cancelText}>{t("cancel")}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
@@ -243,7 +245,7 @@ export default function PatientAddressesScreen() {
             onPress={handleSave}
             disabled={!canSave || saving}
           >
-            {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Enregistrer</Text>}
+            {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("save")}</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -271,21 +273,21 @@ export default function PatientAddressesScreen() {
                 </Text>
                 {address.notes ? <Text style={styles.addressNote}>{address.notes}</Text> : null}
               </View>
-              {address.is_default ? <Text style={styles.defaultBadge}>Par défaut</Text> : null}
+              {address.is_default ? <Text style={styles.defaultBadge}>{t("default_badge")}</Text> : null}
             </View>
             <View style={styles.addressActions}>
               <TouchableOpacity style={styles.actionBtn} onPress={() => handleEdit(address)}>
                 <Pencil size={14} color={Colors.primary} />
-                <Text style={styles.actionText}>Modifier</Text>
+                <Text style={styles.actionText}>{t("edit")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionBtn} onPress={() => handleDelete(address.id)}>
                 <Trash2 size={14} color={Colors.danger} />
-                <Text style={[styles.actionText, { color: Colors.danger }]}>Supprimer</Text>
+                <Text style={[styles.actionText, { color: Colors.danger }]}>{t("delete")}</Text>
               </TouchableOpacity>
               {!address.is_default ? (
                 <TouchableOpacity style={styles.actionBtn} onPress={() => handleSetDefault(address.id)}>
                   <Home size={14} color={Colors.textMuted} />
-                  <Text style={styles.actionText}>Définir défaut</Text>
+                  <Text style={styles.actionText}>{t("set_default")}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -294,7 +296,7 @@ export default function PatientAddressesScreen() {
 
       {!loading && addresses.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucune adresse enregistrée.</Text>
+          <Text style={styles.emptyText}>{t("no_saved_address")}</Text>
         </View>
       ) : null}
 

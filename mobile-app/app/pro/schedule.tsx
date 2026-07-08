@@ -10,19 +10,21 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { CalendarClock, ChevronRight, Clock, MapPin } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 const SPEC_LABEL: Record<string, string> = {
-  nurse: "Soins infirmiers",
-  physiotherapist: "Kinésithérapie",
-  psychologist: "Psychologie",
-  yoga_instructor: "Yoga",
+  nurse: "spec_nurse",
+  physiotherapist: "spec_physio",
+  psychologist: "spec_psy",
+  yoga_instructor: "spec_yoga",
 };
 
 export default function ProScheduleScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -60,7 +62,7 @@ export default function ProScheduleScreen() {
   return (
     <View style={s.root}>
       <View style={s.header}>
-        <Text style={s.title}>Mes missions</Text>
+        <Text style={s.title}>{t("my_missions")}</Text>
         <Text style={s.subtitle}>
           {upcoming.length} à venir · {done.length} terminée{done.length > 1 ? "s" : ""}
         </Text>
@@ -80,9 +82,9 @@ export default function ProScheduleScreen() {
         <View style={s.emptyCard}>
           <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
           <Text style={s.emptyTitle}>
-            {filter === "upcoming" ? "Aucune mission à venir" : "Aucune mission terminée"}
+            {filter === "upcoming" ? t("no_missions_upcoming") : t("no_missions_done")}
           </Text>
-          <Text style={s.emptySub}>Acceptez des demandes pour remplir votre planning.</Text>
+          <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
@@ -103,7 +105,7 @@ export default function ProScheduleScreen() {
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={s.rowTop}>
-                    <Text style={s.patient}>Patient</Text>
+                    <Text style={s.patient}>{t("patient")}</Text>
                     <View
                       style={[
                         s.pill,
@@ -116,15 +118,15 @@ export default function ProScheduleScreen() {
                           done_ ? s.pillTxtDone : cancelled ? s.pillTxtCancel : b.status === "in_progress" ? s.pillTxtLive : s.pillTxtSoon,
                         ]}
                       >
-                        {done_ ? "Terminé" : cancelled ? "Annulé" : b.status === "in_progress" ? "En cours" : "À venir"}
+                        {done_ ? t("status_completed") : cancelled ? t("status_cancelled") : b.status === "in_progress" ? t("status_in_progress") : t("tab_upcoming")}
                       </Text>
                     </View>
                   </View>
-                  <Text style={s.spec}>{SPEC_LABEL[b.specialty] ?? b.specialty}</Text>
+                  <Text style={s.spec}>{SPEC_LABEL[b.specialty] ? t(SPEC_LABEL[b.specialty]) : b.specialty}</Text>
                   <View style={s.metaRow}>
                     <Clock size={12} color={Colors.textMuted} />
                     <Text style={s.metaTxt}>
-                      {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : "Heure flexible"}
+                      {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : t("flexible_time")}
                     </Text>
                   </View>
                   {b.address ? (
@@ -137,7 +139,7 @@ export default function ProScheduleScreen() {
                     <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
                     {!done_ && !cancelled ? (
                       <View style={s.openRow}>
-                        <Text style={s.openTxt}>Ouvrir</Text>
+                        <Text style={s.openTxt}>{t("open_action")}</Text>
                         <ChevronRight size={15} color={NAVY} />
                       </View>
                     ) : null}

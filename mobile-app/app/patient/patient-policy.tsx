@@ -11,19 +11,17 @@ import {
 import { ArrowLeft, FileText, Shield } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { showToast } from "@/lib/toast";
 
 const POLICY_VERSION = "2026-05-30";
 
-const POLICY_TEXT = [
-  "CareLink protège vos données personnelles et médicales conformément à la réglementation.",
-  "Vos informations sont partagées uniquement avec les professionnels nécessaires à votre prise en charge.",
-  "Vous pouvez modifier vos consentements à tout moment depuis cette page.",
-];
+const POLICY_KEYS = ["policy_p1", "policy_p2", "policy_p3"];
 
 export default function PatientPolicyScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -52,7 +50,7 @@ export default function PatientPolicyScreen() {
         setAcceptedVersion(profile.policy_version ?? null);
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Politique indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("policy_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -78,9 +76,9 @@ export default function PatientPolicyScreen() {
       });
       setAcceptedAt(updated.policy_accepted_at ?? now);
       setAcceptedVersion(updated.policy_version ?? POLICY_VERSION);
-      showToast("Préférences enregistrées.");
+      showToast(t("prefs_saved"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     } finally {
       setSaving(false);
     }
@@ -88,7 +86,7 @@ export default function PatientPolicyScreen() {
 
   const acceptedLabel = acceptedAt
     ? `Acceptée le ${new Date(acceptedAt).toLocaleDateString("fr-MA")}`
-    : "Non acceptée";
+    : t("not_accepted");
   const versionLabel = acceptedVersion ? `Version ${acceptedVersion}` : `Version ${POLICY_VERSION}`;
 
   return (
@@ -97,7 +95,7 @@ export default function PatientPolicyScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Politique patient</Text>
+        <Text style={styles.title}>{t("patient_policy")}</Text>
       </View>
 
       {loading ? (
@@ -112,26 +110,26 @@ export default function PatientPolicyScreen() {
             <View style={styles.policyHeader}>
               <FileText size={18} color={Colors.primary} />
               <View>
-                <Text style={styles.policyTitle}>Politique de confidentialité</Text>
+                <Text style={styles.policyTitle}>{t("privacy_policy")}</Text>
                 <Text style={styles.policyMeta}>{versionLabel}</Text>
                 <Text style={styles.policyMeta}>{acceptedLabel}</Text>
               </View>
             </View>
-            {POLICY_TEXT.map((line) => (
-              <Text key={line} style={styles.policyText}>
-                {line}
+            {POLICY_KEYS.map((key) => (
+              <Text key={key} style={styles.policyText}>
+                {t(key)}
               </Text>
             ))}
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Consentements</Text>
+            <Text style={styles.sectionTitle}>{t("consents")}</Text>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Partage des données médicales</Text>
-                  <Text style={styles.helper}>Autoriser les professionnels à accéder à votre dossier.</Text>
+                  <Text style={styles.label}>{t("share_medical_data")}</Text>
+                  <Text style={styles.helper}>{t("allow_pro_access")}</Text>
                 </View>
               </View>
               <Switch
@@ -145,8 +143,8 @@ export default function PatientPolicyScreen() {
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Rappels et notifications</Text>
-                  <Text style={styles.helper}>Recevoir des rappels de rendez-vous et soins.</Text>
+                  <Text style={styles.label}>{t("reminders_notifications")}</Text>
+                  <Text style={styles.helper}>{t("receive_reminders")}</Text>
                 </View>
               </View>
               <Switch
@@ -160,7 +158,7 @@ export default function PatientPolicyScreen() {
               <View style={styles.rowLeft}>
                 <Shield size={16} color={Colors.primary} />
                 <View>
-                  <Text style={styles.label}>Analyse anonyme</Text>
+                  <Text style={styles.label}>{t("anonymous_analytics")}</Text>
                   <Text style={styles.helper}>Aider à améliorer CareLink sans données identifiantes.</Text>
                 </View>
               </View>
@@ -178,7 +176,7 @@ export default function PatientPolicyScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || loading}>
-        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Accepter & enregistrer</Text>}
+        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("accept_and_save")}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );

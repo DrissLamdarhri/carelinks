@@ -15,23 +15,23 @@ export const onboardingSlides = [
   {
     id: "s1",
     icon: "stethoscope",
-    title: "Soins à domicile",
+    title: "onb_s1_title",
     subtitle:
-      "Infirmiers, kinés, et professionnels de santé viennent chez vous en quelques minutes.",
+      "onb_s1_sub",
   },
   {
     id: "s2",
     icon: "map-pin",
-    title: "Vous fixez le prix",
+    title: "onb_s2_title",
     subtitle:
-      "Comme InDrive, proposez votre tarif. Les professionnels acceptent ou font une contre-offre.",
+      "onb_s2_sub",
   },
   {
     id: "s3",
     icon: "shield",
-    title: "Vérifiés & certifiés",
+    title: "onb_s3_title",
     subtitle:
-      "Tous nos professionnels sont vérifiés : diplôme, CIN et avis patients contrôlés.",
+      "onb_s3_sub",
   },
 ] as const;
 

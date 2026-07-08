@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Wallet } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
 import { db, type Payment, type Payout } from "@/lib/db/dal";
@@ -22,8 +23,8 @@ const GREEN = "#16A34A";
 const RED = "#E24B4A";
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
-const payoutLabel = (s: Payout["status"]) =>
-  s === "paid" ? "Payé" : s === "processing" ? "En cours" : s === "rejected" ? "Refusé" : "Demandé";
+const payoutLabel = (s: Payout["status"], t: (k: string) => string) =>
+  s === "paid" ? t("payout_paid") : s === "processing" ? t("payout_processing") : s === "rejected" ? t("payout_rejected") : t("payout_requested");
 
 type Move = {
   id: string;
@@ -35,6 +36,7 @@ type Move = {
 };
 
 export default function ProEarningsScreen() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
@@ -73,11 +75,11 @@ export default function ProEarningsScreen() {
   const movements: Move[] = useMemo(() => {
     const list: Move[] = [];
     for (const p of captured) {
-      list.push({ id: `${p.id}-p`, kind: "prestation", label: "Prestation à domicile", sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
+      list.push({ id: `${p.id}-p`, kind: "prestation", label: t("home_service"), sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
       list.push({ id: `${p.id}-c`, kind: "commission", label: `Commission CareLink (${COMMISSION_PCT}%)`, sub: `sur ${p.amount_mad} MAD`, amount: -Number(p.commission_mad), date: p.created_at });
     }
     for (const po of activePayouts) {
-      list.push({ id: po.id, kind: "payout", label: "Retrait", sub: payoutLabel(po.status), amount: -Number(po.amount_mad), date: po.created_at });
+      list.push({ id: po.id, kind: "payout", label: t("withdrawal"), sub: payoutLabel(po.status, t), amount: -Number(po.amount_mad), date: po.created_at });
     }
     return list.sort((a, b) => b.date.localeCompare(a.date));
   }, [captured, activePayouts]);
@@ -93,10 +95,10 @@ export default function ProEarningsScreen() {
           setRequesting(true);
           try {
             await db.payouts.request({ professional_id: user.id, amount_mad: available, method: "bank" });
-            showToast("Demande de retrait envoyée ✓");
+            showToast(t("withdraw_sent"));
             await reload();
           } catch {
-            showToast("Demande impossible");
+            showToast(t("withdraw_failed"));
           } finally {
             setRequesting(false);
           }
@@ -111,18 +113,18 @@ export default function ProEarningsScreen() {
 
   return (
     <ScrollView style={s.root} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-      <Text style={s.title}>Revenus</Text>
+      <Text style={s.title}>{t("revenue")}</Text>
 
       {/* Wallet card */}
       <LinearGradient colors={[NAVY, "#241A9E"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.wallet}>
         <View style={s.walletTop}>
           <Wallet size={16} color="rgba(255,255,255,0.7)" />
-          <Text style={s.walletLbl}>Solde du portefeuille</Text>
+          <Text style={s.walletLbl}>{t("wallet_balance")}</Text>
         </View>
         <Text style={s.walletVal}>{available.toLocaleString("fr-MA")} <Text style={s.walletUnit}>MAD</Text></Text>
         <View style={s.walletRow}>
           <View style={s.walletBox}>
-            <Text style={s.walletBoxLbl}>En attente de capture</Text>
+            <Text style={s.walletBoxLbl}>{t("pending_capture")}</Text>
             <Text style={s.walletBoxVal}>{pendingNet} MAD</Text>
           </View>
           <TouchableOpacity style={[s.walletBox, s.walletAction, available < 50 && { opacity: 0.55 }]} onPress={requestPayout} disabled={available < 50 || requesting}>
@@ -130,8 +132,8 @@ export default function ProEarningsScreen() {
               <ActivityIndicator color={NAVY} />
             ) : (
               <>
-                <Text style={s.walletActionLbl}>Action</Text>
-                <View style={s.walletActionRow}><ArrowUpRight size={15} color={NAVY} strokeWidth={2.4} /><Text style={s.walletActionTxt}>Retirer</Text></View>
+                <Text style={s.walletActionLbl}>{t("action")}</Text>
+                <View style={s.walletActionRow}><ArrowUpRight size={15} color={NAVY} strokeWidth={2.4} /><Text style={s.walletActionTxt}>{t("withdraw_short")}</Text></View>
               </>
             )}
           </TouchableOpacity>
@@ -144,21 +146,21 @@ export default function ProEarningsScreen() {
         <View style={s.statCard}>
           <CheckCircle2 size={17} color={NAVY} />
           <Text style={s.statVal}>{captured.length}</Text>
-          <Text style={s.statLbl}>Prestations payées</Text>
+          <Text style={s.statLbl}>{t("paid_services")}</Text>
         </View>
         <View style={s.statCard}>
           <ArrowUpRight size={17} color={GREEN} />
           <Text style={s.statVal}>{earned} MAD</Text>
-          <Text style={s.statLbl}>Total gagné (net)</Text>
+          <Text style={s.statLbl}>{t("total_earned_net")}</Text>
         </View>
       </View>
 
       {/* Movements */}
-      <Text style={s.sectionTitle}>Mouvements du portefeuille</Text>
+      <Text style={s.sectionTitle}>{t("wallet_movements")}</Text>
       {movements.length === 0 ? (
         <View style={s.emptyCard}>
-          <Text style={s.emptyTxt}>Aucun mouvement pour l'instant.</Text>
-          <Text style={s.emptySub}>Vos prestations payées apparaîtront ici.</Text>
+          <Text style={s.emptyTxt}>{t("no_movements")}</Text>
+          <Text style={s.emptySub}>{t("paid_services_hint")}</Text>
         </View>
       ) : (
         movements.map((m) => {

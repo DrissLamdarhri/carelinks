@@ -12,16 +12,12 @@ import {
 } from "react-native";
 import { AlertTriangle, CheckCircle2, Circle, Navigation, ShieldAlert } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
 
 const cancellationReasons = [
-  "Imprévu personnel",
-  "Erreur de réservation",
-  "Délai trop long",
-  "Le pro n'est pas venu",
-  "Problème de qualité",
-  "Autre",
+  "reason_personal", "reason_booking_error", "reason_too_long", "reason_no_show", "reason_quality", "reason_other",
 ];
 
 const NAVY = "#0D0870";
@@ -45,6 +41,7 @@ export function CancellationDialog({
   onClose,
   onCancelled,
 }: CancellationDialogProps) {
+  const { t } = useI18n();
   const [reason, setReason] = useState(cancellationReasons[0]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -65,11 +62,11 @@ export function CancellationDialog({
         .update({ status: "cancelled", cancel_reason: reason, cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", bookingId);
       if (error) throw error;
-      Alert.alert("Annulation confirmée", "Votre réservation a été annulée.");
+      Alert.alert(t("cancel_confirmed"), t("booking_cancelled_msg"));
       await onCancelled();
       onClose();
     } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Impossible d'annuler la réservation.");
+      Alert.alert(t("error"), error instanceof Error ? error.message : t("cannot_cancel"));
     } finally {
       setSubmitting(false);
     }
@@ -83,12 +80,15 @@ export function CancellationDialog({
       await onCancelled();
       onClose();
       if (res.suspended) {
-        Alert.alert("Compte suspendu", "Vous avez atteint 2 avertissements. Votre compte est temporairement suspendu — contactez le support.");
+        Alert.alert(t("account_suspended"), t("suspended_msg"));
       } else {
-        Alert.alert("Réservation annulée", `Une pénalité de ${res.penalty_mad} MAD a été appliquée.\nAvertissement ${res.warnings}/2.`);
+        Alert.alert(
+          t("booking_cancelled"),
+          `${t("penalty_applied").replace("{n}", String(res.penalty_mad))}\n${t("warning_count").replace("{n}", String(res.warnings))}`,
+        );
       }
     } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Annulation impossible.");
+      Alert.alert(t("error"), error instanceof Error ? error.message : t("cancel_impossible"));
     } finally {
       setSubmitting(false);
     }
@@ -101,37 +101,35 @@ export function CancellationDialog({
         <View style={styles.card}>
           {enRoute ? (
             <>
-              <Text style={styles.title}>Annuler la demande</Text>
-              <Text style={styles.subtitle}>Le professionnel s'est déjà déplacé</Text>
+              <Text style={styles.title}>{t("cancel_request_title")}</Text>
+              <Text style={styles.subtitle}>{t("pro_already_moved")}</Text>
 
               <View style={styles.enRouteCard}>
                 <View style={styles.enRouteIcon}><Navigation size={18} color={NAVY} /></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.enRouteName}>{proName?.trim() || "Votre professionnel"} est en route</Text>
-                  <Text style={styles.enRouteSub}>Il s'est déjà déplacé pour cette demande.</Text>
+                  <Text style={styles.enRouteName}>{proName?.trim() || t("your_professional")} · {t("en_route_short")}</Text>
+                  <Text style={styles.enRouteSub}>{t("pro_moved_note")}</Text>
                 </View>
               </View>
 
               <View style={styles.penaltyBox}>
                 <ShieldAlert size={16} color="#B45309" />
-                <Text style={styles.penaltyText}>
-                  Annuler maintenant entraîne une <Text style={styles.bold}>pénalité de 5 MAD</Text> (versée au professionnel en dédommagement) et un <Text style={styles.bold}>avertissement</Text>. Après 2 avertissements, votre compte est suspendu.
-                </Text>
+                <Text style={styles.penaltyText}>{t("penalty_warning")}</Text>
               </View>
 
               <View style={styles.actions}>
                 <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} disabled={submitting}>
-                  <Text style={styles.secondaryBtnText}>Garder</Text>
+                  <Text style={styles.secondaryBtnText}>{t("keep")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.primaryBtn, submitting && { opacity: 0.7 }]} onPress={handlePenaltyCancel} disabled={submitting}>
-                  {submitting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryBtnText}>Annuler (−5 MAD)</Text>}
+                  {submitting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryBtnText}>{t("cancel_penalty_5")}</Text>}
                 </TouchableOpacity>
               </View>
             </>
           ) : (
             <>
-              <Text style={styles.title}>Annuler la réservation</Text>
-              <Text style={styles.subtitle}>Choisissez une raison d'annulation</Text>
+              <Text style={styles.title}>{t("cancel_reservation")}</Text>
+              <Text style={styles.subtitle}>{t("choose_cancel_reason")}</Text>
 
               <ScrollView style={styles.reasonList} contentContainerStyle={{ gap: 8 }}>
                 {cancellationReasons.map((item) => {
@@ -139,7 +137,7 @@ export function CancellationDialog({
                   return (
                     <TouchableOpacity key={item} style={[styles.reasonRow, selected && styles.reasonRowActive]} onPress={() => setReason(item)}>
                       {selected ? <CheckCircle2 size={18} color={Colors.primary} /> : <Circle size={18} color={Colors.textMuted} />}
-                      <Text style={[styles.reasonText, selected && styles.reasonTextActive]}>{item}</Text>
+                      <Text style={[styles.reasonText, selected && styles.reasonTextActive]}>{t(item)}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -148,18 +146,16 @@ export function CancellationDialog({
               <View style={[styles.warningBox, hasCancellationFee ? styles.warningBoxCritical : styles.warningBoxSafe]}>
                 <AlertTriangle size={16} color={hasCancellationFee ? "#B45309" : Colors.success} />
                 <Text style={styles.warningText}>
-                  {hasCancellationFee
-                    ? "Annulation à moins de 2h : des frais peuvent s'appliquer."
-                    : "Annulation gratuite : aucun professionnel n'est encore en route."}
+                  {hasCancellationFee ? t("less_2h_note") : t("free_cancel_note")}
                 </Text>
               </View>
 
               <View style={styles.actions}>
                 <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} disabled={submitting}>
-                  <Text style={styles.secondaryBtnText}>Fermer</Text>
+                  <Text style={styles.secondaryBtnText}>{t("close")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.primaryBtn, submitting && { opacity: 0.7 }]} onPress={handleFreeCancel} disabled={submitting}>
-                  {submitting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryBtnText}>Confirmer l'annulation</Text>}
+                  {submitting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryBtnText}>{t("confirm_cancellation")}</Text>}
                 </TouchableOpacity>
               </View>
             </>

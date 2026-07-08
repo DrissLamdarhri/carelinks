@@ -3,6 +3,7 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIn
 import { useRouter } from "expo-router";
 import { ArrowLeft, MapPin, MessageCircle, Star, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
@@ -37,12 +38,13 @@ const slots = [
 ];
 
 const consultTypes = [
-  { key: "onsite", label: "En personne", icon: MapPin },
-  { key: "video", label: "Vidéo", icon: Video },
-  { key: "chat", label: "Chat", icon: MessageCircle },
+  { key: "onsite", label: "in_person", icon: MapPin },
+  { key: "video", label: "video", icon: Video },
+  { key: "chat", label: "chat", icon: MessageCircle },
 ] as const;
 
 export default function PsychologistBookingScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [confirming, setConfirming] = useState(false);
@@ -67,7 +69,7 @@ export default function PsychologistBookingScreen() {
 
   const handleReservePsych = async () => {
     if (!user?.id) {
-      Alert.alert("Erreur", "Veuillez vous connecter pour réserver");
+      Alert.alert("Erreur", t("please_login_book"));
       return;
     }
     if (!canConfirm) return;
@@ -96,16 +98,16 @@ export default function PsychologistBookingScreen() {
         console.error("notifyAdminNewBooking failed:", err);
       }
 
-      Alert.alert("✅ Réservation confirmée!", "La réservation a été envoyée à l'administrateur.", [
+      Alert.alert("✅ Réservation confirmée!", t("booking_sent_admin"), [
         {
-          text: "Voir mes réservations",
+          text: t("see_my_bookings"),
           onPress: () => router.push("/patient/bookings"),
         },
         { text: "Fermer", onPress: () => {} },
       ]);
     } catch (err) {
       console.error("Erreur lors de la réservation psy:", err);
-      Alert.alert("Erreur", "Impossible de créer la réservation. Essayez plus tard.");
+      Alert.alert("Erreur", t("cannot_create_booking"));
     } finally {
       setConfirming(false);
     }
@@ -118,7 +120,7 @@ export default function PsychologistBookingScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Prendre un RDV</Text>
+          <Text style={styles.headerTitle}>{t("book_appointment_short")}</Text>
         </View>
       </View>
 
@@ -136,7 +138,7 @@ export default function PsychologistBookingScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.profileName}>Dr. Dalila Mansouri</Text>
-              <Text style={styles.profileRole}>Psychologue Clinicienne</Text>
+              <Text style={styles.profileRole}>{t("clinical_psychologist")}</Text>
               <View style={styles.ratingRow}>
                 <Star size={12} color="#FBBF24" fill="#FBBF24" />
                 <Text style={styles.ratingText}>4.9</Text>
@@ -145,12 +147,12 @@ export default function PsychologistBookingScreen() {
             </View>
           </View>
           <View style={styles.profileFooter}>
-            <Text style={styles.profileFooterLabel}>Consultation</Text>
+            <Text style={styles.profileFooterLabel}>{t("consultation")}</Text>
             <Text style={styles.profileFooterPrice}>200 MAD</Text>
           </View>
         </View>
 
-        <Text style={styles.blockLabel}>Type de consultation</Text>
+        <Text style={styles.blockLabel}>{t("consultation_type")}</Text>
         <View style={styles.consultRow}>
           {consultTypes.map((item) => {
             const active = item.key === consultType;
@@ -162,7 +164,7 @@ export default function PsychologistBookingScreen() {
               >
                 <item.icon size={18} color={active ? Colors.primary : Colors.textMuted} />
                 <Text style={[styles.consultText, active && styles.consultTextActive]}>
-                  {item.label}
+                  {t(item.label)}
                 </Text>
               </TouchableOpacity>
             );
@@ -170,7 +172,7 @@ export default function PsychologistBookingScreen() {
         </View>
 
         <View style={styles.dateHeaderRow}>
-          <Text style={styles.blockLabel}>Choisir une date</Text>
+          <Text style={styles.blockLabel}>{t("choose_date")}</Text>
           <View style={styles.monthNav}>
             <TouchableOpacity
               style={[styles.monthNavBtn, selectedMonthIndex === 0 && styles.monthNavBtnDisabled]}
@@ -235,7 +237,7 @@ export default function PsychologistBookingScreen() {
           </View>
         )}
 
-        <Text style={styles.blockLabel}>Créneaux disponibles</Text>
+        <Text style={styles.blockLabel}>{t("available_slots")}</Text>
         <View style={styles.slotsGrid}>
           {slots.map((slot, i) => {
             const active = selectedSlot === i;

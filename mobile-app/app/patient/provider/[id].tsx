@@ -21,12 +21,14 @@ import {
   Star,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { ReviewsList } from "@/components/ReviewsList";
 import { db } from "@/lib/db/dal";
 import type { Professional, Profile } from "@/lib/db/types";
 import { mockProfessionals } from "@/lib/mock-data";
 
 export default function ProviderProfileScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const providerId = params.id;
@@ -52,7 +54,7 @@ export default function ProviderProfileScreen() {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : "Professionnel introuvable.");
+          setErrorMessage(error instanceof Error ? error.message : t("pro_not_found_short"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -137,17 +139,17 @@ export default function ProviderProfileScreen() {
               <View style={styles.ratingRow}>
                 <Star size={14} color="#FBBF24" fill="#FBBF24" />
                 <Text style={styles.statValue}>
-                  {rating > 0 ? rating.toFixed(1) : "Nouveau"}
+                  {rating > 0 ? rating.toFixed(1) : t("new_badge")}
                 </Text>
               </View>
               <Text style={styles.statLabel}>
-                {reviewCount > 0 ? `${reviewCount} avis` : "Pas encore d'avis"}
+                {reviewCount > 0 ? `${reviewCount} avis` : t("no_reviews_yet")}
               </Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statCol}>
               <Text style={styles.statValue}>{professional?.years_experience ?? "—"}</Text>
-              <Text style={styles.statLabel}>Expérience</Text>
+              <Text style={styles.statLabel}>{t("experience")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statCol}>
@@ -161,8 +163,8 @@ export default function ProviderProfileScreen() {
 
         <View style={styles.quickInfoRow}>
           {[
-            { icon: Clock3, text: "Sur RDV" },
-            { icon: Award, text: isVerified ? "Vérifié ✓" : "En attente" },
+            { icon: Clock3, text: t("by_appointment") },
+            { icon: Award, text: isVerified ? t("verified_check") : t("pending_status") },
             { icon: MapPin, text: city },
           ].map((item, index) => (
             <View key={`${item.text}-${index}`} style={styles.quickInfoChip}>
@@ -212,7 +214,7 @@ export default function ProviderProfileScreen() {
           <MessageCircle size={20} color={Colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.requestBtn} onPress={() => router.push("/patient/request")}>
-          <Text style={styles.requestBtnText}>Demander un soin</Text>
+          <Text style={styles.requestBtnText}>{t("request_care")}</Text>
         </TouchableOpacity>
       </View>
     </View>

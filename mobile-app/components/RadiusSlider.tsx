@@ -11,6 +11,7 @@ import {
 // the native @react-native-community/slider module isn't linked (Expo Go).
 // If unavailable, render a simple fallback with +/- buttons.
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 
 type RadiusSliderProps = {
@@ -24,6 +25,7 @@ export function RadiusSlider({
   initialRadiusKm,
   onUpdated,
 }: RadiusSliderProps) {
+  const { t } = useI18n();
   const [radius, setRadius] = useState(initialRadiusKm);
   const [saving, setSaving] = useState(false);
 
@@ -48,7 +50,7 @@ export function RadiusSlider({
       onUpdated?.(rounded);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Impossible de mettre à jour le rayon de service.";
+        error instanceof Error ? error.message : t("cannot_update_radius");
       Alert.alert("Erreur", message);
     } finally {
       setSaving(false);
@@ -109,7 +111,7 @@ export function RadiusSlider({
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text style={styles.label}>Rayon de service</Text>
+        <Text style={styles.label}>{t("service_radius")}</Text>
         <Text style={styles.value}>{radius} km</Text>
       </View>
 
@@ -141,7 +143,7 @@ export function RadiusSlider({
       {saving ? (
         <View style={styles.savingRow}>
           <ActivityIndicator size="small" color={Colors.primary} />
-          <Text style={styles.savingText}>Enregistrement...</Text>
+          <Text style={styles.savingText}>{t("saving")}</Text>
         </View>
       ) : null}
     </View>

@@ -11,11 +11,13 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, ShieldCheck, Smartphone } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useMfa } from "@/lib/hooks/useMfa";
 import { supabase } from "@/lib/supabase";
 
 export default function MfaSettingsScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, refreshProfile, challengeMfaSms, verifyMfaSms } = useAuth();
   const { listTotpFactors, unenrollFactor, clearBackupCodes } = useMfa(user?.id);
@@ -70,7 +72,7 @@ export default function MfaSettingsScreen() {
       await updateProfileMfa(false, null);
       setTotpFactorId(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Impossible de désactiver le MFA.");
+      setErrorMessage(error instanceof Error ? error.message : t("cannot_disable_mfa"));
     } finally {
       setLoading(false);
     }
@@ -84,7 +86,7 @@ export default function MfaSettingsScreen() {
       await challengeMfaSms(profile.phone);
       setSmsSent(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Envoi SMS impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("sms_send_failed"));
     } finally {
       setSmsLoading(false);
     }
@@ -98,7 +100,7 @@ export default function MfaSettingsScreen() {
       await verifyMfaSms(profile.phone, smsCode);
       await updateProfileMfa(true, "sms");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Code SMS invalide.");
+      setErrorMessage(error instanceof Error ? error.message : t("invalid_sms_code"));
     } finally {
       setSmsLoading(false);
     }
@@ -112,7 +114,7 @@ export default function MfaSettingsScreen() {
       setSmsSent(false);
       setSmsCode("");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Impossible de désactiver le SMS.");
+      setErrorMessage(error instanceof Error ? error.message : t("cannot_disable_sms"));
     } finally {
       setSmsLoading(false);
     }
@@ -129,20 +131,20 @@ export default function MfaSettingsScreen() {
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Sécurité</Text>
+        <Text style={styles.title}>{t("security")}</Text>
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <ShieldCheck size={18} color={Colors.primary} />
-            <Text style={styles.cardTitle}>Authentificateur</Text>
+            <Text style={styles.cardTitle}>{t("authenticator")}</Text>
             {checkingFactors ? <ActivityIndicator size="small" color={Colors.primary} /> : null}
           </View>
           <Text style={styles.cardBody}>
             {checkingFactors
-              ? "Vérification du statut MFA…"
+              ? t("checking_mfa")
               : totpEnabled
-                ? "Activé : votre compte est protégé par un code TOTP."
-                : "Non activé : utilisez une application comme Google Authenticator ou Authy."}
+                ? t("mfa_on_desc")
+                : t("mfa_off_desc")}
           </Text>
           {totpEnabled ? (
             <TouchableOpacity
@@ -150,7 +152,7 @@ export default function MfaSettingsScreen() {
               onPress={handleDisableTotp}
               disabled={loading || checkingFactors}
             >
-              <Text style={styles.dangerText}>Désactiver</Text>
+              <Text style={styles.dangerText}>{t("disable")}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -158,7 +160,7 @@ export default function MfaSettingsScreen() {
               onPress={() => router.push({ pathname: "/auth/mfa-setup" })}
               disabled={loading || checkingFactors}
             >
-              <Text style={styles.primaryText}>Configurer</Text>
+              <Text style={styles.primaryText}>{t("configure")}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -167,7 +169,7 @@ export default function MfaSettingsScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Smartphone size={18} color={Colors.primary} />
-              <Text style={styles.cardTitle}>Code SMS de secours</Text>
+              <Text style={styles.cardTitle}>{t("sms_backup_code")}</Text>
             </View>
             {smsAvailable ? (
               <>
@@ -177,14 +179,14 @@ export default function MfaSettingsScreen() {
                     : "Activez un SMS de secours si vous ne configurez pas de TOTP."}
                 </Text>
                 {!profile?.phone ? (
-                  <Text style={styles.cardHint}>Numéro de téléphone manquant dans votre profil.</Text>
+                  <Text style={styles.cardHint}>{t("phone_missing_profile")}</Text>
                 ) : null}
                 {smsEnabled ? (
                   <TouchableOpacity style={styles.dangerBtn} onPress={handleSmsDisable} disabled={smsLoading}>
                     {smsLoading ? (
                       <ActivityIndicator size="small" color={Colors.danger} />
                     ) : (
-                      <Text style={styles.dangerText}>Désactiver</Text>
+                      <Text style={styles.dangerText}>{t("disable")}</Text>
                     )}
                   </TouchableOpacity>
                 ) : (
@@ -197,7 +199,7 @@ export default function MfaSettingsScreen() {
                       {smsLoading ? (
                         <ActivityIndicator size="small" color="white" />
                       ) : (
-                        <Text style={styles.primaryText}>Activer le SMS</Text>
+                        <Text style={styles.primaryText}>{t("enable_sms")}</Text>
                       )}
                     </TouchableOpacity>
                     {smsSent ? (
@@ -206,7 +208,7 @@ export default function MfaSettingsScreen() {
                           value={smsCode}
                           onChangeText={(text) => setSmsCode(text.replace(/\D/g, "").slice(0, 6))}
                           keyboardType="number-pad"
-                          placeholder="Code 6 chiffres"
+                          placeholder={t("six_digit_code")}
                           placeholderTextColor={Colors.textSubtle}
                           style={styles.smsInput}
                         />
@@ -215,7 +217,7 @@ export default function MfaSettingsScreen() {
                           onPress={handleSmsVerify}
                           disabled={smsLoading || smsCode.length !== 6}
                         >
-                          <Text style={styles.secondaryText}>Valider</Text>
+                          <Text style={styles.secondaryText}>{t("validate")}</Text>
                         </TouchableOpacity>
                       </View>
                     ) : null}

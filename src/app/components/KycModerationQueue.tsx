@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { sendApprovalEmail, sendRejectionEmail, getAdminSignedUrl } from "../../lib/api";
+import { sendApprovalEmail, sendRejectionEmail, getAdminSignedUrl, getPendingPros, getProDocumentsAdmin } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -24,64 +24,20 @@ export function KycModerationQueue() {
   const fetchQueue = async () => {
     setLoading(true);
     try {
-      // Fetch pending professionals via Edge Function (uses service role to bypass RLS)
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token || "";
-      
-      console.log("[KycModerationQueue] Fetching pending professionals...");
-      const pendingResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/professionals/pending`,
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-            "X-Admin-Key": "carelink-admin-2024",
-          },
-        }
-      );
-      
-      console.log("[KycModerationQueue] Pending response status:", pendingResponse.status);
-      const pendingData = await pendingResponse.json();
-      console.log("[KycModerationQueue] Pending professionals:", pendingData);
-      
-      if (!pendingResponse.ok) {
-        console.error("[KycModerationQueue] Pending response error:", pendingData);
-        toast.error(`Erreur: ${pendingData.error || "Impossible de charger les professionnels"}`);
-        setPros([]);
-        return;
-      }
-      
-      const professionals = pendingData.professionals || [];
-      console.log(`[KycModerationQueue] Found ${professionals.length} pending professionals`);
-      
-      // Fetch documents for each professional
+      // Pending pros + their documents — direct Postgres (admin RLS), no KV.
+      const { professionals } = await getPendingPros();
       const prosWithDocs = await Promise.all(
-        professionals.map(async (p: any) => {
-          console.log(`[KycModerationQueue] Fetching documents for pro ${p.id}...`);
-          const docsResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/server/make-server-aa5d1aa6/admin/professionals/${p.id}/documents`,
-            {
-              headers: {
-                Authorization: token ? `Bearer ${token}` : "",
-                "X-Admin-Key": "carelink-admin-2024",
-              },
-            }
-          );
-          
-          console.log(`[KycModerationQueue] Documents response status for ${p.id}:`, docsResponse.status);
-          const docsData = await docsResponse.json();
-          console.log(`[KycModerationQueue] Documents for ${p.id}:`, docsData);
-          
+        (professionals || []).map(async (p: any) => {
+          const { documents } = await getProDocumentsAdmin(p.id).catch(() => ({ documents: [] }));
           return {
             id: p.id,
-            full_name: p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : p.firstName || "Unknown",
+            full_name: p.profile?.full_name || "Professionnel",
             specialty: p.specialty,
-            city: p.city,
-            documents: docsData.documents || [],
+            city: p.profile?.city || p.city || "",
+            documents: documents || [],
           };
         })
       );
-      
-      console.log("[KycModerationQueue] Final pros with docs:", prosWithDocs);
       setPros(prosWithDocs);
     } catch (err) {
       console.error("[KycModerationQueue] Error fetching pending professionals:", err);

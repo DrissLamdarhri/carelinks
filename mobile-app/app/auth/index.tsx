@@ -20,6 +20,7 @@ import {
 } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
 import { onboardingSlides } from "@/lib/mock-data";
+import { useI18n } from "@/lib/i18n";
 
 const iconMap = {
   stethoscope: Stethoscope,
@@ -29,6 +30,7 @@ const iconMap = {
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const [step, setStep] = useState(0);
   const lastStep = onboardingSlides.length - 1;
   const scrollRef = useRef<FlatList<(typeof onboardingSlides)[0]> | null>(null);
@@ -55,11 +57,11 @@ export default function OnboardingScreen() {
         <View style={styles.iconCard}>
           <SlideIcon size={36} color="white" />
         </View>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.subtitle}</Text>
+        <Text style={styles.title}>{t(item.title)}</Text>
+        <Text style={styles.subtitle}>{t(item.subtitle)}</Text>
       </View>
     );
-  }, [screenWidth]);
+  }, [screenWidth, t]);
 
   return (
     <LinearGradient colors={Gradients.onboarding} style={styles.root}>
@@ -70,7 +72,7 @@ export default function OnboardingScreen() {
 
         <View style={styles.topRow}>
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")}>
-            <Text style={styles.skip}>Passer</Text>
+            <Text style={styles.skip}>{t("skip")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -109,7 +111,7 @@ export default function OnboardingScreen() {
 
           {step < lastStep ? (
             <TouchableOpacity onPress={next} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>Continuer</Text>
+              <Text style={styles.primaryBtnText}>{t("continue_btn")}</Text>
               <ChevronRight size={18} color={Colors.primary} />
             </TouchableOpacity>
           ) : (
@@ -118,14 +120,14 @@ export default function OnboardingScreen() {
                 onPress={() => router.push("/auth/patient-login")}
                 style={styles.primaryBtn}
               >
-                <Text style={styles.primaryBtnText}>Je suis patient</Text>
+                <Text style={styles.primaryBtnText}>{t("i_am_patient")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => router.push("/auth/pro-login")}
                 style={styles.secondaryBtn}
               >
-                <Text style={styles.secondaryBtnText}>Je suis professionnel</Text>
+                <Text style={styles.secondaryBtnText}>{t("i_am_pro")}</Text>
               </TouchableOpacity>
 
               {/* Admin Panel link removed from onboarding for security */}

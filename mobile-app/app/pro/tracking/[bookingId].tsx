@@ -31,6 +31,7 @@ import { geo } from "@/lib/db/geo";
 import { showToast } from "@/lib/toast";
 import { haptics } from "@/lib/haptics";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -49,16 +50,16 @@ function haversineKm(a: LatLng, b: LatLng): number {
 // ── In-app turn-by-turn (OSRM maneuvers → French instructions) ───────────────
 type NavStep = { instruction: string; loc: LatLng; dir: "left" | "right" | "straight" | "arrive" };
 
-function parseManeuver(m: { type?: string; modifier?: string }, name: string): { instruction: string; dir: NavStep["dir"] } {
+function parseManeuver(m: { type?: string; modifier?: string }, name: string, t: (k: string) => string): { instruction: string; dir: NavStep["dir"] } {
   const type = m?.type ?? "";
   const mod = m?.modifier ?? "";
-  const on = name ? ` sur ${name}` : "";
-  if (type === "arrive") return { instruction: "Vous êtes arrivé", dir: "arrive" };
-  if (type === "depart") return { instruction: name ? `Prenez ${name}` : "C'est parti", dir: "straight" };
-  if (type === "roundabout" || type === "rotary") return { instruction: `Prenez le rond-point${on}`, dir: "straight" };
-  if (mod.includes("left")) return { instruction: `Tournez à gauche${on}`, dir: "left" };
-  if (mod.includes("right")) return { instruction: `Tournez à droite${on}`, dir: "right" };
-  return { instruction: `Continuez tout droit${on}`, dir: "straight" };
+  const on = name ? ` ${t("nav_on")} ${name}` : "";
+  if (type === "arrive") return { instruction: t("you_arrived"), dir: "arrive" };
+  if (type === "depart") return { instruction: name ? `${t("nav_take")} ${name}` : t("nav_start"), dir: "straight" };
+  if (type === "roundabout" || type === "rotary") return { instruction: `${t("nav_roundabout")}${on}`, dir: "straight" };
+  if (mod.includes("left")) return { instruction: `${t("nav_turn_left")}${on}`, dir: "left" };
+  if (mod.includes("right")) return { instruction: `${t("nav_turn_right")}${on}`, dir: "right" };
+  return { instruction: `${t("nav_straight")}${on}`, dir: "straight" };
 }
 
 function fmtDist(km: number): string {
@@ -68,6 +69,7 @@ function fmtDist(km: number): string {
 }
 
 export default function ProTrackingScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = Array.isArray(params.bookingId) ? params.bookingId[0] : params.bookingId;
@@ -106,7 +108,7 @@ export default function ProTrackingScreen() {
         if (!d && b.address) d = await geo.geocodeAddress(b.address);
         if (!cancelled) setDest(d ?? MAP_CENTER);
       } catch {
-        if (!cancelled) showToast("Réservation introuvable");
+        if (!cancelled) showToast(t("reservation_not_found"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -129,9 +131,9 @@ export default function ProTrackingScreen() {
       try {
         const url = `https://router.project-osrm.org/route/v1/driving/${nurse.lng},${nurse.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`;
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 5000);
+        const timeoutId = setTimeout(() => ctrl.abort(), 5000);
         const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(t);
+        clearTimeout(timeoutId);
         const body = await res.json();
         const r = body.routes?.[0];
         const coords: LatLng[] | undefined = r?.geometry?.coordinates?.map(
@@ -143,7 +145,7 @@ export default function ProTrackingScreen() {
         const parsed: NavStep[] = rawSteps
           .filter((st) => Array.isArray(st?.maneuver?.location))
           .map((st) => {
-            const p = parseManeuver(st.maneuver, st.name ?? "");
+            const p = parseManeuver(st.maneuver, st.name ?? "", t);
             return { instruction: p.instruction, dir: p.dir, loc: { lat: st.maneuver.location[1], lng: st.maneuver.location[0] } };
           });
         if (parsed.length) {
@@ -176,7 +178,7 @@ export default function ProTrackingScreen() {
         showToast(doneMsg);
         if (status === "completed") router.back();
       } catch {
-        showToast("Action impossible");
+        showToast(t("action_failed"));
       } finally {
         setBusy(false);
       }
@@ -227,7 +229,7 @@ export default function ProTrackingScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.navInstruction} numberOfLines={2}>
-                {curStep ? curStep.instruction : nurse ? "Calcul de l'itinéraire…" : "Localisation…"}
+                {curStep ? curStep.instruction : nurse ? t("calculating_route") : t("locating")}
               </Text>
               <Text style={s.navSub}>
                 {stepDistKm != null ? `${fmtDist(stepDistKm)} · ` : ""}
@@ -241,7 +243,7 @@ export default function ProTrackingScreen() {
       {/* Bottom card */}
       <View style={s.sheet}>
         <View style={s.handle} />
-        <Text style={s.title}>En route vers le patient</Text>
+        <Text style={s.title}>{t("en_route_to_patient")}</Text>
 
         <View style={s.row}>
           <View style={s.avatar}><Text style={s.avatarTxt}>{patientName.slice(0, 1).toUpperCase()}</Text></View>
@@ -267,22 +269,22 @@ export default function ProTrackingScreen() {
             style={[s.actBtn, s.actGhost]}
             onPress={() => {
               if (patient?.phone) void Linking.openURL(`tel:${patient.phone}`);
-              else showToast("Numéro indisponible");
+              else showToast(t("number_unavailable"));
             }}
           >
             <Phone size={17} color={NAVY} strokeWidth={2.2} />
-            <Text style={s.actGhostTxt}>Appeler le patient</Text>
+            <Text style={s.actGhostTxt}>{t("call_patient")}</Text>
           </TouchableOpacity>
         </View>
 
         {status === "matched" ? (
-          <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("in_progress", "Mission démarrée")}>
-            <Text style={s.statusTxt}>Démarrer la mission</Text>
+          <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("in_progress", t("mission_started"))}>
+            <Text style={s.statusTxt}>{t("start_mission")}</Text>
           </TouchableOpacity>
         ) : status === "in_progress" ? (
-          <TouchableOpacity style={[s.statusBtn, s.statusDone]} disabled={busy} onPress={() => advance("completed", "Mission terminée")}>
+          <TouchableOpacity style={[s.statusBtn, s.statusDone]} disabled={busy} onPress={() => advance("completed", t("mission_completed"))}>
             <CheckCircle2 size={18} color="#FFFFFF" />
-            <Text style={s.statusTxt}>Terminer la mission</Text>
+            <Text style={s.statusTxt}>{t("end_mission")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>

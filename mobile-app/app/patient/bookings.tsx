@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { Calendar, CalendarClock, ChevronRight, MapPin, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import type { Booking } from "@/lib/db/types";
@@ -113,6 +114,8 @@ const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string 
 
 export default function PatientBookingsScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const STATUS_KEY: Record<string, string> = { open: "status_open", matched: "status_matched", in_progress: "status_in_progress", completed: "status_completed", cancelled: "status_cancelled" };
   const { user } = useAuth();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
@@ -177,18 +180,18 @@ export default function PatientBookingsScreen() {
   }, [bookings, loading, tab]);
 
   const upcoming = useMemo(
-    () => normalized.filter((item) => !item.isCompleted && item.statusLabel !== "Annulé"),
+    () => normalized.filter((item) => !item.isCompleted && item.status !== "cancelled"),
     [normalized]
   );
   const past = useMemo(
-    () => normalized.filter((item) => item.isCompleted || item.statusLabel === "Annulé"),
+    () => normalized.filter((item) => item.isCompleted || item.status === "cancelled"),
     [normalized]
   );
   const displayed = tab === "upcoming" ? upcoming : past;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Mes rendez-vous</Text>
+      <Text style={styles.title}>{t("my_appointments_full")}</Text>
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -196,7 +199,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("upcoming")}
         >
           <Text style={[styles.tabText, tab === "upcoming" && styles.tabTextActive]}>
-            À venir
+            {t("tab_upcoming")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -204,7 +207,7 @@ export default function PatientBookingsScreen() {
           onPress={() => setTab("past")}
         >
           <Text style={[styles.tabText, tab === "past" && styles.tabTextActive]}>
-            Historique
+            {t("tab_history")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -221,11 +224,11 @@ export default function PatientBookingsScreen() {
             <Calendar size={28} color={Colors.textSubtle} />
           </View>
           <Text style={styles.emptyTitle}>
-            {tab === "upcoming" ? "Aucun rendez-vous à venir" : "Aucun historique"}
+            {tab === "upcoming" ? t("no_upcoming") : t("no_history")}
           </Text>
           {tab === "upcoming" ? (
             <TouchableOpacity style={styles.emptyCta} onPress={() => router.push("/patient/request")}>
-              <Text style={styles.emptyCtaText}>Prendre un rendez-vous</Text>
+              <Text style={styles.emptyCtaText}>{t("book_appointment")}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -241,7 +244,7 @@ export default function PatientBookingsScreen() {
                   {item.specialtyLabel}
                 </Text>
                 <Text style={[styles.badge, { backgroundColor: "#F3F3F5", color: Colors.textMuted }]}>
-                  {item.statusLabel}
+                  {t(STATUS_KEY[item.status] ?? "status_open")}
                 </Text>
               </View>
 
@@ -322,7 +325,7 @@ export default function PatientBookingsScreen() {
                     });
                   }}
                 >
-                  <Text style={styles.secondaryBtnText}>Annuler</Text>
+                  <Text style={styles.secondaryBtnText}>{t("cancel")}</Text>
                 </TouchableOpacity>
                 )}
 
@@ -338,7 +341,7 @@ export default function PatientBookingsScreen() {
                   }}
                 >
                   <Text style={styles.primaryBtnText}>
-                    {item.isCompleted ? "Réserver à nouveau" : "Détails"}
+                    {item.isCompleted ? t("book_again") : t("see_details")}
                   </Text>
                   {!item.isCompleted ? <ChevronRight size={14} color="white" /> : null}
                 </TouchableOpacity>

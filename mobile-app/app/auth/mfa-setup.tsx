@@ -15,6 +15,7 @@ import { Buffer } from "buffer";
 import * as Clipboard from "expo-clipboard";
 import { SvgXml } from "react-native-svg";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useMfa } from "@/lib/hooks/useMfa";
 import { supabase } from "@/lib/supabase";
@@ -55,6 +56,7 @@ function CodeInput({
 }
 
 export default function MfaSetupScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams();
   const { user, profile, enrollMfaTotp, verifyMfaTotp, refreshProfile } = useAuth();
@@ -120,7 +122,7 @@ export default function MfaSetupScreen() {
         setSecret(result.secret);
       } catch (error) {
         if (!mounted) return;
-        setErrorMessage(error instanceof Error ? error.message : "Impossible de configurer le MFA.");
+        setErrorMessage(error instanceof Error ? error.message : t("cannot_setup_mfa"));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -141,7 +143,7 @@ export default function MfaSetupScreen() {
       const codes = await createBackupCodes(8);
       setBackupCodes(codes);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Code invalide.");
+      setErrorMessage(error instanceof Error ? error.message : t("invalid_code"));
     } finally {
       setVerifying(false);
     }
@@ -215,7 +217,7 @@ export default function MfaSetupScreen() {
           <View style={styles.iconWrap}>
             <ShieldCheck size={22} color={Colors.primary} />
           </View>
-          <Text style={styles.title}>Activer la double authentification</Text>
+          <Text style={styles.title}>{t("enable_2fa")}</Text>
           <Text style={styles.subtitle}>
             Scannez le QR code puis saisissez le code à 6 chiffres pour confirmer.
           </Text>
@@ -224,7 +226,7 @@ export default function MfaSetupScreen() {
         {isEnabled ? (
           <View style={styles.enabledCard}>
             <Text style={styles.enabledTitle}>MFA déjà activé</Text>
-            <Text style={styles.enabledText}>Votre compte est déjà protégé.</Text>
+            <Text style={styles.enabledText}>{t("account_protected")}</Text>
           </View>
         ) : (
           <>
@@ -233,9 +235,9 @@ export default function MfaSetupScreen() {
             {secret ? (
               <View style={styles.secretCard}>
                 <View style={styles.secretHeader}>
-                  <Text style={styles.secretLabel}>Clé manuelle</Text>
+                  <Text style={styles.secretLabel}>{t("manual_key")}</Text>
                   <TouchableOpacity onPress={handleCopySecret} style={styles.copyBtn}>
-                    <Text style={styles.copyText}>{secretCopied ? "Copié" : "Copier"}</Text>
+                    <Text style={styles.copyText}>{secretCopied ? "Copié" : t("copy")}</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.secretValue}>{secret}</Text>
@@ -255,7 +257,7 @@ export default function MfaSetupScreen() {
               {verifying ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.submitText}>Valider</Text>
+                <Text style={styles.submitText}>{t("validate")}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -263,7 +265,7 @@ export default function MfaSetupScreen() {
 
         {backupCodes.length > 0 ? (
           <View style={styles.backupCard}>
-            <Text style={styles.backupTitle}>Codes de secours</Text>
+            <Text style={styles.backupTitle}>{t("backup_codes")}</Text>
             <Text style={styles.backupHint}>
               Notez ces codes dans un endroit sûr. Chaque code est utilisable une seule fois.
             </Text>
@@ -275,7 +277,7 @@ export default function MfaSetupScreen() {
               ))}
             </View>
             <TouchableOpacity onPress={handleContinue} style={styles.continueBtn}>
-              <Text style={styles.continueText}>Continuer</Text>
+              <Text style={styles.continueText}>{t("continue_btn")}</Text>
             </TouchableOpacity>
           </View>
         ) : null}

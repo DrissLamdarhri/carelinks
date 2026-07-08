@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, ChevronRight, Eye, EyeOff, Lock, Mail, Shield, Stethoscope } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
@@ -20,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 export default function ProLoginScreen() {
   const router = useRouter();
   const { signInWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset } = useAuth();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -87,14 +89,14 @@ export default function ProLoginScreen() {
 
         if (proError || !proData) {
           // Professional account not found or error - redirect to signup
-          showToast("Compte professionnel non trouvé. Veuillez d'abord vous inscrire.");
+          showToast(t("pro_not_found"));
           router.replace("/auth/pro-registration");
           return;
         }
 
         if (proData.verification_status !== "approved") {
           // Professional not verified - redirect to upload documents
-          showToast("Votre compte n'est pas encore vérifié. Complétez l'inscription.");
+          showToast(t("pro_not_verified"));
           router.replace("/auth/pro-registration");
           return;
         }
@@ -147,27 +149,18 @@ export default function ProLoginScreen() {
             <Stethoscope size={24} color="white" />
           </View>
           <View>
-            <Text style={styles.heroTitle}>Espace Pro</Text>
-            <Text style={styles.heroSubtitle}>Infirmier · Psychologue · Kiné · Yoga</Text>
+            <Text style={styles.heroTitle}>{t("espace_pro")}</Text>
+            <Text style={styles.heroSubtitle}>{t("pro_specialties")}</Text>
           </View>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.formLead}>Connectez-vous à votre compte professionnel</Text>
-
-        <GoogleAuthButton loading={googleLoading} onPress={handleGoogleSignIn} />
-        <View style={styles.oauthSpacer} />
-        <AppleAuthButton loading={appleLoading} onPress={handleAppleSignIn} />
-
-        <View style={styles.sepRow}>
-          <View style={styles.sepLine} />
-          <Text style={styles.sepText}>ou avec email</Text>
-          <View style={styles.sepLine} />
-        </View>
+        <Text style={styles.formLead}>{t("pro_login_lead")}</Text>
+        <Text style={styles.formHint}>{t("pro_email_hint")}</Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Email professionnel</Text>
+          <Text style={styles.label}>{t("email_pro")}</Text>
           <View style={styles.inputWrap}>
             <Mail size={18} color={Colors.textMuted} />
             <TextInput
@@ -183,7 +176,7 @@ export default function ProLoginScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Mot de passe</Text>
+          <Text style={styles.label}>{t("password")}</Text>
           <View style={styles.inputWrap}>
             <Lock size={18} color={Colors.textMuted} />
             <TextInput
@@ -203,18 +196,18 @@ export default function ProLoginScreen() {
         <TouchableOpacity
           onPress={async () => {
             if (!email.trim()) {
-              showToast("Entrez votre email d'abord");
+              showToast(t("enter_email_first"));
               return;
             }
             try {
               await sendPasswordReset(email);
-              showToast("Email de réinitialisation envoyé ✓");
+              showToast(t("reset_sent"));
             } catch (e) {
               showToast(e instanceof Error ? e.message : "Envoi impossible");
             }
           }}
         >
-          <Text style={styles.forgot}>Mot de passe oublié ?</Text>
+          <Text style={styles.forgot}>{t("forgot_password")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -226,7 +219,7 @@ export default function ProLoginScreen() {
             <ActivityIndicator size="small" color="white" />
           ) : (
             <>
-              <Text style={styles.submitText}>Se connecter</Text>
+              <Text style={styles.submitText}>{t("signin_btn")}</Text>
               <ChevronRight size={18} color="white" />
             </>
           )}
@@ -237,15 +230,15 @@ export default function ProLoginScreen() {
         <View style={styles.noticeCard}>
           <Shield size={20} color={Colors.primary} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.noticeTitle}>Compte vérifié requis</Text>
-            <Text style={styles.noticeBody}>Seuls les professionnels approuvés peuvent se connecter</Text>
+            <Text style={styles.noticeTitle}>{t("verified_account_required")}</Text>
+            <Text style={styles.noticeBody}>{t("only_approved_pros")}</Text>
           </View>
         </View>
 
         <View style={styles.registerWrap}>
-          <Text style={styles.registerHint}>Pas encore inscrit ?</Text>
+          <Text style={styles.registerHint}>{t("not_registered")}</Text>
           <TouchableOpacity onPress={() => router.push("/auth/pro-registration")} style={styles.registerBtn}>
-            <Text style={styles.registerText}>Créer un compte professionnel</Text>
+            <Text style={styles.registerText}>{t("create_pro_account")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -305,7 +298,8 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: { color: "rgba(255,255,255,0.65)", fontSize: 13, marginTop: 1 },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 28 },
-  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 14 },
+  formLead: { fontSize: 15, color: Colors.textPrimary, fontWeight: "600", marginBottom: 6 },
+  formHint: { fontSize: 12, color: Colors.textMuted, lineHeight: 17, marginBottom: 16 },
   sepRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 14 },
   sepLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
   sepText: { fontSize: 11, color: Colors.textMuted },

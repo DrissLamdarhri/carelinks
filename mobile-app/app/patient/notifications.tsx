@@ -1,5 +1,7 @@
 import { NotificationPreferences } from "@/components/NotificationPreferences";
+import { useI18n } from "@/lib/i18n";
 
 export default function PatientNotificationsScreen() {
-  return <NotificationPreferences title="Notifications" />;
+  const { t } = useI18n();
+  return <NotificationPreferences title={t("notifications")} />;
 }

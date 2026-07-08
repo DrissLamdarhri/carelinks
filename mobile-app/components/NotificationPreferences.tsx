@@ -11,6 +11,7 @@ import {
 import { ArrowLeft, Bell, Lock, Mail, MessageCircle, Shield, Smartphone } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { NotificationSettings } from "@/lib/db/types";
@@ -36,6 +37,7 @@ type Row = {
 const SMS_DISABLED = true;
 
 export function NotificationPreferences({ title = "Notifications" }: { title?: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
@@ -51,7 +53,7 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
         const row = await db.notificationSettings.getOrCreate(user.id);
         if (active) setSettings(row);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "Paramètres indisponibles.");
+        showToast(error instanceof Error ? error.message : t("settings_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -64,12 +66,12 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
 
   const rows = useMemo<Row[]>(
     () => [
-      { key: "push_enabled", label: "Notifications push", icon: Bell },
+      { key: "push_enabled", label: t("push_notifications"), icon: Bell },
       { key: "email_enabled", label: "Emails", icon: Mail },
       {
         key: "sms_enabled",
         label: "SMS",
-        description: SMS_DISABLED ? "Indisponible sans fournisseur SMS." : undefined,
+        description: SMS_DISABLED ? t("sms_unavailable") : undefined,
         icon: Smartphone,
         disabled: SMS_DISABLED,
       },
@@ -79,13 +81,13 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
 
   const categoryRows = useMemo<Row[]>(
     () => [
-      { key: "appointment_enabled", label: "Rendez-vous", icon: Bell },
+      { key: "appointment_enabled", label: t("appointments"), icon: Bell },
       { key: "messages_enabled", label: "Messages", icon: MessageCircle },
-      { key: "reminders_enabled", label: "Rappels santé", icon: Shield },
+      { key: "reminders_enabled", label: t("health_reminders"), icon: Shield },
       {
         key: "security_enabled",
-        label: "Alertes de sécurité",
-        description: "Toujours activé pour protéger votre compte.",
+        label: t("security_alerts"),
+        description: t("always_on_security"),
         icon: Lock,
         disabled: true,
       },
@@ -102,7 +104,7 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
       const updated = await db.notificationSettings.update(user.id, { [key]: value });
       setSettings(updated);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Mise à jour impossible.");
+      showToast(error instanceof Error ? error.message : t("update_failed"));
       setSettings((prev) => (prev ? { ...prev, [key]: !value } : prev));
     } finally {
       setSavingKey(null);
@@ -127,7 +129,7 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
       {!loading && settings ? (
         <>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Canaux</Text>
+            <Text style={styles.sectionTitle}>{t("channels")}</Text>
             {rows.map((row) => (
               <View key={row.key} style={styles.row}>
                 <View style={styles.rowLeft}>
@@ -151,7 +153,7 @@ export function NotificationPreferences({ title = "Notifications" }: { title?: s
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Catégories</Text>
+            <Text style={styles.sectionTitle}>{t("categories")}</Text>
             {categoryRows.map((row) => (
               <View key={row.key} style={styles.row}>
                 <View style={styles.rowLeft}>

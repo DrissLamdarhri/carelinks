@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   Check, X, Eye, Clock, AlertCircle, CheckCircle2, XCircle,
   Mail, MapPin, Phone, Award, Filter, Download, Search, UserX, ExternalLink, FileText,
+  Image as ImageIcon, CreditCard, FileCode2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -47,6 +48,9 @@ export function ProfessionalsManager() {
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
 
   useEffect(() => {
     loadProfessionals();
@@ -195,73 +199,33 @@ export function ProfessionalsManager() {
   const loadProDocuments = async (proId: string) => {
     setDocsLoading(true);
     try {
-      // If the admin UI flag is set, prefer the admin API (service-role) first — avoids RLS filtering
-      if (isAdminAuthed) {
-        try {
-          const res = await getProDocumentsAdmin(proId);
-          if (res?.documents && res.documents.length > 0) {
-            setProDocuments(res.documents);
-            return;
-          }
-        } catch (adminErr) {
-          console.warn("Admin API pro documents error (falling back to client):", adminErr);
-        }
-      }
-
+      // Try direct query first
       const { data, error } = await supabase
         .from("pro_documents")
         .select("id,doc_type,storage_path,is_verified,uploaded_at")
         .eq("professional_id", proId)
         .order("uploaded_at", { ascending: false });
 
-      console.log(`📄 Loaded pro_documents for ${proId}: ${data?.length ?? 0} rows`, { data });
+      console.log(`📄 Loaded pro_documents for ${proId}: ${data?.length ?? 0} rows`, { data, error });
 
       if (error) {
-        console.warn("Error fetching pro documents via RLS:", error);
-        // Try admin API fallback
-        try {
-          const res = await getProDocumentsAdmin(proId);
-          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
-          setProDocuments(res.documents ?? []);
-          return;
-        } catch (apiErr) {
-          console.error("Admin API pro documents error:", apiErr);
-          setProDocuments([]);
-          return;
-        }
+        console.warn("Error fetching pro documents:", error);
+        toast.error("Erreur lors du chargement des documents (RLS policy?)");
+        setProDocuments([]);
+        return;
       }
 
       if (!data || data.length === 0) {
-        console.warn(`⚠️  No documents found for ${proId}. Trying admin API...`);
-        // Fallback in case RLS filtered results
-        try {
-          const res = await getProDocumentsAdmin(proId);
-          console.log(`📄 Admin API fallback: ${res.documents?.length ?? 0} documents`);
-          if (res.documents && res.documents.length > 0) {
-            setProDocuments(res.documents);
-            return;
-          }
-        } catch (apiErr) {
-          console.error("Admin API pro documents error:", apiErr);
-        }
+        console.warn(`⚠️  No documents found for ${proId}`);
+        setProDocuments([]);
+        return;
       }
 
-      setProDocuments(data ?? []);
+      setProDocuments(data);
     } catch (e: any) {
       console.error("Error loading pro documents:", e);
-      console.error("Pro documents error details:", {
-        message: e?.message ?? String(e),
-        code: e?.code ?? null,
-        status: e?.status ?? null,
-        stack: e?.stack ?? null,
-      });
-      try {
-        const res = await getProDocumentsAdmin(proId);
-        setProDocuments(res.documents ?? []);
-      } catch (fallbackErr) {
-        console.error("Fallback admin API failed:", fallbackErr);
-        setProDocuments([]);
-      }
+      toast.error("Erreur lors du chargement des documents");
+      setProDocuments([]);
     } finally {
       setDocsLoading(false);
     }
@@ -986,52 +950,89 @@ export function ProfessionalsManager() {
                   ) : (
                     <div className="space-y-2">
                       {proDocuments.map((d: any) => {
-                        const docIcon = d.doc_type === "diploma" ? "📄" : d.doc_type === "cin" ? "🪪" : "🤳";
-                        const isImage = d.doc_type === "cin" || d.doc_type === "selfie";
-                        const SUPABASE_URL = "https://wjhzrovmktekfcjohhrw.supabase.co";
-                        const docUrl = `${SUPABASE_URL}/storage/v1/object/public/pro-documents/${d.storage_path}`;
+                        const getDocIcon = () => {
+                          if (d.doc_type === "diploma") return FileText;
+                          if (d.doc_type === "cin") return CreditCard;
+                          return ImageIcon;
+                        };
+                        const DocIcon = getDocIcon();
+                        
+                        const handleOpenDocument = async () => {
+                          try {
+                            setSelectedDocument(d);
+                            setDocumentPreviewLoading(true);
+                            setDocumentPreviewUrl(null);
+
+                            console.log("📄 Opening document:", d.doc_type, "Path:", d.storage_path);
+                            
+                            const url = await getAdminSignedUrl(d.storage_path);
+                            console.log("🔗 Signed URL generated:", url.signedUrl.substring(0, 100) + "...");
+                            
+                            // Fetch the blob
+                            const response = await fetch(url.signedUrl);
+                            console.log("📡 Fetch response status:", response.status, "Content-Type:", response.headers.get('content-type'));
+                            
+                            if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+                            
+                            const blob = await response.blob();
+                            console.log("💾 Blob loaded - Size:", blob.size, "Type:", blob.type);
+                            
+                            if (blob.size === 0) {
+                              throw new Error("Blob is empty - file may not exist at this path");
+                            }
+                            
+                            const blobUrl = URL.createObjectURL(blob);
+                            console.log("✅ Blob URL created:", blobUrl);
+                            setDocumentPreviewUrl(blobUrl);
+                          } catch (error) {
+                            console.error("❌ Error loading document:", error);
+                            toast.error("Erreur lors du chargement du document");
+                          } finally {
+                            setDocumentPreviewLoading(false);
+                          }
+                        };
                         
                         return (
-                          <div key={d.id} className="relative" style={{ background: "#F8F8FC", borderRadius: 12, padding: 12, border: "1px solid #E0E0E0" }}>
-                            <div className="flex gap-3">
-                              {/* Preview thumbnail for images */}
-                              {isImage && (
-                                <div
-                                  className="w-12 h-12 rounded-lg flex-shrink-0 border border-[#E0E0E0] overflow-hidden bg-white flex items-center justify-center"
-                                >
-                                  <img 
-                                    src={docUrl} 
-                                    alt={d.doc_type} 
-                                    className="w-full h-full object-cover"
-                                    onError={() => console.error("Failed to load image:", docUrl)}
-                                  />
-                                </div>
-                              )}
-                              
-                              {/* Document info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-lg">{docIcon}</span>
-                                  <p className="text-sm text-[#1A1A1A] font-semibold">
-                                    {d.doc_type === "diploma" ? "Diplôme" : d.doc_type === "cin" ? "Carte d'Identité" : "Photo d'Identité"}
-                                  </p>
-                                  {d.is_verified && (
-                                    <span className="inline-block px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#16A34A] text-xs font-semibold">✓ Vérifié</span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-[#888780]">
-                                  Uploadé le {new Date(d.uploaded_at).toLocaleDateString("fr-FR", {day: "numeric", month: "long", year: "numeric"})}
-                                </p>
-                              </div>
-                              
-                              {/* Open button */}
-                              <button 
-                                onClick={() => window.open(docUrl, "_blank")}
-                                className="px-3 h-8 bg-[#0D0870] text-white rounded-lg text-[12px] font-semibold hover:opacity-90 flex-shrink-0 flex items-center gap-1"
+                          <div 
+                            key={d.id} 
+                            className="flex items-start gap-3 p-4 rounded-xl border border-[#E0E0E0] hover:border-[#0D0870] hover:shadow-md transition-all bg-white"
+                            style={{ background: "#FAFAFA" }}
+                          >
+                            {/* Icon / Thumbnail */}
+                            <div className="flex-shrink-0">
+                              <div
+                                className="w-14 h-14 rounded-lg border-2 border-[#E0E0E0] flex items-center justify-center"
+                                style={{ background: "#F8F8FC" }}
                               >
-                                <ExternalLink size={12} /> Voir
-                              </button>
+                                <DocIcon size={24} className="text-[#888780]" />
+                              </div>
                             </div>
+
+                            {/* Document info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-semibold text-[#1A1A1A]">
+                                  {d.doc_type === "diploma" ? "Diplôme" : d.doc_type === "cin" ? "Carte d'Identité" : "Photo d'Identité"}
+                                </p>
+                                {d.is_verified && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#16A34A] text-xs font-semibold">
+                                    <Check size={12} /> Vérifié
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-[#888780]">
+                                Uploadé le {new Date(d.uploaded_at).toLocaleDateString("fr-FR", {day: "numeric", month: "long", year: "numeric"})}
+                              </p>
+                            </div>
+
+                            {/* Open button */}
+                            <button 
+                              onClick={handleOpenDocument}
+                              className="flex-shrink-0 px-4 py-2 bg-[#0D0870] text-white rounded-lg text-xs font-semibold hover:bg-[#0A005C] transition-colors flex items-center gap-1 whitespace-nowrap"
+                            >
+                              <ExternalLink size={14} /> 
+                              <span>Voir</span>
+                            </button>
                           </div>
                         );
                       })}
@@ -1179,6 +1180,85 @@ export function ProfessionalsManager() {
             </motion.div>
           </div>
         )}
+
+        {/* Document Preview Modal */}
+        <AnimatePresence>
+          {selectedDocument && documentPreviewUrl && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              onClick={() => {
+                setSelectedDocument(null);
+                setDocumentPreviewUrl(null);
+                if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 overflow-hidden"
+              >
+                <div className="flex items-center justify-between p-6 border-b border-[#E0E0E0]">
+                  <h3 className="text-lg font-bold text-[#1A1A1A]">
+                    {selectedDocument.doc_type === "diploma" ? "Diplôme" : selectedDocument.doc_type === "cin" ? "Carte d'Identité" : "Photo d'Identité"}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setSelectedDocument(null);
+                      setDocumentPreviewUrl(null);
+                      if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
+                    }}
+                    className="text-[#888780] hover:text-[#1A1A1A] transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div className="p-6 flex items-center justify-center bg-[#F5F5F5] min-h-96">
+                  {documentPreviewLoading ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D0870]"></div>
+                      <p className="text-sm text-[#888780]">Chargement du document...</p>
+                    </div>
+                  ) : (
+                    <img 
+                      src={documentPreviewUrl} 
+                      alt="Document preview"
+                      className="max-w-full max-h-96 object-contain rounded-lg"
+                      onError={() => {
+                        toast.error("Impossible d'afficher l'image");
+                        setSelectedDocument(null);
+                        setDocumentPreviewUrl(null);
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div className="flex gap-3 p-6 border-t border-[#E0E0E0]">
+                  <a 
+                    href={documentPreviewUrl || '#'}
+                    download={`${selectedDocument.doc_type}-${selectedDocument.id}`}
+                    className="flex-1 px-4 py-2.5 bg-[#0D0870] text-white rounded-lg text-sm font-semibold hover:bg-[#0A005C] transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download size={16} />
+                    Télécharger
+                  </a>
+                  <button
+                    onClick={() => {
+                      setSelectedDocument(null);
+                      setDocumentPreviewUrl(null);
+                      if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
+                    }}
+                    className="flex-1 px-4 py-2.5 border border-[#E0E0E0] text-[#1A1A1A] rounded-lg text-sm font-semibold hover:bg-[#F5F5F5] transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
     </div>
   );

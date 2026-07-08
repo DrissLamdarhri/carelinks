@@ -20,20 +20,21 @@ the patient accepts a bid, then gets live tracking, chat, payment, and rating. P
 
 **Supabase project ref:** `wjhzrovmktekfcjohhrw`. Edge Function base path: `make-server-aa5d1aa6`.
 
-## ⚠️ The one thing to internalize: there are TWO parallel backends
+## Backend: one source of truth — Postgres
 
-The web app and mobile app do **not** share a data path, and they use **incompatible data models**:
+The **entire product runs on direct Postgres tables** under RLS + Realtime: the
+**mobile app** (the product) and the **web admin panel** (`/admin`). A typed DAL
+(`mobile-app/lib/db/dal.ts`, `src/lib/db/dal.ts`) reads/writes relational tables
+(`bookings`, `bids`, `payments`, `professionals`, …). **Build here.**
 
-- **Path A — KV Edge Function** (web only): `src/lib/api.ts` → Hono server `supabase/functions/server/index.tsx`,
-  which stores `request:*` / `offer:*` / `user:*` / `pro:*` blobs in a JSONB `kv_store_aa5d1aa6` table.
-  This is the Figma-Make-generated demo backend.
-- **Path B — Direct Postgres tables** (mobile, and parts of web): a typed DAL (`mobile-app/lib/db/dal.ts`,
-  `src/lib/db/dal.ts`) reads/writes relational tables (`bookings`, `bids`, …) directly under RLS, with
-  Supabase Realtime (`postgres_changes`) for live updates. **This is the intended production model.**
+The old **Figma-Make KV edge function** (`make-server-aa5d1aa6`) + its
+`kv_store_aa5d1aa6` blob table + the web "iPhone preview" patient/pro demo have
+been **retired** — there is no second backend. The only edge functions left are
+`send-approval-email` / `send-rejection-email`. Details: [`docs/architecture.md`](docs/architecture.md).
 
-They are **not synchronized**. Terminology differs: Path A = *requests/offers*; Path B = *bookings/bids*.
-Some web components (e.g. `NurseBooking`, `MyBookings`, `WaitingOffers`) import both in the same file.
-**When in doubt, build on Path B (relational tables + DAL + Realtime).** Details: [`docs/architecture.md`](docs/architecture.md).
+> One leftover cleanup on the Supabase side: the deployed `server` function + the
+> `kv_store_aa5d1aa6` table still physically exist in the project — drop them when
+> convenient (`supabase functions delete server`; `drop table kv_store_aa5d1aa6;`).
 
 ## Commands
 

@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,11 +19,13 @@ import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 import { AppleAuthButton } from "@/components/AppleAuthButton";
 import { showToast } from "@/lib/toast";
+import { useI18n } from "@/lib/i18n";
 
 export default function PatientAuthFlowScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const { t } = useI18n();
   const screenWidth = Dimensions.get("window").width;
 
   // Shared OAuth state
@@ -71,6 +75,7 @@ export default function PatientAuthFlowScreen() {
     agreed;
 
   const routeByRole = (nextRole: string | null) => {
+    showToast("Connexion réussie ✓", "success");
     if (nextRole === "pro") {
       router.replace("/pro");
     } else if (nextRole === "admin") {
@@ -207,13 +212,13 @@ export default function PatientAuthFlowScreen() {
             style={[styles.tabBtn, tab === 0 && styles.tabActive]}
             onPress={() => switchTab(0)}
           >
-            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>Connexion</Text>
+            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>{t("login")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabBtn, tab === 1 && styles.tabActive]}
             onPress={() => switchTab(1)}
           >
-            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>Inscription</Text>
+            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>{t("signup")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -236,10 +241,10 @@ export default function PatientAuthFlowScreen() {
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
-            <Text style={styles.screenTitle}>Bon retour !</Text>
-            <Text style={styles.screenSubtitle}>Connectez-vous pour accéder à vos soins</Text>
+            <Text style={styles.screenTitle}>{t("welcome_back")}</Text>
+            <Text style={styles.screenSubtitle}>{t("login_subtitle")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -248,12 +253,12 @@ export default function PatientAuthFlowScreen() {
 
           <View style={styles.sepRow}>
             <View style={styles.sepLine} />
-            <Text style={styles.sepText}>ou avec email</Text>
+            <Text style={styles.sepText}>{t("or_with_email")}</Text>
             <View style={styles.sepLine} />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t("email")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -269,7 +274,7 @@ export default function PatientAuthFlowScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{t("password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -291,7 +296,7 @@ export default function PatientAuthFlowScreen() {
           </View>
 
           <TouchableOpacity>
-            <Text style={styles.forgot}>Mot de passe oublié ?</Text>
+            <Text style={styles.forgot}>{t("forgot_password")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -303,7 +308,7 @@ export default function PatientAuthFlowScreen() {
               <ActivityIndicator size="small" color="white" />
             ) : (
               <>
-                <Text style={styles.submitText}>Se connecter</Text>
+                <Text style={styles.submitText}>{t("signin_btn")}</Text>
                 <ChevronRight size={18} color="white" />
               </>
             )}
@@ -317,10 +322,10 @@ export default function PatientAuthFlowScreen() {
         </ScrollView>
 
         {/* REGISTRATION SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
-            <Text style={styles.screenTitle}>Bienvenue !</Text>
-            <Text style={styles.screenSubtitle}>Créez votre compte pour débuter votre parcours</Text>
+            <Text style={styles.screenTitle}>{t("welcome_excl")}</Text>
+            <Text style={styles.screenSubtitle}>{t("create_account_subtitle")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -329,14 +334,14 @@ export default function PatientAuthFlowScreen() {
 
           <View style={styles.sepRow}>
             <View style={styles.sepLine} />
-            <Text style={styles.sepText}>ou avec email</Text>
+            <Text style={styles.sepText}>{t("or_with_email")}</Text>
             <View style={styles.sepLine} />
           </View>
 
           {/* Name fields */}
           <View style={{ flexDirection: "row", gap: 12 }}>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={styles.label}>Prénom</Text>
+              <Text style={styles.label}>{t("first_name")}</Text>
               <View style={styles.inputWrap}>
                 <User size={18} color={Colors.textMuted} />
                 <TextInput
@@ -349,7 +354,7 @@ export default function PatientAuthFlowScreen() {
               </View>
             </View>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={styles.label}>Nom</Text>
+              <Text style={styles.label}>{t("last_name")}</Text>
               <View style={styles.inputWrap}>
                 <User size={18} color={Colors.textMuted} />
                 <TextInput
@@ -365,7 +370,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* Phone field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Téléphone</Text>
+            <Text style={styles.label}>{t("phone")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -381,7 +386,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* Email field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t("email")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -398,7 +403,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* City field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Ville</Text>
+            <Text style={styles.label}>{t("city")}</Text>
             <View style={styles.pickerWrap}>
               <MapPin size={18} color={Colors.textMuted} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
@@ -417,7 +422,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* Password field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{t("password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -453,7 +458,7 @@ export default function PatientAuthFlowScreen() {
 
           {/* Confirm password field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Confirmer mot de passe</Text>
+            <Text style={styles.label}>{t("confirm_password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -491,7 +496,7 @@ export default function PatientAuthFlowScreen() {
               <ActivityIndicator size="small" color="white" />
             ) : (
               <>
-                <Text style={styles.submitText}>Créer mon compte</Text>
+                <Text style={styles.submitText}>{t("create_my_account")}</Text>
                 <ChevronRight size={18} color="white" />
               </>
             )}
@@ -536,7 +541,7 @@ const styles = StyleSheet.create({
   },
   tabText: { fontSize: 14, color: Colors.textMuted },
   tabActiveText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
-  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 240 },
   screenHeader: { marginBottom: 16 },
   screenTitle: {
     fontSize: 28,

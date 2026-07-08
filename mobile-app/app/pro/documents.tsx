@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, BadgeCheck, FileText, Upload } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { ProDocument } from "@/lib/db/types";
@@ -22,6 +23,7 @@ const docTypes = [
 ];
 
 export default function ProDocumentsScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
 
@@ -45,7 +47,7 @@ export default function ProDocumentsScreen() {
         const rows = await db.proDocuments.listForPro(user.id);
         setDocuments(rows);
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Chargement des documents impossible.");
+        setErrorMessage(error instanceof Error ? error.message : t("cannot_load_docs"));
       } finally {
         setLoading(false);
       }
@@ -68,7 +70,7 @@ export default function ProDocumentsScreen() {
       setDocuments((prev) => [next, ...prev]);
       setStoragePath("");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Ajout du document impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("cannot_add_doc"));
     } finally {
       setSubmitting(false);
     }
@@ -81,13 +83,13 @@ export default function ProDocumentsScreen() {
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Documents & certifications</Text>
+          <Text style={styles.title}>{t("docs_certifications")}</Text>
           <Text style={styles.subtitle}>KYC et vérification professionnelle</Text>
         </View>
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.formTitle}>Ajouter un document</Text>
+        <Text style={styles.formTitle}>{t("add_document")}</Text>
         <View style={styles.chipsRow}>
           {docTypes.map((item) => {
             const active = item.key === docType;
@@ -119,13 +121,13 @@ export default function ProDocumentsScreen() {
           ) : (
             <>
               <Upload size={16} color="white" />
-              <Text style={styles.uploadText}>Enregistrer le document</Text>
+              <Text style={styles.uploadText}>{t("save_document")}</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.listTitle}>Mes documents</Text>
+      <Text style={styles.listTitle}>{t("my_documents")}</Text>
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -153,7 +155,7 @@ export default function ProDocumentsScreen() {
 
       {!loading && documents.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucun document pour le moment.</Text>
+          <Text style={styles.emptyText}>{t("no_documents_yet")}</Text>
         </View>
       ) : null}
 

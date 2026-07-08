@@ -25,6 +25,7 @@ import {
   Phone,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import {
   MOROCCAN_CITIES,
   mockPatientProfile,
@@ -47,6 +48,7 @@ const serviceIconMap = {
 
 export default function PatientHomeScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { profile, refreshProfile } = useAuth();
   
   // Refresh profile when screen comes into focus
@@ -79,7 +81,7 @@ export default function PatientHomeScreen() {
                 useDefaultImage={!avatar}
               />
             <View>
-              <Text style={styles.greeting}>Bonjour 👋</Text>
+              <Text style={styles.greeting}>{t("hello")}</Text>
               <Text style={styles.userName}>
                 {displayName.firstName} {displayName.lastName}
               </Text>
@@ -90,7 +92,7 @@ export default function PatientHomeScreen() {
           </View>
         </View>
 
-        <Text style={styles.question}>Quel soin recherchez-vous ?</Text>
+        <Text style={styles.question}>{t("what_care")}</Text>
         <Text style={styles.questionSub}>
           Des professionnels certifiés disponibles maintenant
         </Text>
@@ -113,7 +115,7 @@ export default function PatientHomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choisissez votre service</Text>
+        <Text style={styles.sectionTitle}>{t("choose_service")}</Text>
         <View style={styles.grid}>
           {primaryServices.map((s) => {
             const Icon = serviceIconMap[s.icon];
@@ -167,7 +169,7 @@ export default function PatientHomeScreen() {
           <View style={styles.ctaIconWrap}>
             <Zap size={16} color="white" />
           </View>
-          <Text style={styles.ctaText}>Demander un soin maintenant</Text>
+          <Text style={styles.ctaText}>{t("request_care_now")}</Text>
           <ChevronRight size={18} color="white" />
         </TouchableOpacity>
         <Text style={styles.ctaHint}>⚡ Réponse en moins de 5 minutes</Text>
@@ -217,12 +219,12 @@ export default function PatientHomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Prochain rendez-vous</Text>
+        <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
         <TouchableOpacity onPress={() => router.push("/patient/bookings")} activeOpacity={0.9}>
           <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
           <View style={styles.bookingBadgeRow}>
             <Text style={styles.bookingBadge}>{mockPatientBooking.careType}</Text>
-            <Text style={styles.bookingStatus}>Confirmé</Text>
+            <Text style={styles.bookingStatus}>{t("confirmed")}</Text>
           </View>
           <Text style={styles.bookingPro}>{mockPatientBooking.proName}</Text>
           <View style={styles.bookingTimeRow}>

@@ -4,15 +4,17 @@
  */
 
 import { Tabs } from "expo-router";
-import { Home, CalendarDays, Wallet, User } from "lucide-react-native";
+import { Home, CalendarDays, Wallet, User, MessageCircle } from "lucide-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useI18n } from "@/lib/i18n";
 
 const PRIMARY = "#0D0870";
 const INACTIVE = "#B0B0B0";
 
 export default function ProLayout() {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   // Normalize bottom inset: ensure a small minimum and cap to avoid excess space on some Android devices
   const safeInset = Math.min(Math.max(insets.bottom || 0, 8), 18);
   const tabBottomPadding = Platform.OS === "ios" ? Math.max(safeInset, 8) : safeInset;
@@ -36,6 +38,7 @@ export default function ProLayout() {
     } as const;
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: PRIMARY,
@@ -59,7 +62,7 @@ export default function ProLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Accueil",
+          title: t("home"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Home color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
@@ -70,7 +73,7 @@ export default function ProLayout() {
       <Tabs.Screen
         name="schedule"
         options={{
-          title: "Missions",
+          title: t("missions"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <CalendarDays color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
@@ -81,7 +84,7 @@ export default function ProLayout() {
       <Tabs.Screen
         name="earnings"
         options={{
-          title: "Revenus",
+          title: t("revenue"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <Wallet color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
@@ -90,9 +93,20 @@ export default function ProLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: t("chat"),
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={iconWrap(focused)}>
+              <MessageCircle color={focused ? PRIMARY : color} size={size} strokeWidth={1.8} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
+          title: t("profile"),
           tabBarIcon: ({ color, size, focused }) => (
             <View style={iconWrap(focused)}>
               <User color={focused ? PRIMARY : color} size={size} strokeWidth={1.6} />
@@ -121,6 +135,7 @@ export default function ProLayout() {
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
     </Tabs>
   );
 }

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { MapPin, Route } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 
 type LocationMatchingDemoCardProps = {
   role: "patient" | "pro";
@@ -8,6 +9,7 @@ type LocationMatchingDemoCardProps = {
 };
 
 export function LocationMatchingDemoCard({ role, city }: LocationMatchingDemoCardProps) {
+  const { t } = useI18n();
   const title =
     role === "patient"
       ? "Aperçu localisation patient ↔ professionnel"
@@ -37,7 +39,7 @@ export function LocationMatchingDemoCard({ role, city }: LocationMatchingDemoCar
 
         <View style={styles.centerBadge}>
           <Route size={12} color={Colors.primary} />
-          <Text style={styles.centerBadgeText}>Rayon + disponibilité</Text>
+          <Text style={styles.centerBadgeText}>{t("radius_availability")}</Text>
         </View>
       </View>
     </View>

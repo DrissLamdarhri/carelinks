@@ -12,6 +12,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import { ArrowLeft, CircleCheck, CircleDashed, CircleX, Upload, FileText } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { ProDocument, Professional } from "@/lib/db/types";
@@ -26,6 +27,7 @@ const documentTypes: { key: DocKey; label: string }[] = [
 ];
 
 export default function KycUploaderScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export default function KycUploaderScreen() {
       const docs = await db.proDocuments.listForPro(user.id);
       setDocuments(docs);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossible de charger le KYC.";
+      const message = error instanceof Error ? error.message : t("cannot_load_kyc");
       Alert.alert("Erreur", message);
     } finally {
       setLoading(false);
@@ -115,10 +117,10 @@ export default function KycUploaderScreen() {
       });
       if (insertError) throw insertError;
 
-      Alert.alert("Document ajouté", "Votre document a été envoyé pour vérification.");
+      Alert.alert(t("document_added_short"), t("doc_sent_verification"));
       await loadData();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Échec du téléversement.";
+      const message = error instanceof Error ? error.message : t("upload_failed");
       Alert.alert("Erreur", message);
     } finally {
       setUploadingType(null);
@@ -132,8 +134,8 @@ export default function KycUploaderScreen() {
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Vérification KYC</Text>
-          <Text style={styles.subtitle}>Téléversez vos documents professionnels</Text>
+          <Text style={styles.title}>{t("kyc_verification")}</Text>
+          <Text style={styles.subtitle}>{t("upload_pro_docs")}</Text>
         </View>
       </View>
 
@@ -186,7 +188,7 @@ export default function KycUploaderScreen() {
                   ) : (
                     <>
                       <Upload size={15} color="white" />
-                      <Text style={styles.uploadBtnText}>Téléverser</Text>
+                      <Text style={styles.uploadBtnText}>{t("upload")}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -194,10 +196,10 @@ export default function KycUploaderScreen() {
             );
           })}
 
-          <Text style={styles.listTitle}>Documents envoyés</Text>
+          <Text style={styles.listTitle}>{t("docs_sent")}</Text>
           {documents.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>Aucun document envoyé pour le moment.</Text>
+              <Text style={styles.emptyText}>{t("no_docs_sent")}</Text>
             </View>
           ) : (
             documents.map((doc) => (

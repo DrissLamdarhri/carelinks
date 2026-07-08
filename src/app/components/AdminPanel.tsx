@@ -1607,7 +1607,7 @@ export function AdminPanel() {
             {!sidebarCollapsed && (
               <div className="hidden xl:block">
                 <p className="text-xs text-[#1A1A1A]" style={{ fontWeight: 600 }}>Admin</p>
-                <p className="text-xs text-[#888780]">admin@carelink.ma</p>
+                <p className="text-xs text-[#888780]">Administration CareLink</p>
               </div>
             )}
           </div>
@@ -2066,89 +2066,7 @@ export function AdminPanel() {
           )}
 
           {/* ======= PROFESSIONALS ======= */}
-          {tab === "professionals" && (
-            <div>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-[#888780]">
-                  {liveAllPros.length} professionnel{liveAllPros.length !== 1 ? 's' : ''} inscrit{liveAllPros.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr style={{ background: "#F8F8FC" }}>
-                      {["Nom", "Email", "Spécialité", "Vérification", "Revenus", "Actions"].map((h) => (
-                        <th key={h} className="text-left text-xs text-[#888780] px-5 py-3" style={{ fontWeight: 500 }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedPros
-                      .map((p: any) => (
-                        <tr key={p.id} className="border-t border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
-                                style={{ background: "#8B5CF6", fontWeight: 700 }}
-                              >
-                                {p.name?.charAt(0).toUpperCase() ?? "?"}
-                              </div>
-                              <span className="text-sm text-[#1A1A1A]" style={{ fontWeight: 500 }}>
-                                {p.name ?? "—"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 text-sm text-[#888780]">{p.email ?? "—"}</td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]">{p.specialty ?? "—"}</td>
-                          <td className="px-5 py-4"><StatusBadge status={p.status ?? "Vérifié"} /></td>
-                          <td className="px-5 py-4 text-sm text-[#1A1A1A]" style={{ fontWeight: 600 }}>{p.revenue ?? "—"}</td>
-                          <td className="px-5 py-4">
-                            <button onClick={() => setSelectedProForView(p)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F3F3F5] transition-colors">
-                              <Eye size={15} className="text-[#888780]" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination for Professionals */}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
-                <p className="text-sm text-[#888780]">
-                  {liveAllPros.length > 0 ? `${(prosPage - 1) * pageSize + 1} sur ${liveAllPros.length}` : "0 professionnels"}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setProPage(Math.max(1, prosPage - 1))}
-                    disabled={prosPage === 1}
-                    className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
-                    style={{ color: prosPage === 1 ? "#D0D0D0" : "#888780" }}
-                  >
-                    ← Précédent
-                  </button>
-                  <span className="text-xs text-[#888780]">
-                    Page {prosPage} / {prosTotalPages || 1}
-                  </span>
-                  <button
-                    onClick={() => setProPage(Math.min(prosTotalPages, prosPage + 1))}
-                    disabled={prosPage >= prosTotalPages}
-                    className="p-2 rounded-lg border border-[#E0E0E0] transition-colors disabled:opacity-50"
-                    style={{ color: prosPage >= prosTotalPages ? "#D0D0D0" : "#888780" }}
-                  >
-                    Suivant →
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ======= PROFESSIONALS (OLD) - REMOVE THIS ======= */}
-          {false && tab === "professionals" && <ProfessionalsManager />}
+          {tab === "professionals" && <ProfessionalsManager />}
 
 
           {/* ======= SERVICE TYPES ======= */}

@@ -13,6 +13,7 @@ import * as ImagePicker from "expo-image-picker";
 import { ArrowLeft, MapPin, Phone, User, Camera } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { storage } from "@/lib/db/storage";
@@ -27,6 +28,7 @@ const specialtyOptions: Array<{ label: string; value: ProSpecialty }> = [
 ];
 
 export default function ProProfileInfosScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -65,15 +67,15 @@ export default function ProProfileInfosScreen() {
           // Small delay to ensure database consistency
           await new Promise(resolve => setTimeout(resolve, 500));
           await refreshProfile();
-          showToast("Avatar mis à jour.");
+          showToast(t("avatar_updated"));
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : "Erreur lors du chargement de l'avatar.");
+          setErrorMessage(error instanceof Error ? error.message : t("avatar_upload_error"));
         } finally {
           setUploadingAvatar(false);
         }
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sélection de l'image.");
+      setErrorMessage(error instanceof Error ? error.message : t("image_pick_error"));
     }
   }, [user?.id, refreshProfile]);
 
@@ -101,7 +103,7 @@ export default function ProProfileInfosScreen() {
         setExperience(String(pro?.years_experience ?? 0));
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Profil indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("profile_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -119,11 +121,11 @@ export default function ProProfileInfosScreen() {
   const handleSave = async () => {
     if (!user?.id || saving) return;
     if (!fullName) {
-      setErrorMessage("Veuillez renseigner votre nom complet.");
+      setErrorMessage(t("enter_full_name"));
       return;
     }
     if (!isExperienceValid) {
-      setErrorMessage("Années d'expérience invalides.");
+      setErrorMessage(t("invalid_experience"));
       return;
     }
     setSaving(true);
@@ -141,9 +143,9 @@ export default function ProProfileInfosScreen() {
         years_experience: experienceValue,
       });
       await refreshProfile();
-      showToast("Profil pro mis à jour.");
+      showToast(t("pro_profile_updated"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("update_failed"));
     } finally {
       setSaving(false);
     }
@@ -155,7 +157,7 @@ export default function ProProfileInfosScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft size={18} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Profil professionnel</Text>
+        <Text style={styles.title}>{t("pro_profile")}</Text>
       </View>
 
       {loading ? (
@@ -185,11 +187,11 @@ export default function ProProfileInfosScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarHint}>Appuyez pour changer votre photo</Text>
+            <Text style={styles.avatarHint}>{t("tap_change_photo")}</Text>
           </View>
 
           <View style={styles.card}>
-          <Text style={styles.label}>Prénom</Text>
+          <Text style={styles.label}>{t("first_name")}</Text>
           <View style={styles.inputWrap}>
             <User size={16} color={Colors.textMuted} />
             <TextInput
@@ -210,7 +212,7 @@ export default function ProProfileInfosScreen() {
             style={styles.simpleInput}
           />
 
-          <Text style={styles.label}>Téléphone</Text>
+          <Text style={styles.label}>{t("phone")}</Text>
           <View style={styles.inputWrap}>
             <Phone size={16} color={Colors.textMuted} />
             <TextInput
@@ -223,7 +225,7 @@ export default function ProProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Ville</Text>
+          <Text style={styles.label}>{t("city")}</Text>
           <View style={styles.inputWrap}>
             <MapPin size={16} color={Colors.textMuted} />
             <TextInput
@@ -235,10 +237,10 @@ export default function ProProfileInfosScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t("email")}</Text>
           <TextInput value={email} editable={false} style={styles.simpleInputMuted} />
 
-          <Text style={styles.label}>Spécialité</Text>
+          <Text style={styles.label}>{t("specialty")}</Text>
           <View style={styles.chipsRow}>
             {specialtyOptions.map((option) => {
               const active = specialty === option.value;
@@ -254,7 +256,7 @@ export default function ProProfileInfosScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Années d'expérience</Text>
+          <Text style={styles.label}>{t("years_experience_lbl")}</Text>
           <TextInput
             value={experience}
             onChangeText={setExperience}
@@ -263,13 +265,13 @@ export default function ProProfileInfosScreen() {
             keyboardType="numeric"
             style={styles.simpleInput}
           />
-          {!isExperienceValid ? <Text style={styles.errorText}>Veuillez entrer un nombre valide.</Text> : null}
+          {!isExperienceValid ? <Text style={styles.errorText}>{t("enter_valid_number")}</Text> : null}
 
           <Text style={styles.label}>Bio</Text>
           <TextInput
             value={bio}
             onChangeText={setBio}
-            placeholder="Présentez votre expérience..."
+            placeholder={t("describe_experience_ph")}
             placeholderTextColor={Colors.textSubtle}
             style={styles.textArea}
             multiline
@@ -281,7 +283,7 @@ export default function ProProfileInfosScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || loading}>
-        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>Enregistrer</Text>}
+        {saving ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.saveText}>{t("save")}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );

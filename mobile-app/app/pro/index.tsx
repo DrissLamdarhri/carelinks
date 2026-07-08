@@ -22,6 +22,7 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { mockProProfile } from "@/lib/mock-data";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
@@ -36,6 +37,7 @@ const NAVY = "#0D0870";
 
 export default function ProHomeScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, profile, refreshProfile } = useAuth();
   const [isOnline, setIsOnline] = useState(false);
   const [tab, setTab] = useState<"requests" | "schedule">("requests");
@@ -100,7 +102,7 @@ export default function ProHomeScreen() {
   const toggleOnline = async () => {
     if (!user?.id || busy) return;
     if (!specialty) {
-      showToast("Choisissez d'abord votre spécialité");
+      showToast(t("choose_specialty_first"));
       router.push("/pro/bids");
       return;
     }
@@ -111,13 +113,13 @@ export default function ProHomeScreen() {
         const coords = await geo.getCurrentPosition();
         await db.pros.upsert({ id: user.id, specialty, is_available: true });
         await geo.setProLocation(user.id, coords.lat, coords.lng);
-        showToast("Vous êtes en ligne — visible par les patients");
+        showToast(t("you_online_visible"));
       } else {
         await db.pros.upsert({ id: user.id, specialty, is_available: false });
       }
       setIsOnline(next);
     } catch {
-      showToast("Action impossible");
+      showToast(t("action_failed"));
     } finally {
       setBusy(false);
     }
@@ -131,7 +133,7 @@ export default function ProHomeScreen() {
           <View style={styles.userWrap}>
             <Image key={avatar} source={typeof avatar === "string" ? { uri: avatar } : avatar} style={styles.avatar} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.greeting}>Bonjour 👋</Text>
+              <Text style={styles.greeting}>{t("hello")}</Text>
               <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
           </View>
@@ -152,7 +154,7 @@ export default function ProHomeScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.onlineTitle}>{isOnline ? "En ligne" : "Hors ligne"}</Text>
             <Text style={styles.onlineSub}>
-              {isOnline ? "Vous recevez des demandes près de vous" : "Activez pour recevoir des demandes"}
+              {isOnline ? t("you_receive_nearby") : "Activez pour recevoir des demandes"}
             </Text>
           </View>
           <View style={[styles.switchTrack, isOnline && styles.switchTrackOn]}>
@@ -162,9 +164,9 @@ export default function ProHomeScreen() {
 
         {/* Real stats */}
         <View style={styles.statsRow}>
-          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label="Aujourd'hui" />
+          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label={t("today")} />
           <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
-          <Stat icon={Activity} value={`${monthMissions}`} label="Ce mois" />
+          <Stat icon={Activity} value={`${monthMissions}`} label={t("this_month")} />
         </View>
       </LinearGradient>
 
@@ -184,7 +186,7 @@ export default function ProHomeScreen() {
                 </Text>
               </View>
               <View style={styles.missionGo}>
-                <Text style={styles.missionGoTxt}>Voir la carte</Text>
+                <Text style={styles.missionGoTxt}>{t("view_map")}</Text>
                 <ChevronRight size={16} color="#FFFFFF" />
               </View>
             </View>
@@ -198,7 +200,7 @@ export default function ProHomeScreen() {
             <View style={styles.missionActions}>
               <View style={styles.missionBtn}>
                 <Navigation size={14} color={NAVY} strokeWidth={2.4} />
-                <Text style={styles.missionBtnTxt}>Itinéraire</Text>
+                <Text style={styles.missionBtnTxt}>{t("directions")}</Text>
               </View>
               <Text style={styles.missionPrice}>{activeMission.final_price_mad ?? activeMission.budget_max_mad ?? "—"} MAD</Text>
             </View>
@@ -210,11 +212,11 @@ export default function ProHomeScreen() {
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/bids")}>
           <Banknote size={16} color={Colors.primary} />
-          <Text style={styles.quickTxt}>Demandes proches</Text>
+          <Text style={styles.quickTxt}>{t("nearby_requests")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
           <FileText size={16} color={Colors.primary} />
-          <Text style={styles.quickTxt}>Documents KYC</Text>
+          <Text style={styles.quickTxt}>{t("kyc_documents")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -234,15 +236,15 @@ export default function ProHomeScreen() {
             <LiveBookingsFeed specialty={specialty} />
           ) : (
             <View style={styles.setupCard}>
-              <Text style={styles.setupText}>Choisissez votre spécialité et votre position pour recevoir les demandes.</Text>
+              <Text style={styles.setupText}>{t("setup_specialty_hint")}</Text>
               <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
-                <Text style={styles.setupBtnTxt}>Configurer</Text>
+                <Text style={styles.setupBtnTxt}>{t("configure")}</Text>
               </TouchableOpacity>
             </View>
           )
         ) : appointments.length === 0 ? (
           <View style={styles.setupCard}>
-            <Text style={styles.setupText}>Aucun rendez-vous pour le moment.</Text>
+            <Text style={styles.setupText}>{t("no_appointments")}</Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
@@ -263,7 +265,7 @@ export default function ProHomeScreen() {
                     </View>
                     <View style={styles.jobSep} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.jobPatient}>Patient</Text>
+                      <Text style={styles.jobPatient}>{t("patient")}</Text>
                       <Text style={styles.jobCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
                       {b.address ? (
                         <View style={styles.jobAddrRow}>
@@ -282,7 +284,7 @@ export default function ProHomeScreen() {
                   {!done ? (
                     <TouchableOpacity style={styles.navBtn} onPress={() => router.push(`/pro/tracking/${b.id}`)}>
                       <Navigation size={15} color="#FFFFFF" strokeWidth={2.2} />
-                      <Text style={styles.navBtnTxt}>Naviguer vers le patient</Text>
+                      <Text style={styles.navBtnTxt}>{t("navigate_to_patient")}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </TouchableOpacity>

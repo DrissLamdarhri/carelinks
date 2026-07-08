@@ -6,15 +6,10 @@ import {
   Loader2, CheckCircle2, Activity
 } from "lucide-react";
 
-import { adminLogin, signIn } from "../../lib/api";
+import { signIn } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
-
-const ADMIN_CREDENTIALS = {
-  email: "admin@carelink.ma",
-  password: "CareLinkAdmin2024!",
-};
 
 export function AdminLogin() {
   const navigate = useNavigate();
@@ -34,37 +29,22 @@ export function AdminLogin() {
     setError("");
     setLoading(true);
     try {
-      // 1) Try real Supabase auth (preferred — gives auth.uid() for RLS)
-      let supaOk = false;
-      try {
-        await signIn(email, password);
-        const { data: u } = await supabase.auth.getUser();
-        if (u.user) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", u.user.id)
-            .single();
-          if (prof?.role === "admin") {
-            supaOk = true;
-          } else {
-            await supabase.auth.signOut();
-            throw new Error("Ce compte n'a pas le rôle administrateur.");
-          }
-        }
-      } catch (e: any) {
-        // Fall through to legacy admin-key login (KV mode) only for the demo creds
-        if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-          await adminLogin(email, password);
-        } else {
-          throw e;
-        }
+      // Real Supabase auth + admin role gate (no demo-credential fallback).
+      await signIn(email, password);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Identifiants incorrects.");
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", u.user.id)
+        .single();
+      if (prof?.role !== "admin") {
+        await supabase.auth.signOut();
+        throw new Error("Ce compte n'a pas le rôle administrateur.");
       }
       setAdminAuthed(true);
       setSuccess(true);
-      toast.success(supaOk
-        ? "Connecté en tant qu'admin (Supabase Auth)"
-        : "Bienvenue dans l'administration CareLink !");
+      toast.success("Connecté en tant qu'admin CareLink !");
       setTimeout(() => navigate("/admin/dashboard"), 900);
     } catch (err: any) {
       setError(err.message || "Identifiants incorrects.");
@@ -225,25 +205,6 @@ export function AdminLogin() {
                 <p className="text-[#888780] mb-8 text-sm">
                   Accès réservé aux administrateurs CareLink
                 </p>
-
-                {/* Demo credentials badge */}
-                <div
-                  className="flex items-start gap-3 p-4 rounded-2xl mb-6"
-                  style={{ background: "#EDE5CC", border: "1px solid rgba(13,8,112,0.1)" }}
-                >
-                  <Shield size={18} className="text-[#0D0870] mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-[#0D0870] text-xs mb-1" style={{ fontWeight: 600 }}>
-                      Identifiants de démonstration
-                    </p>
-                    <p className="text-[#0D0870]/70 text-xs font-mono">
-                      {ADMIN_CREDENTIALS.email}
-                    </p>
-                    <p className="text-[#0D0870]/70 text-xs font-mono">
-                      {ADMIN_CREDENTIALS.password}
-                    </p>
-                  </div>
-                </div>
 
                 {/* Error */}
                 <AnimatePresence>

@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle2, ChevronRight, Eye, EyeOff, Lock, Mail, MapPin, Shield, Stethoscope, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
@@ -20,6 +21,7 @@ import { showToast } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
 
 export default function ProAuthFlowScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
@@ -113,7 +115,7 @@ export default function ProAuthFlowScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+      setLoginError(error instanceof Error ? error.message : t("wrong_credentials"));
     } finally {
       setLoginSubmitting(false);
     }
@@ -156,7 +158,7 @@ export default function ProAuthFlowScreen() {
 
       goToKycOnboarding();
     } catch (error) {
-      setRegError(error instanceof Error ? error.message : "Inscription échouée.");
+      setRegError(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setRegSubmitting(false);
     }
@@ -180,7 +182,7 @@ export default function ProAuthFlowScreen() {
         goToKycOnboarding();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Google impossible.";
+      const msg = error instanceof Error ? error.message : t("google_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -206,7 +208,7 @@ export default function ProAuthFlowScreen() {
         goToKycOnboarding();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Apple impossible.";
+      const msg = error instanceof Error ? error.message : t("apple_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -235,13 +237,13 @@ export default function ProAuthFlowScreen() {
             style={[styles.tabBtn, tab === 0 && styles.tabActive]}
             onPress={() => switchTab(0)}
           >
-            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>Connexion</Text>
+            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>{t("login")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabBtn, tab === 1 && styles.tabActive]}
             onPress={() => switchTab(1)}
           >
-            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>Inscription</Text>
+            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>{t("signup")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -264,13 +266,13 @@ export default function ProAuthFlowScreen() {
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <View style={styles.headerIcon}>
               <Stethoscope size={24} color="white" />
             </View>
-            <Text style={styles.screenTitle}>Espace Professionnel</Text>
-            <Text style={styles.screenSubtitle}>Connectez-vous à votre tableau de bord</Text>
+            <Text style={styles.screenTitle}>{t("pro_space")}</Text>
+            <Text style={styles.screenSubtitle}>{t("login_to_dashboard")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -284,7 +286,7 @@ export default function ProAuthFlowScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email professionnel</Text>
+            <Text style={styles.label}>{t("email_pro")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -300,7 +302,7 @@ export default function ProAuthFlowScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{t("password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -322,7 +324,7 @@ export default function ProAuthFlowScreen() {
           </View>
 
           <TouchableOpacity>
-            <Text style={styles.forgot}>Mot de passe oublié ?</Text>
+            <Text style={styles.forgot}>{t("forgot_password")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -334,7 +336,7 @@ export default function ProAuthFlowScreen() {
               <ActivityIndicator size="small" color="white" />
             ) : (
               <>
-                <Text style={styles.submitText}>Se connecter</Text>
+                <Text style={styles.submitText}>{t("signin_btn")}</Text>
                 <ChevronRight size={18} color="white" />
               </>
             )}
@@ -348,13 +350,13 @@ export default function ProAuthFlowScreen() {
         </ScrollView>
 
         {/* REGISTRATION SCREEN */}
-        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]}>
+        <ScrollView contentContainerStyle={[styles.screenContent, { width: screenWidth }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.screenHeader}>
             <View style={styles.headerIcon}>
               <Shield size={24} color="white" />
             </View>
-            <Text style={styles.screenTitle}>Rejoignez CareLink</Text>
-            <Text style={styles.screenSubtitle}>Enregistrez votre pratique professionnelle</Text>
+            <Text style={styles.screenTitle}>{t("join_carelink")}</Text>
+            <Text style={styles.screenSubtitle}>{t("register_practice")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -370,7 +372,7 @@ export default function ProAuthFlowScreen() {
           {/* Name fields */}
           <View style={{ flexDirection: "row", gap: 12 }}>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={styles.label}>Prénom</Text>
+              <Text style={styles.label}>{t("first_name")}</Text>
               <View style={styles.inputWrap}>
                 <User size={18} color={Colors.textMuted} />
                 <TextInput
@@ -399,7 +401,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Phone field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Téléphone</Text>
+            <Text style={styles.label}>{t("phone")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -415,7 +417,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Email field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Email professionnel</Text>
+            <Text style={styles.label}>{t("email_pro")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -432,7 +434,7 @@ export default function ProAuthFlowScreen() {
 
           {/* City field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Ville</Text>
+            <Text style={styles.label}>{t("city")}</Text>
             <View style={styles.pickerWrap}>
               <MapPin size={18} color={Colors.textMuted} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
@@ -451,7 +453,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Specialty field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Spécialité médicale</Text>
+            <Text style={styles.label}>{t("medical_specialty")}</Text>
             <View style={styles.inputWrap}>
               <Stethoscope size={18} color={Colors.textMuted} />
               <TextInput
@@ -466,7 +468,7 @@ export default function ProAuthFlowScreen() {
 
           {/* License field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Numéro de licence</Text>
+            <Text style={styles.label}>{t("license_number")}</Text>
             <View style={styles.inputWrap}>
               <Shield size={18} color={Colors.textMuted} />
               <TextInput
@@ -481,7 +483,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Password field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{t("password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -517,7 +519,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Confirm password field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Confirmer mot de passe</Text>
+            <Text style={styles.label}>{t("confirm_password")}</Text>
             <View style={styles.inputWrap}>
               <Lock size={18} color={Colors.textMuted} />
               <TextInput
@@ -555,7 +557,7 @@ export default function ProAuthFlowScreen() {
               <ActivityIndicator size="small" color="white" />
             ) : (
               <>
-                <Text style={styles.submitText}>Créer mon compte</Text>
+                <Text style={styles.submitText}>{t("create_my_account")}</Text>
                 <ChevronRight size={18} color="white" />
               </>
             )}
@@ -600,7 +602,7 @@ const styles = StyleSheet.create({
   },
   tabText: { fontSize: 14, color: Colors.textMuted },
   tabActiveText: { fontSize: 14, color: Colors.textPrimary, fontWeight: "600" },
-  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  screenContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 240 },
   screenHeader: { marginBottom: 16, alignItems: "center" },
   headerIcon: {
     width: 56,

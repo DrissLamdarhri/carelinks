@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CreditCard,
   Edit3,
+  Globe,
   HelpCircle,
   LogOut,
   MapPin,
@@ -14,39 +15,46 @@ import {
 } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { useI18n } from "@/lib/i18n";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
-import { AvatarWithDefault } from "@/components/AvatarWithDefault";
+import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { toastSuccess } from "@/lib/toast";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
+// `label`/`title` are i18n keys resolved with t() at render.
 const menuSections: Array<{
   title: string;
-  items: Array<{ icon: typeof User; label: string; color: string; route?: string }>;
+  items: Array<{ icon: typeof User; label: string; color: string; route?: string; action?: string }>;
 }> = [
   {
-    title: "Compte",
+    title: "account",
     items: [
-      { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/patient/profile-infos" },
-      { icon: CreditCard, label: "Politique patient", color: "#3B82F6", route: "/patient/patient-policy" },
-      { icon: MapPin, label: "Adresses enregistrées", color: "#6BB8C8", route: "/patient/addresses" },
+      { icon: User, label: "personal_info", color: "#0D0870", route: "/patient/profile-infos" },
+      { icon: CreditCard, label: "patient_policy", color: "#3B82F6", route: "/patient/patient-policy" },
+      { icon: MapPin, label: "saved_addresses", color: "#6BB8C8", route: "/patient/addresses" },
     ],
   },
   {
-    title: "Préférences",
+    title: "preferences",
     items: [
-      { icon: Bell, label: "Notifications", color: "#6BB8C8", route: "/patient/notifications" },
-      { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6", route: "/auth/mfa-settings" },
+      { icon: Globe, label: "language", color: "#0D0870", action: "language" },
+      { icon: Bell, label: "notifications", color: "#6BB8C8", route: "/patient/notifications" },
+      { icon: Shield, label: "security_privacy", color: "#8B5CF6", route: "/auth/mfa-settings" },
     ],
   },
   {
-    title: "Support",
-    items: [{ icon: HelpCircle, label: "Aide & FAQ", color: "#888780" }],
+    title: "support",
+    items: [{ icon: HelpCircle, label: "help_faq", color: "#888780" }],
   },
 ];
 
 export default function PatientProfileScreen() {
   const router = useRouter();
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const { t } = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
   const [bookingsCount, setBookingsCount] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
   const [avgRating, setAvgRating] = useState<string>("—");
@@ -96,6 +104,7 @@ export default function PatientProfileScreen() {
       const success = await updateProfileAvatar(user.id, avatarUrl);
       if (success) {
         await refreshProfile();
+        toastSuccess("Photo de profil mise à jour ✓");
       }
     } finally {
       setUploadingAvatar(false);
@@ -120,79 +129,41 @@ export default function PatientProfileScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>Mon profil</Text>
+      <ProfileHeaderCard
+        title="Mon profil"
+        name={displayName}
+        email={email}
+        phone={phone}
+        city={city}
+        avatarUrl={avatar}
+        initials={initials}
+        uploading={uploadingAvatar}
+        onEditAvatar={handleUploadAvatar}
+        stats={[
+          { value: bookingsLabel, label: "Réservations" },
+          { value: ratingLabel, label: "Note moyenne", star: true },
+          { value: spentLabel, label: "MAD dépensés", accent: true },
+        ]}
+      />
 
-        <View style={styles.profileRow}>
-          <View style={styles.avatarWrap}>
-            <AvatarWithDefault
-              avatarUrl={avatar}
-              initials={initials}
-              size={64}
-              borderRadius={32}
-              useDefaultImage={!avatar}
-            />
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={handleUploadAvatar}
-              disabled={uploadingAvatar}
-            >
-              {uploadingAvatar ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Edit3 size={10} color="white" />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.profileMeta}>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.email}>{email}</Text>
-            <View style={styles.contactRow}>
-              <Text style={styles.phone}>{phone}</Text>
-              <Text style={styles.contactDot}>·</Text>
-              <Text style={styles.city}>{city}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{bookingsLabel}</Text>
-            <Text style={styles.statLabel}>Réservations</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <View style={styles.ratingRow}>
-              <Star size={14} color="#FBBF24" fill="#FBBF24" />
-              <Text style={styles.statValue}>{ratingLabel}</Text>
-            </View>
-            <Text style={styles.statLabel}>Note moyenne</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: Colors.primary }]}>{spentLabel}</Text>
-            <Text style={styles.statLabel}>MAD dépensés</Text>
-          </View>
-        </View>
-      </View>
-
+      <View style={styles.body}>
       {menuSections.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={styles.sectionTitle}>{t(section.title)}</Text>
           <View style={styles.menuCard}>
             {section.items.map((item, index) => (
               <TouchableOpacity
                 key={item.label}
                 style={[styles.menuItem, index === section.items.length - 1 && styles.menuItemLast]}
                 onPress={() => {
-                  if (item.route) router.push(item.route as never);
+                  if (item.action === "language") setLangOpen(true);
+                  else if (item.route) router.push(item.route as never);
                 }}
               >
                 <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
                   <item.icon size={16} color={item.color} />
                 </View>
-                <Text style={styles.menuText}>{item.label}</Text>
+                <Text style={styles.menuText}>{t(item.label)}</Text>
                 <ChevronRight size={16} color="#D0D0D0" />
               </TouchableOpacity>
             ))}
@@ -208,15 +179,19 @@ export default function PatientProfileScreen() {
         }}
       >
         <LogOut size={18} color={Colors.danger} />
-        <Text style={styles.signOutText}>Se déconnecter</Text>
+        <Text style={styles.signOutText}>{t("sign_out")}</Text>
       </TouchableOpacity>
+      </View>
+
+      <LanguageSelector visible={langOpen} onClose={() => setLangOpen(false)} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 24 },
+  content: { paddingBottom: 24 },
+  body: { paddingHorizontal: 20, paddingTop: 16 },
   headerCard: {
     backgroundColor: "white",
     borderRadius: 20,

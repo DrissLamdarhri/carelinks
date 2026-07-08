@@ -139,22 +139,30 @@ security definer
 as $$
 declare
   v_sender_name text;
+  v_recipient   uuid;
 begin
   select coalesce(p.full_name, 'Nouveau message') into v_sender_name
   from public.profiles p where p.id = new.sender_id;
 
-  insert into public.notifications (user_id, kind, title, body, data)
-  values (
-    new.recipient_id,
-    'message',
-    v_sender_name,
-    left(new.body, 140),
-    jsonb_build_object(
-      'booking_id', new.booking_id,
-      'message_id', new.id,
-      'sender_id',  new.sender_id
-    )
-  );
+  -- messages has no recipient_id — the recipient is the OTHER party on the booking.
+  select case when new.sender_id = b.patient_id then b.professional_id else b.patient_id end
+    into v_recipient
+  from public.bookings b where b.id = new.booking_id;
+
+  if v_recipient is not null then
+    insert into public.notifications (user_id, kind, title, body, payload)
+    values (
+      v_recipient,
+      'message',
+      v_sender_name,
+      left(new.body, 140),
+      jsonb_build_object(
+        'booking_id', new.booking_id,
+        'message_id', new.id,
+        'sender_id',  new.sender_id
+      )
+    );
+  end if;
   return new;
 end;
 $$;

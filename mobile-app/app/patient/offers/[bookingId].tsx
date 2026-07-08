@@ -19,7 +19,9 @@ import {
   Star,
 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { Booking, Bid, Professional, Profile } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
 import {
@@ -43,26 +45,27 @@ type ProOfferMeta = {
 };
 
 const specialtyLabels: Record<string, string> = {
-  nurse: "Infirmier",
-  psychologist: "Psychologue",
-  physiotherapist: "Kinésithérapeute",
-  yoga_instructor: "Instructeur Yoga",
+  nurse: "nurse",
+  psychologist: "psychologist",
+  physiotherapist: "physio",
+  yoga_instructor: "yoga_instructor_lbl",
 };
 
-function getMeta(profile: Profile | null, pro: Professional | null): ProOfferMeta {
+function getMeta(profile: Profile | null, pro: Professional | null, t: (k: string) => string): ProOfferMeta {
   return {
-    fullName: profile?.full_name || "Professionnel",
+    fullName: profile?.full_name || t("the_professional"),
     avatarUrl: profile?.avatar_url || null,
     phone: profile?.phone || null,
     rating: pro?.rating_avg ?? 0,
     reviewCount: pro?.rating_count ?? 0,
     yearsExperience: pro?.years_experience ?? null,
-    specialtyLabel: specialtyLabels[pro?.specialty ?? ""] ?? "Spécialiste",
+    specialtyLabel: specialtyLabels[pro?.specialty ?? ""] ? t(specialtyLabels[pro?.specialty ?? ""]) : t("the_specialist"),
     isVerified: pro?.verification_status === "approved",
   };
 }
 
 export default function NurseOffersScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
@@ -86,7 +89,7 @@ export default function NurseOffersScreen() {
     const loadBooking = async () => {
       setBookingError(null);
       if (!bookingId) {
-        if (!cancelled) setBookingError("Réservation introuvable.");
+        if (!cancelled) setBookingError(t("reservation_not_found"));
         return;
       }
 
@@ -99,7 +102,7 @@ export default function NurseOffersScreen() {
         if (!cancelled) setBooking(next);
       } catch (loadError) {
         if (!cancelled) {
-          setBookingError(loadError instanceof Error ? loadError.message : "Impossible de charger la demande.");
+          setBookingError(loadError instanceof Error ? loadError.message : t("cannot_load_request"));
         }
       }
     };
@@ -128,7 +131,7 @@ export default function NurseOffersScreen() {
     return Object.fromEntries(
       [...new Set(visibleOffers.map((offer) => offer.professional_id))].map((proId) => [
         proId,
-        getMeta(buildDemoProfile(proId), buildDemoProfessional(proId)),
+        getMeta(buildDemoProfile(proId), buildDemoProfessional(proId), t),
       ])
     );
   }, [isDemoBooking, visibleOffers]);
@@ -148,9 +151,9 @@ export default function NurseOffersScreen() {
               db.profiles.get(proId).catch(() => null),
               db.pros.get(proId).catch(() => null),
             ]);
-            return [proId, getMeta(profile as Profile | null, professional as Professional | null)] as const;
+            return [proId, getMeta(profile as Profile | null, professional as Professional | null, t)] as const;
           } catch {
-            return [proId, getMeta(null, null)] as const;
+            return [proId, getMeta(null, null, t)] as const;
           }
         })
       );
@@ -177,9 +180,11 @@ export default function NurseOffersScreen() {
       }
       // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
       await db.bids.acceptAndMatch(offer.id);
+      toastSuccess(t("offer_accepted_notified"));
       router.push(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
     } catch (acceptError) {
-      setActionError(acceptError instanceof Error ? acceptError.message : "Erreur lors de l'acceptation.");
+      setActionError(acceptError instanceof Error ? acceptError.message : t("accept_error"));
+      toastError(t("cannot_accept_offer"));
     } finally {
       setActionId(null);
     }
@@ -199,7 +204,7 @@ export default function NurseOffersScreen() {
       await db.bids.setStatus(offerId, "rejected");
       setHiddenOfferIds((prev) => [...prev, offerId]);
     } catch (rejectError) {
-      setActionError(rejectError instanceof Error ? rejectError.message : "Erreur lors du refus.");
+      setActionError(rejectError instanceof Error ? rejectError.message : t("reject_error"));
     } finally {
       setActionId(null);
     }
@@ -212,7 +217,7 @@ export default function NurseOffersScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.headerIconBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Offres reçues</Text>
+          <Text style={styles.headerTitle}>{t("offers_received")}</Text>
           <View style={styles.headerIconBtn}>
             <SlidersHorizontal size={18} color={Colors.textPrimary} />
           </View>
@@ -220,7 +225,7 @@ export default function NurseOffersScreen() {
         {booking ? (
           <View style={styles.requestMetaRow}>
             <Text style={styles.requestBadge}>
-              {specialtyLabels[booking.specialty] ?? booking.specialty}
+              {specialtyLabels[booking.specialty] ? t(specialtyLabels[booking.specialty]) : booking.specialty}
             </Text>
             <Text style={styles.requestMetaText}>
               {booking.scheduled_at
@@ -228,7 +233,7 @@ export default function NurseOffersScreen() {
                     hour: "2-digit",
                     minute: "2-digit",
                   })
-                : "Horaire flexible"}
+                : t("flexible_schedule")}
             </Text>
             <Text style={styles.requestMetaText}>·</Text>
             <Text style={styles.requestMetaText} numberOfLines={1}>
@@ -242,7 +247,7 @@ export default function NurseOffersScreen() {
         {loading ? (
           <View style={styles.loadingRow}>
             <Loader2 size={15} color={Colors.textMuted} />
-            <Text style={styles.countText}>Chargement des offres…</Text>
+            <Text style={styles.countText}>{t("loading_offers")}</Text>
           </View>
         ) : (
           <Text style={styles.countText}>
@@ -260,13 +265,13 @@ export default function NurseOffersScreen() {
             <View style={styles.emptyIcon}>
               <Clock3 size={24} color={Colors.textSubtle} />
             </View>
-            <Text style={styles.emptyTitle}>Aucune offre pour le moment</Text>
-            <Text style={styles.emptyText}>Les professionnels consultent votre demande…</Text>
+            <Text style={styles.emptyTitle}>{t("no_offers_yet")}</Text>
+            <Text style={styles.emptyText}>{t("pros_reviewing")}</Text>
           </View>
         ) : null}
 
         {visibleOffers.map((offer) => {
-          const pro = metaByProId[offer.professional_id] ?? getMeta(null, null);
+          const pro = metaByProId[offer.professional_id] ?? getMeta(null, null, t);
           const isCounterOffer =
             booking?.budget_max_mad != null ? offer.price_mad > booking.budget_max_mad : false;
           const counterDelta =
@@ -278,7 +283,7 @@ export default function NurseOffersScreen() {
                 {!isCounterOffer ? (
                   <>
                     <CheckCircle size={12} color={Colors.primary} />
-                    <Text style={styles.bannerAcceptText}>Accepte votre prix</Text>
+                    <Text style={styles.bannerAcceptText}>{t("accepts_your_price")}</Text>
                   </>
                 ) : (
                   <Text style={styles.bannerCounterText}>
@@ -346,7 +351,7 @@ export default function NurseOffersScreen() {
                     ) : (
                       <>
                         <CheckCircle size={15} color="white" />
-                        <Text style={styles.acceptBtnText}>Accepter</Text>
+                        <Text style={styles.acceptBtnText}>{t("accept")}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -359,7 +364,7 @@ export default function NurseOffersScreen() {
                     {actionId === `${offer.id}:reject` ? (
                       <ActivityIndicator size="small" color={Colors.textMuted} />
                     ) : (
-                      <Text style={styles.rejectBtnText}>Refuser</Text>
+                      <Text style={styles.rejectBtnText}>{t("reject")}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -380,7 +385,7 @@ export default function NurseOffersScreen() {
           }}
           style={styles.footerBtn}
         >
-          <Text style={styles.footerBtnText}>Modifier mon prix</Text>
+          <Text style={styles.footerBtnText}>{t("edit_my_price")}</Text>
         </TouchableOpacity>
       </View>
     </View>
