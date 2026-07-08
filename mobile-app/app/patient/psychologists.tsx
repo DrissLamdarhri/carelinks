@@ -53,9 +53,9 @@ export default function PsychologistsDirectoryScreen() {
     return () => { active = false; };
   }, []);
 
-  const openBooking = (p: Psy) => {
+  const openProfile = (p: Psy) => {
     router.push(
-      `/patient/psychologist?proId=${encodeURIComponent(p.id)}&name=${encodeURIComponent(p.name)}&price=${p.price}`
+      `/patient/psychologist-profile?id=${encodeURIComponent(p.id)}&name=${encodeURIComponent(p.name)}&price=${p.price}&focus=${encodeURIComponent(p.focus)}&rating=${p.rating}&reviews=${p.reviews}`
     );
   };
 
@@ -74,7 +74,7 @@ export default function PsychologistsDirectoryScreen() {
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         {loading ? <ActivityIndicator color={Colors.primary} style={{ marginBottom: 12 }} /> : null}
         {list.map((p) => (
-          <TouchableOpacity key={p.id} style={s.card} activeOpacity={0.85} onPress={() => openBooking(p)}>
+          <TouchableOpacity key={p.id} style={s.card} activeOpacity={0.85} onPress={() => openProfile(p)}>
             <View style={s.avatar}><Text style={s.avatarTxt}>{p.initials}</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={s.name}>{p.name}</Text>
