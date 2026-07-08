@@ -97,6 +97,12 @@ begin
 end; $$;
 
 -- ── The 4 cancellation rules, one status-based RPC ───────────────────────────
+-- A legacy public.cancel_booking(uuid, text) exists in this project (applied
+-- ad-hoc, not in the repo) with different parameter names. `create or replace`
+-- cannot rename parameters, so drop the old signature(s) first.
+drop function if exists public.cancel_booking(uuid, text);
+drop function if exists public.cancel_booking(uuid);
+
 create or replace function public.cancel_booking(p_booking uuid, p_reason text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
