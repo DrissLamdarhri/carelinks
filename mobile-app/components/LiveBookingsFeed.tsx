@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Clock, HandCoins, Loader2, Lock, MapPin, Send, ShieldAlert, Stethoscope, Zap } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
@@ -21,6 +22,7 @@ type LiveBookingsFeedProps = { specialty: ProSpecialty };
 
 export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const { bookings, loading } = useOpenBookingsBySpecialty(specialty);
   const [bidFor, setBidFor] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
@@ -42,7 +44,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   const submitBid = async (bookingId: string) => {
     if (!user?.id || submitting) return;
     if (!approved) {
-      setErrorMessage("Votre compte doit être vérifié avant de faire une offre.");
+      setErrorMessage(t("must_verify_to_offer"));
       return;
     }
     const n = Number(amount);
@@ -58,8 +60,8 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
       setAmount("");
       toastSuccess(`Offre de ${n} MAD envoyée ✓`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Envoi impossible.");
-      toastError("Offre non envoyée");
+      setErrorMessage(error instanceof Error ? error.message : t("send_failed"));
+      toastError(t("offer_not_sent"));
     } finally {
       setSubmitting(false);
     }
@@ -71,12 +73,12 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
         <ShieldAlert size={18} color={proStatus === "rejected" ? "#E24B4A" : "#B45309"} />
         <View style={{ flex: 1 }}>
           <Text style={styles.verifyTitle}>
-            {proStatus === "rejected" ? "Compte non validé" : "Compte en cours de vérification"}
+            {proStatus === "rejected" ? t("account_rejected") : t("account_pending")}
           </Text>
           <Text style={styles.verifySub}>
             {proStatus === "rejected"
-              ? "Votre inscription a été refusée. Contactez le support CareLink."
-              : "Vous pourrez faire des offres dès que l'équipe aura validé vos documents."}
+              ? t("registration_rejected_msg")
+              : t("pending_offer_msg")}
           </Text>
         </View>
       </View>
@@ -98,8 +100,8 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
           <View style={styles.emptyIcon}>
             <Stethoscope size={22} color={Colors.textSubtle} />
           </View>
-          <Text style={styles.emptyTitle}>Aucune demande pour le moment</Text>
-          <Text style={styles.emptySub}>Restez en ligne — les nouvelles demandes apparaîtront ici.</Text>
+          <Text style={styles.emptyTitle}>{t("no_requests_now")}</Text>
+          <Text style={styles.emptySub}>{t("stay_online_msg")}</Text>
         </View>
       </View>
     );
@@ -119,7 +121,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
                 <Stethoscope size={19} color={Colors.primary} strokeWidth={1.9} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.title}>Demande de soin</Text>
+                <Text style={styles.title}>{t("care_request")}</Text>
                 <Text style={styles.subtitle}>{SPEC_LABEL[booking.specialty] ?? "Nouveau patient"}</Text>
               </View>
               <View style={styles.priceBadge}>
@@ -188,7 +190,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
             ) : !approved ? (
               <View style={styles.lockedBtn}>
                 <Lock size={15} color={Colors.textMuted} />
-                <Text style={styles.lockedTxt}>Vérification requise pour faire une offre</Text>
+                <Text style={styles.lockedTxt}>{t("verification_required")}</Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -197,7 +199,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
                 onPress={() => { setBidFor(booking.id); setAmount(String(booking.budget_max_mad ?? "")); }}
               >
                 <HandCoins size={17} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.offerTxt}>Faire une offre</Text>
+                <Text style={styles.offerTxt}>{t("make_offer")}</Text>
               </TouchableOpacity>
             )}
           </View>

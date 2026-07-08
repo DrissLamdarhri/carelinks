@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacit
 import { useRouter } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import { db } from "@/lib/db/dal";
@@ -40,6 +41,7 @@ const timeAgo = (iso: string) => {
 export default function PatientMessagesScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const { bookings, loading } = usePatientBookings(user?.id ?? null);
   const [convos, setConvos] = useState<Convo[]>([]);
   const [building, setBuilding] = useState(false);
@@ -90,8 +92,8 @@ export default function PatientMessagesScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Messagerie</Text>
-        <Text style={styles.subtitle}>Vos conversations avec les professionnels</Text>
+        <Text style={styles.title}>{t("messaging_title")}</Text>
+        <Text style={styles.subtitle}>{t("conversations_with_pros")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -100,8 +102,8 @@ export default function PatientMessagesScreen() {
         ) : convos.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}><MessageCircle size={22} color={Colors.textSubtle} /></View>
-            <Text style={styles.emptyTitle}>Aucune conversation</Text>
-            <Text style={styles.emptySub}>Vos échanges avec les professionnels apparaîtront ici.</Text>
+            <Text style={styles.emptyTitle}>{t("no_conversation")}</Text>
+            <Text style={styles.emptySub}>{t("convos_pros_hint")}</Text>
           </View>
         ) : (
           convos.map((c) => (
@@ -119,7 +121,7 @@ export default function PatientMessagesScreen() {
                 </View>
                 <View style={styles.bottomRow}>
                   <Text style={[styles.preview, c.unread && styles.previewUnread]} numberOfLines={1}>
-                    {c.lastBody ? `${c.lastMine ? "Vous : " : ""}${c.lastBody}` : `${c.specialty} · démarrez la discussion`}
+                    {c.lastBody ? `${c.lastMine ? t("you_prefix") : ""}${c.lastBody}` : `${c.specialty} · ${t("start_discussion")}`}
                   </Text>
                   {c.unread ? <View style={styles.unreadDot} /> : null}
                 </View>

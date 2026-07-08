@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacit
 import { useFocusEffect, useRouter } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
@@ -35,6 +36,7 @@ const timeAgo = (iso: string) => {
 export default function ProMessagesScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [convos, setConvos] = useState<Convo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,8 +80,8 @@ export default function ProMessagesScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Messagerie</Text>
-        <Text style={styles.subtitle}>Vos conversations avec les patients</Text>
+        <Text style={styles.title}>{t("messaging_title")}</Text>
+        <Text style={styles.subtitle}>{t("conversations_with_patients")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -88,8 +90,8 @@ export default function ProMessagesScreen() {
         ) : convos.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}><MessageCircle size={22} color={Colors.textSubtle} /></View>
-            <Text style={styles.emptyTitle}>Aucune conversation</Text>
-            <Text style={styles.emptySub}>Vos échanges avec les patients apparaîtront ici après acceptation d'une mission.</Text>
+            <Text style={styles.emptyTitle}>{t("no_conversation")}</Text>
+            <Text style={styles.emptySub}>{t("convos_patients_hint")}</Text>
           </View>
         ) : (
           convos.map((c) => (
@@ -107,7 +109,7 @@ export default function ProMessagesScreen() {
                 </View>
                 <View style={styles.bottomRow}>
                   <Text style={[styles.preview, c.unread && styles.previewUnread]} numberOfLines={1}>
-                    {c.lastBody ? `${c.lastMine ? "Vous : " : ""}${c.lastBody}` : `${c.meta} · démarrez la discussion`}
+                    {c.lastBody ? `${c.lastMine ? t("you_prefix") : ""}${c.lastBody}` : `${c.meta} · ${t("start_discussion")}`}
                   </Text>
                   {c.unread ? <View style={styles.unreadDot} /> : null}
                 </View>

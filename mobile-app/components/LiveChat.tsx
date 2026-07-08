@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Check, CheckCheck, Send } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -63,6 +64,7 @@ const dayLabel = (iso: string) => {
 
 export function LiveChat({ bookingId, recipientId: _recipientId, recipientName = "Professionnel", recipientAvatar }: LiveChatProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const isDemoBooking = isDemoBookingId(bookingId);
   const demoRecipientId = _recipientId ?? DEMO_PRO_1_ID;
   const demoPatientId = user?.id ?? DEMO_PATIENT_ID;
@@ -97,7 +99,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
       if (error) throw error;
       setMessages((data ?? []) as MessageRow[]);
     } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Chat indisponible.");
+      Alert.alert(t("error"), error instanceof Error ? error.message : t("chat_unavailable"));
     } finally {
       setLoading(false);
     }
@@ -143,7 +145,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
       const { error } = await supabase.from("messages").insert({ booking_id: bookingId, sender_id: user.id, body });
       if (error) throw error;
     } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Impossible d'envoyer le message.");
+      Alert.alert(t("error"), error instanceof Error ? error.message : t("send_msg_failed"));
       setInput(body);
     } finally {
       setSending(false);
@@ -165,7 +167,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
         ) : sorted.length === 0 ? (
           <View style={styles.emptyWrap}>
             <BubbleAvatar url={recipientAvatar} name={recipientName} />
-            <Text style={styles.emptyTitle}>Démarrez la conversation</Text>
+            <Text style={styles.emptyTitle}>{t("start_conversation")}</Text>
             <Text style={styles.emptySub}>Envoyez un message à {recipientName.split(" ")[0]}.</Text>
           </View>
         ) : null}
@@ -208,7 +210,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Écrivez un message…"
+          placeholder={t("write_message")}
           placeholderTextColor={Colors.textSubtle}
           selectionColor={NAVY}
           style={styles.input}
