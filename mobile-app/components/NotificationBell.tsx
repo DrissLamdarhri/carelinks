@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 
@@ -40,6 +41,7 @@ function iconForKind(kind: AppNotification["kind"]) {
 }
 
 export function NotificationBell() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,7 +67,7 @@ export function NotificationBell() {
       if (error) throw error;
       setItems((data ?? []) as AppNotification[]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Notifications indisponibles.";
+      const message = error instanceof Error ? error.message : t("notifications_unavailable");
       Alert.alert("Erreur", message);
     } finally {
       setLoading(false);
@@ -124,7 +126,7 @@ export function NotificationBell() {
       await fetchNotifications();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Impossible de marquer les notifications comme lues.";
+        error instanceof Error ? error.message : t("cannot_mark_read");
       Alert.alert("Erreur", message);
     } finally {
       setMarking(false);
@@ -147,7 +149,7 @@ export function NotificationBell() {
           <Pressable style={styles.modalBackdrop} onPress={() => setVisible(false)} />
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Notifications</Text>
+              <Text style={styles.sheetTitle}>{t("notifications")}</Text>
               <TouchableOpacity onPress={() => setVisible(false)}>
                 <Ionicons name="close" size={22} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -160,7 +162,7 @@ export function NotificationBell() {
             ) : (
               <ScrollView style={styles.list} contentContainerStyle={{ gap: 10 }}>
                 {items.length === 0 ? (
-                  <Text style={styles.emptyText}>Aucune notification.</Text>
+                  <Text style={styles.emptyText}>{t("no_notifications")}</Text>
                 ) : (
                   items.map((item) => (
                     <View key={item.id} style={[styles.itemCard, item.read_at ? styles.itemRead : undefined]}>
@@ -197,7 +199,7 @@ export function NotificationBell() {
               {marking ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.markBtnText}>Tout marquer comme lu</Text>
+                <Text style={styles.markBtnText}>{t("mark_all_read")}</Text>
               )}
             </TouchableOpacity>
           </View>

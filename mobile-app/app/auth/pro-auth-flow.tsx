@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle2, ChevronRight, Eye, EyeOff, Lock, Mail, MapPin, Shield, Stethoscope, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { MOROCCAN_CITIES } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthButton } from "@/components/GoogleAuthButton";
@@ -20,6 +21,7 @@ import { showToast } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
 
 export default function ProAuthFlowScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
@@ -113,7 +115,7 @@ export default function ProAuthFlowScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+      setLoginError(error instanceof Error ? error.message : t("wrong_credentials"));
     } finally {
       setLoginSubmitting(false);
     }
@@ -156,7 +158,7 @@ export default function ProAuthFlowScreen() {
 
       goToKycOnboarding();
     } catch (error) {
-      setRegError(error instanceof Error ? error.message : "Inscription échouée.");
+      setRegError(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setRegSubmitting(false);
     }
@@ -180,7 +182,7 @@ export default function ProAuthFlowScreen() {
         goToKycOnboarding();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Google impossible.";
+      const msg = error instanceof Error ? error.message : t("google_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -206,7 +208,7 @@ export default function ProAuthFlowScreen() {
         goToKycOnboarding();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Apple impossible.";
+      const msg = error instanceof Error ? error.message : t("apple_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -235,13 +237,13 @@ export default function ProAuthFlowScreen() {
             style={[styles.tabBtn, tab === 0 && styles.tabActive]}
             onPress={() => switchTab(0)}
           >
-            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>Connexion</Text>
+            <Text style={[styles.tabText, tab === 0 && styles.tabActiveText]}>{t("login")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabBtn, tab === 1 && styles.tabActive]}
             onPress={() => switchTab(1)}
           >
-            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>Inscription</Text>
+            <Text style={[styles.tabText, tab === 1 && styles.tabActiveText]}>{t("signup")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -269,8 +271,8 @@ export default function ProAuthFlowScreen() {
             <View style={styles.headerIcon}>
               <Stethoscope size={24} color="white" />
             </View>
-            <Text style={styles.screenTitle}>Espace Professionnel</Text>
-            <Text style={styles.screenSubtitle}>Connectez-vous à votre tableau de bord</Text>
+            <Text style={styles.screenTitle}>{t("pro_space")}</Text>
+            <Text style={styles.screenSubtitle}>{t("login_to_dashboard")}</Text>
           </View>
 
           <GoogleAuthButton loading={googleLoading} onPress={handleGoogleAuth} />
@@ -284,7 +286,7 @@ export default function ProAuthFlowScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email professionnel</Text>
+            <Text style={styles.label}>{t("email_pro")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput
@@ -415,7 +417,7 @@ export default function ProAuthFlowScreen() {
 
           {/* Email field */}
           <View style={styles.field}>
-            <Text style={styles.label}>Email professionnel</Text>
+            <Text style={styles.label}>{t("email_pro")}</Text>
             <View style={styles.inputWrap}>
               <Mail size={18} color={Colors.textMuted} />
               <TextInput

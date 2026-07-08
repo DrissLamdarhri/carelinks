@@ -13,12 +13,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Phone, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
 
 export default function BookingChatScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
@@ -34,7 +36,7 @@ export default function BookingChatScreen() {
     const loadRecipient = async () => {
       if (!bookingId) {
         setLoading(false);
-        setErrorMessage("Réservation introuvable.");
+        setErrorMessage(t("reservation_not_found"));
         return;
       }
       if (isDemoBooking) {
@@ -54,7 +56,7 @@ export default function BookingChatScreen() {
         if (active) setRecipientProfile(profile);
       } catch (error) {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : "Conversation indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("conversation_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -93,7 +95,7 @@ export default function BookingChatScreen() {
             <Text style={styles.title} numberOfLines={1}>
               {recipientProfile?.full_name ?? "Professionnel"}
             </Text>
-            <Text style={styles.subtitle}>En ligne</Text>
+            <Text style={styles.subtitle}>{t("online")}</Text>
           </View>
         </View>
         <View style={styles.actions}>
@@ -126,7 +128,7 @@ export default function BookingChatScreen() {
         />
       ) : (
         <View style={styles.center}>
-          <Text style={styles.errorText}>{errorMessage ?? "Destinataire introuvable."}</Text>
+          <Text style={styles.errorText}>{errorMessage ?? t("recipient_not_found")}</Text>
         </View>
       )}
     </KeyboardAvoidingView>

@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Phone } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
@@ -21,6 +22,7 @@ import type { Profile } from "@/lib/db/types";
 const NAVY = "#0D0870";
 
 export default function ProChatScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
@@ -33,7 +35,7 @@ export default function ProChatScreen() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      if (!bookingId) { setLoading(false); setErrorMessage("Réservation introuvable."); return; }
+      if (!bookingId) { setLoading(false); setErrorMessage(t("reservation_not_found")); return; }
       try {
         const booking = await db.bookings.get(bookingId);
         if (!active) return;
@@ -42,7 +44,7 @@ export default function ProChatScreen() {
         const profile = await db.profiles.get(patientId).catch(() => null);
         if (active) setRecipient(profile);
       } catch (error) {
-        if (active) setErrorMessage(error instanceof Error ? error.message : "Conversation indisponible.");
+        if (active) setErrorMessage(error instanceof Error ? error.message : t("conversation_unavailable"));
       } finally {
         if (active) setLoading(false);
       }
@@ -67,7 +69,7 @@ export default function ProChatScreen() {
           )}
           <View style={{ flex: 1 }}>
             <Text style={styles.title} numberOfLines={1}>{name}</Text>
-            <Text style={styles.subtitle}>Patient</Text>
+            <Text style={styles.subtitle}>{t("patient")}</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.iconBtn} onPress={() => { if (recipient?.phone) void Linking.openURL(`tel:${recipient.phone}`); }}>
@@ -80,7 +82,7 @@ export default function ProChatScreen() {
       ) : recipientId && bookingId ? (
         <LiveChat bookingId={bookingId} recipientId={recipientId} recipientName={name} recipientAvatar={recipient?.avatar_url ?? null} />
       ) : (
-        <View style={styles.center}><Text style={styles.errorText}>{errorMessage ?? "Destinataire introuvable."}</Text></View>
+        <View style={styles.center}><Text style={styles.errorText}>{errorMessage ?? t("recipient_not_found")}</Text></View>
       )}
     </KeyboardAvoidingView>
   );
