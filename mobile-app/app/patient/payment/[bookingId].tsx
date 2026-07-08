@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, Check, CreditCard, Lock, ShieldCheck, User } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
@@ -26,14 +27,13 @@ const SERVICE_FEE = 5; // flat CareLink patient fee (MAD)
 const COMMISSION_RATE = 0.2; // 20% platform commission on the prestation
 
 const SPEC_LABEL: Record<string, string> = {
-  nurse: "Infirmier·ère",
-  physiotherapist: "Kinésithérapeute",
-  psychologist: "Psychologue",
-  yoga_instructor: "Coach yoga",
+  nurse: "spec_nurse2",
+  physiotherapist: "spec_physio",
+  psychologist: "spec_psy",
+  yoga_instructor: "spec_yoga2",
 };
 
 type Step = 0 | 1 | 2 | 3; // Résumé · Paiement · 3-D Secure · Confirmé
-const STEPS = ["Résumé", "Paiement", "Confirmation"];
 
 const digits = (s: string) => s.replace(/\D/g, "");
 const fmtCard = (s: string) => digits(s).slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
@@ -48,6 +48,8 @@ export default function PaymentScreen() {
   const bookingId = normalizeRouteParam(params.bookingId);
   const isDemo = isDemoBookingId(bookingId);
   const { user } = useAuth();
+  const { t } = useI18n();
+  const STEPS = [t("step_summary"), t("payment_title"), t("step_confirmation")];
 
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>(0);
@@ -91,7 +93,7 @@ export default function PaymentScreen() {
           } catch { /* keep default */ }
         }
       } catch (error) {
-        Alert.alert("Erreur", error instanceof Error ? error.message : "Réservation introuvable.");
+        Alert.alert(t("error"), error instanceof Error ? error.message : t("reservation_not_found"));
       } finally {
         if (active) setLoading(false);
       }
@@ -124,9 +126,9 @@ export default function PaymentScreen() {
       }
       setTxId(String(Math.floor(100000 + Math.random() * 900000)));
       setStep(3);
-      toastSuccess("Paiement confirmé ✓");
+      toastSuccess(t("payment_confirmed_title"));
     } catch (error) {
-      toastError(error instanceof Error ? error.message : "Le paiement n'a pas pu être confirmé.");
+      toastError(error instanceof Error ? error.message : t("payment_failed_msg"));
     } finally {
       setSubmitting(false);
     }
@@ -137,10 +139,10 @@ export default function PaymentScreen() {
       <LinearGradient colors={[NAVY, "#0A065A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
         <TouchableOpacity style={s.back} onPress={() => (step > 0 && step < 3 ? setStep((step - 1) as Step) : router.back())}>
           <ArrowLeft size={18} color="rgba(255,255,255,0.85)" />
-          <Text style={s.backTxt}>Retour</Text>
+          <Text style={s.backTxt}>{t("back")}</Text>
         </TouchableOpacity>
-        <Text style={s.title}>Paiement</Text>
-        <Text style={s.sub}>Paiement sécurisé CMI · 3-D Secure</Text>
+        <Text style={s.title}>{t("payment_title")}</Text>
+        <Text style={s.sub}>{t("secure_payment")}</Text>
         <View style={s.headerBlob} />
       </LinearGradient>
 
@@ -170,22 +172,22 @@ export default function PaymentScreen() {
                   <View style={s.proRow}>
                     <View style={s.avatar}><User size={20} color={NAVY} /></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.proName}>{proName} · {SPEC_LABEL[specialty] ?? specialty}</Text>
+                      <Text style={s.proName}>{proName} · {SPEC_LABEL[specialty] ? t(SPEC_LABEL[specialty]) : specialty}</Text>
                       <Text style={s.proMeta}>{service}{city ? ` · ${city}` : ""}</Text>
                     </View>
                   </View>
                 </View>
 
                 <View style={s.card}>
-                  <Text style={s.cardLabel}>Détail à la charge du patient</Text>
-                  <Row label="Prestation" value={`${prestation} MAD`} />
-                  <Row label="Frais de service CareLink" value={`+${SERVICE_FEE} MAD`} muted />
+                  <Text style={s.cardLabel}>{t("patient_charge_detail")}</Text>
+                  <Row label={t("prestation")} value={`${prestation} MAD`} />
+                  <Row label={t("service_fee")} value={`+${SERVICE_FEE} MAD`} muted />
                   <View style={s.divider} />
-                  <Row label="Total à payer" value={`${total} MAD`} bold />
+                  <Row label={t("total_to_pay")} value={`${total} MAD`} bold />
                 </View>
 
                 <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => setStep(1)}>
-                  <Text style={s.ctaTxt}>Continuer vers le paiement</Text>
+                  <Text style={s.ctaTxt}>{t("continue_to_payment")}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -194,14 +196,14 @@ export default function PaymentScreen() {
             {step === 1 && (
               <>
                 <View style={s.totalBanner}>
-                  <Text style={s.totalBannerLbl}>Montant total</Text>
+                  <Text style={s.totalBannerLbl}>{t("total_amount")}</Text>
                   <Text style={s.totalBannerVal}>{total} MAD</Text>
                 </View>
 
                 <CmiCard number={cardNum} name={cardName} exp={exp} />
 
                 <Field icon={<CreditCard size={17} color={Colors.textMuted} />} value={fmtCard(cardNum)} onChangeText={(t) => setCardNum(digits(t))} placeholder="4242 4242 4242 4242" keyboardType="number-pad" />
-                <Field value={cardName} onChangeText={setCardName} placeholder="Nom du titulaire" autoCapitalize="characters" />
+                <Field value={cardName} onChangeText={setCardName} placeholder={t("cardholder_name")} autoCapitalize="characters" />
                 <View style={s.rowFields}>
                   <View style={{ flex: 1 }}><Field value={fmtExp(exp)} onChangeText={(t) => setExp(digits(t))} placeholder="MM/AA" keyboardType="number-pad" /></View>
                   <View style={{ flex: 1 }}><Field icon={<Lock size={15} color={Colors.textMuted} />} value={cvv} onChangeText={(t) => setCvv(digits(t).slice(0, 3))} placeholder="CVV" keyboardType="number-pad" secureTextEntry /></View>
@@ -213,7 +215,7 @@ export default function PaymentScreen() {
                 </TouchableOpacity>
                 <View style={s.secureRow}>
                   <ShieldCheck size={13} color={Colors.textMuted} />
-                  <Text style={s.secureTxt}>Paiement 3-D Secure · chiffré · démo (aucune donnée réelle)</Text>
+                  <Text style={s.secureTxt}>{t("secure_3ds_note")}</Text>
                 </View>
               </>
             )}
@@ -222,30 +224,30 @@ export default function PaymentScreen() {
             {step === 2 && (
               <>
                 <View style={s.totalBanner}>
-                  <Text style={s.totalBannerLbl}>Montant total</Text>
+                  <Text style={s.totalBannerLbl}>{t("total_amount")}</Text>
                   <Text style={s.totalBannerVal}>{total} MAD</Text>
                 </View>
                 <CmiCard number={cardNum} name={cardName} exp={exp} filled />
                 <View style={s.otpCard}>
                   <View style={s.otpHead}>
                     <ShieldCheck size={18} color={NAVY} />
-                    <Text style={s.otpTitle}>Vérification 3-D Secure</Text>
+                    <Text style={s.otpTitle}>{t("verification_3ds")}</Text>
                   </View>
-                  <Text style={s.otpSub}>Un code de confirmation a été envoyé au numéro associé à votre carte (démo : saisissez n'importe quel code).</Text>
+                  <Text style={s.otpSub}>{t("otp_sent_note")}</Text>
                   <TextInput
                     value={otp}
                     onChangeText={(t) => setOtp(digits(t).slice(0, 6))}
-                    placeholder="Code OTP"
+                    placeholder={t("otp_code")}
                     placeholderTextColor={Colors.textSubtle}
                     keyboardType="number-pad"
                     style={s.otpInput}
                     textAlign="center"
                   />
                   <TouchableOpacity style={[s.cta, { marginTop: 12 }, otp.length < 4 && s.ctaDisabled]} disabled={otp.length < 4 || submitting} onPress={confirmPayment} activeOpacity={0.9}>
-                    {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={s.ctaTxt}>Confirmer</Text>}
+                    {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={s.ctaTxt}>{t("confirm")}</Text>}
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setStep(1)}><Text style={s.linkCenter}>Modifier la carte</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setStep(1)}><Text style={s.linkCenter}>{t("modify_card")}</Text></TouchableOpacity>
               </>
             )}
 
@@ -254,28 +256,28 @@ export default function PaymentScreen() {
               <>
                 <View style={s.doneWrap}>
                   <View style={s.doneCircle}><Check size={30} color={NAVY} strokeWidth={3} /></View>
-                  <Text style={s.doneTitle}>Paiement confirmé</Text>
+                  <Text style={s.doneTitle}>{t("payment_confirmed_short")}</Text>
                   <Text style={s.doneSub}>Transaction CMI #{txId}</Text>
                 </View>
 
                 <View style={s.card}>
-                  <Text style={s.cardLabel}>Répartition de la transaction</Text>
-                  <Row label="Encaissé (patient)" value={`${total} MAD`} bold />
+                  <Text style={s.cardLabel}>{t("transaction_split")}</Text>
+                  <Row label={t("collected_patient")} value={`${total} MAD`} bold />
                   <View style={s.divider} />
-                  <Row label="Frais de service · CareLink" value={`${SERVICE_FEE} MAD`} muted />
+                  <Row label={t("service_fee_carelink")} value={`${SERVICE_FEE} MAD`} muted />
                   <Row label={`Commission (${Math.round(COMMISSION_RATE * 100)} %) · CareLink`} value={`${commission} MAD`} muted />
                   <View style={[s.splitRow, { backgroundColor: NAVY }]}>
-                    <Text style={[s.splitLbl, { color: "#FFF" }]}>Revenu net CareLink</Text>
+                    <Text style={[s.splitLbl, { color: "#FFF" }]}>{t("carelink_net")}</Text>
                     <Text style={[s.splitVal, { color: "#FFF" }]}>{careLinkRevenue} MAD</Text>
                   </View>
                   <View style={[s.splitRow, { backgroundColor: CREAM }]}>
-                    <Text style={[s.splitLbl, { color: NAVY }]}>Versé au professionnel</Text>
+                    <Text style={[s.splitLbl, { color: NAVY }]}>{t("paid_to_pro")}</Text>
                     <Text style={[s.splitVal, { color: NAVY }]}>{proNet} MAD</Text>
                   </View>
                 </View>
 
                 <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => router.replace("/patient/bookings")}>
-                  <Text style={s.ctaTxt}>Voir mes réservations</Text>
+                  <Text style={s.ctaTxt}>{t("see_my_bookings")}</Text>
                 </TouchableOpacity>
               </>
             )}
