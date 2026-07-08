@@ -41,6 +41,18 @@ alter table public.bookings  add column if not exists cancelled_by text;        
 create or replace function public.calc_commission(p_amount integer)
 returns integer language sql immutable as $$ select greatest(1, (p_amount * 15) / 100) $$;
 
+-- Only the client's SERVICE payment is commissioned. trip_comp / penalty ledger
+-- rows must keep commission 0 (the nurse receives the full trip comp; a penalty is
+-- a flat debit) — so the auto-commission trigger skips non-service kinds.
+create or replace function public.set_payment_commission()
+returns trigger language plpgsql as $$
+begin
+  if coalesce(new.commission_mad, 0) = 0 and coalesce(new.kind, 'service') = 'service' then
+    new.commission_mad := public.calc_commission(new.amount_mad);
+  end if;
+  return new;
+end $$;
+
 -- ── Escrow capture/refund on booking status change ───────────────────────────
 -- completed → release the hold (authorized → captured).
 -- cancelled → refund the hold, BUT only for the "plain" path (cancel_case is null).

@@ -68,10 +68,11 @@ export default function ProEarningsScreen() {
   const netOf = (p: Payment) => Number(p.amount_mad) - Number(p.commission_mad);
   const captured = useMemo(() => payments.filter((p) => p.status === "captured"), [payments]);
   const paidServices = useMemo(() => captured.filter((p) => p.kind === "service"), [captured]);
-  const earned = captured.reduce(
-    (s, p) => (p.kind === "penalty" ? s - Number(p.amount_mad) : s + netOf(p)),
-    0
-  );
+  const earned = captured.reduce((s, p) => {
+    if (p.kind === "penalty") return s - Number(p.amount_mad); // RULE #4 — full debit
+    if (p.kind === "trip_comp") return s + Number(p.amount_mad); // RULE #3 — full credit (no commission)
+    return s + netOf(p); // service — net of commission
+  }, 0);
   // InHold (escrow): authorized service payments — shown but NOT withdrawable until the job is completed.
   const pendingNet = payments
     .filter((p) => p.status === "authorized")
