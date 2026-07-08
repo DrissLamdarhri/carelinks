@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Check, Loader2, Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { isDemoBookingId } from "@/lib/demo-booking";
@@ -19,6 +20,7 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
   const { pendingBids: liveBids, loading: liveLoading } = useBookingBids(isDemoBooking ? null : bookingId);
   const pendingBids = isDemoBooking ? mockBids ?? [] : liveBids;
   const loading = isDemoBooking ? false : liveLoading;
+  const { t } = useI18n();
   const [accepting, setAccepting] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -34,11 +36,11 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
       }
       // RLS-safe atomic accept + match (same RPC as the offers screen).
       await db.bids.acceptAndMatch(bid.id);
-      toastSuccess("Offre acceptée ✓");
+      toastSuccess(t("offer_accepted"));
       onAccepted?.(bid.id);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de l'acceptation.");
-      toastError("Impossible d'accepter l'offre");
+      setErrorMessage(error instanceof Error ? error.message : t("accept_error"));
+      toastError(t("cannot_accept_offer"));
     } finally {
       setAccepting(null);
     }
@@ -55,7 +57,7 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
   if (pendingBids.length === 0) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyText}>En attente d'offres…</Text>
+        <Text style={styles.emptyText}>{t("waiting_for_bids")}</Text>
       </View>
     );
   }

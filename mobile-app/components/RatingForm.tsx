@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Star } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
@@ -25,7 +26,7 @@ type RatingFormProps = {
   onSubmitted: () => void;
 };
 
-const tags = ["Ponctuel", "Professionnel", "Soigneux", "Aimable", "Propre", "Compétent"];
+const tags = ["tag_punctual", "tag_professional", "tag_careful", "tag_kind", "tag_clean", "tag_competent"];
 const tips = [10, 20, 50];
 
 export function RatingForm({
@@ -42,6 +43,7 @@ export function RatingForm({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedTip, setSelectedTip] = useState<number | null>(null);
   const [comment, setComment] = useState("");
+  const { t } = useI18n();
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = useMemo(
@@ -58,13 +60,13 @@ export function RatingForm({
     setSubmitting(true);
     try {
       if (isDemoBooking) {
-        toastSuccess("Merci pour votre avis ✓");
+        toastSuccess(t("rating_thanks_check"));
         onSubmitted();
         return;
       }
 
       if (!user?.id) {
-        throw new Error("Utilisateur non connecté.");
+        throw new Error(t("user_not_connected"));
       }
 
       const { error } = await supabase.from("ratings").insert({
@@ -73,16 +75,16 @@ export function RatingForm({
         professional_id: professionalId,
         stars,
         comment:
-          [selectedTags.join(", "), selectedTip ? `${selectedTip} MAD` : null, comment.trim() || null]
+          [selectedTags.map((x) => t(x)).join(", "), selectedTip ? `${selectedTip} MAD` : null, comment.trim() || null]
             .filter(Boolean)
             .join(" — ") || null,
       });
       if (error) throw error;
 
-      toastSuccess("Merci pour votre avis ✓");
+      toastSuccess(t("rating_thanks_check"));
       onSubmitted();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossible d'envoyer votre avis.";
+      const message = error instanceof Error ? error.message : t("rating_send_failed");
       toastError(message);
     } finally {
       setSubmitting(false);
@@ -105,8 +107,8 @@ export function RatingForm({
             </Text>
           </View>
         )}
-        <Text style={styles.title}>Comment était votre soin ?</Text>
-        <Text style={styles.subtitle}>Évaluez {professionalName}</Text>
+        <Text style={styles.title}>{t("rating_q_title")}</Text>
+        <Text style={styles.subtitle}>{t("rate_who")} {professionalName}</Text>
         {subtitle ? <Text style={styles.smallSubtitle}>{subtitle}</Text> : null}
       </View>
 
@@ -123,7 +125,7 @@ export function RatingForm({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Qu'avez-vous apprécié ?</Text>
+        <Text style={styles.sectionTitle}>{t("what_appreciated")}</Text>
         <View style={styles.tagWrap}>
           {tags.map((tag) => (
             <TouchableOpacity
@@ -131,14 +133,14 @@ export function RatingForm({
               style={[styles.tag, selectedTags.includes(tag) && styles.tagActive]}
               onPress={() => toggleTag(tag)}
             >
-              <Text style={[styles.tagText, selectedTags.includes(tag) && styles.tagTextActive]}>{tag}</Text>
+              <Text style={[styles.tagText, selectedTags.includes(tag) && styles.tagTextActive]}>{t(tag)}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Ajouter un pourboire ?</Text>
+        <Text style={styles.sectionTitle}>{t("add_tip")}</Text>
         <View style={styles.tipWrap}>
           {tips.map((tip) => (
             <TouchableOpacity
@@ -153,11 +155,11 @@ export function RatingForm({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Commentaire (optionnel)</Text>
+        <Text style={styles.sectionTitle}>{t("comment_optional")}</Text>
         <TextInput
           value={comment}
           onChangeText={setComment}
-          placeholder="Laisser un commentaire (optionnel)…"
+          placeholder={t("leave_comment_ph")}
           placeholderTextColor={Colors.textSubtle}
           style={styles.input}
           multiline
@@ -173,7 +175,7 @@ export function RatingForm({
         {submitting ? (
           <ActivityIndicator size="small" color="white" />
         ) : (
-          <Text style={styles.submitText}>Envoyer mon avis</Text>
+          <Text style={styles.submitText}>{t("send_review")}</Text>
         )}
       </TouchableOpacity>
     </View>
