@@ -3,10 +3,10 @@ import { Languages } from "lucide-react-native";
 import { useI18n, type Locale } from "@/lib/i18n";
 import { Colors } from "@/lib/colors";
 
-const LABELS: Record<Locale, string> = {
-  fr: "Français",
-  ar: "العربية",
-  dar: "Darija",
+// French + Arabic only (Moroccan solution).
+const LABELS: Partial<Record<Locale, string>> = {
+  fr: "FR",
+  ar: "ع",
 };
 
 export function LocaleSwitcher({ compact = true }: { compact?: boolean }) {

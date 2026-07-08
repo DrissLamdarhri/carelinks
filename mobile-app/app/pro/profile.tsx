@@ -5,6 +5,7 @@ import {
   User,
   FileText,
   CreditCard,
+  Globe,
   MapPin,
   Clock,
   Bell,
@@ -15,18 +16,21 @@ import {
 } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
+import { useI18n } from "@/lib/i18n";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import type { Professional } from "@/lib/db/types";
 import { RadiusSlider } from "@/components/RadiusSlider";
 import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import { toastSuccess } from "@/lib/toast";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
-const menuItems = [
+const menuItems: { icon: typeof User; label: string; color: string; route?: string; action?: string }[] = [
   { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/pro/profile-infos" },
   { icon: FileText, label: "Mes documents", color: "#3B82F6", route: "/pro/kyc" },
+  { icon: Globe, label: "Langue / اللغة", color: "#0D0870", action: "language" },
   { icon: CreditCard, label: "Compte bancaire", color: "#6BB8C8" },
   { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
   { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
@@ -42,6 +46,7 @@ export default function ProProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleUploadAvatar = async () => {
@@ -151,7 +156,8 @@ export default function ProProfileScreen() {
             key={item.label}
             style={styles.menuItem}
             onPress={() => {
-              if (item.route) router.push(item.route as never);
+              if (item.action === "language") setLangOpen(true);
+              else if (item.route) router.push(item.route as never);
             }}
           >
             <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
@@ -201,6 +207,8 @@ export default function ProProfileScreen() {
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </View>
+
+      <LanguageSelector visible={langOpen} onClose={() => setLangOpen(false)} />
     </ScrollView>
   );
 }
