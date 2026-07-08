@@ -168,11 +168,11 @@ GET /professionals?city=...&specialty=...
 
 // Approve professional
 PUT /admin/professionals/{proId}/approve
-Header: X-Admin-Key: carelink-admin-2024
+Header: X-Admin-Key: <redacted>
 
 // Reject professional
 PUT /admin/professionals/{proId}/reject
-Header: X-Admin-Key: carelink-admin-2024
+Header: X-Admin-Key: <redacted>
 
 // Get professional documents
 GET /admin/professionals/{proId}/documents
@@ -185,8 +185,8 @@ POST /functions/v1/send-rejection-email
 ### Admin Credentials
 ```
 Email: admin@carelink.ma
-Password: CareLinkAdmin2024!
-Admin Key: carelink-admin-2024
+Password: <redacted>
+Admin Key: <redacted>
 ```
 
 ---

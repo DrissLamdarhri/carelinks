@@ -133,7 +133,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_actual_key_from_supabase_dashboard
 
 ### Test Admin Panel
 ```
-1. Login to admin: admin@carelink.ma / CareLinkAdmin2024!
+1. Login to admin: admin@carelink.ma / <redacted>
 2. Go to "Professionnels" tab
 3. Should see table with search + filters
 4. Click "Approuver" on pending professional → updates + email

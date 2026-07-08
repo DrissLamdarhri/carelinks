@@ -22,8 +22,8 @@ Route groups:
 - **Admin:** `GET /admin/stats` (reads relational tables), `/admin/professionals/pending`, approve/reject,
   `/admin/bookings/recent`, `/admin/notifications`, `POST /admin/log-booking`, `POST /admin/login`.
 
-**Admin auth:** every admin route accepts header `X-Admin-Key: carelink-admin-2024` (hardcoded) **or** a real
-admin profile via `requireAdmin()`. `/admin/login` returns `{ token: "carelink-admin-2024" }` for the demo
+**Admin auth:** every admin route accepts header `X-Admin-Key: <redacted>` (hardcoded) **or** a real
+admin profile via `requireAdmin()`. `/admin/login` returns `{ token: "<redacted>" }` for the demo
 creds. ⚠️ See [tech-debt-and-security.md](tech-debt-and-security.md).
 
 **Dual-write:** the function attempts best-effort writes into relational tables (`syncProfile`,

@@ -26,7 +26,7 @@ Both mobile and web interfaces use the **same authentication credentials**:
 
 ```
 Email:    admin@carelink.ma
-Password: CareLinkAdmin2024!
+Password: <redacted>
 ```
 
 ### Auth Flow
@@ -140,7 +140,7 @@ Edit `mobile-app/app/admin/index.tsx`:
 ```typescript
 const ADMIN_CREDENTIALS = {
   email: "admin@carelink.ma",
-  password: "CareLinkAdmin2024!",
+  password: "<redacted>",
 };
 ```
 

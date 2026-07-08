@@ -38,7 +38,7 @@ src/lib/api.ts  ──HTTP──▶  supabase/functions/server/index.tsx  (Hono,
 
 - Domain terms: **request** (patient) and **offer** (pro bid).
 - Auth: Supabase session token in `Authorization: Bearer`, else anon key. Admin routes gated by
-  `X-Admin-Key: carelink-admin-2024` (hardcoded) **or** a real admin profile.
+  `X-Admin-Key: <redacted>` (hardcoded) **or** a real admin profile.
 - This is what Figma Make generated. It duplicates the whole domain in a KV store.
 
 ### Path B — Direct Postgres tables (mobile / production)

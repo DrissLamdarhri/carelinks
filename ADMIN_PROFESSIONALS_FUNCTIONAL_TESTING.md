@@ -17,8 +17,8 @@
 
 ### Credentials
 - Admin Email: `admin@carelink.ma`
-- Admin Password: `CareLinkAdmin2024!`
-- Admin Key: `carelink-admin-2024`
+- Admin Password: `<redacted>`
+- Admin Key: `<redacted>`
 
 ---
 
@@ -35,7 +35,7 @@
 - **Location**: `src/lib/api.ts` lines 174-181
 - **Evidence**: 
   ```typescript
-  if (email !== "admin@carelink.ma" || password !== "CareLinkAdmin2024!") {
+  if (email !== "admin@carelink.ma" || password !== "<redacted>") {
     throw new Error("Identifiants incorrects");
   }
   return { success: true, message: "Admin connecté" };
