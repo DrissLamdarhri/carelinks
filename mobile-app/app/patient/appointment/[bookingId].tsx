@@ -68,7 +68,7 @@ export default function AppointmentConfirmedScreen() {
       {/* Summary */}
       <View style={s.card}>
         <View style={s.rowBetween}>
-          <Text style={s.cardTitle}>Dr. Dalila Mansouri</Text>
+          <Text style={s.cardTitle}>{booking.notes || t("clinical_psychologist")}</Text>
           {booking.session_total && booking.session_total > 1 ? (
             <View style={s.pill}><Text style={s.pillTxt}>{t("session_short")} {booking.session_index}/{booking.session_total}</Text></View>
           ) : null}

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CalendarDays, MapPin, Repeat, Star, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
@@ -9,7 +9,7 @@ import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
 import type { PlanType, Recurrence, SessionMode } from "@/lib/db/types";
 
-const PRICE = 200; // MAD per session
+const DEFAULT_PRICE = 200; // MAD per session
 // Fallback remote links used only if the psychologist hasn't saved their own yet.
 const DEFAULT_MEET = "https://meet.google.com/new";
 const DEFAULT_ZOOM = "https://zoom.us/join";
@@ -45,6 +45,13 @@ export default function PsychologistBookingScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ proId?: string; name?: string; price?: string }>();
+  const psyName = (typeof params.name === "string" && params.name) || "Dr. Dalila Mansouri";
+  const psyInitials = psyName.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "DM";
+  const PRICE = Number(params.price) || DEFAULT_PRICE;
+  // A real professional_id when the psychologist came from the DB directory;
+  // null for the built-in demo entries.
+  const chosenProId = typeof params.proId === "string" && !params.proId.startsWith("demo") ? params.proId : null;
   const [confirming, setConfirming] = useState(false);
   const [plan, setPlan] = useState<PlanType>("single");
   const [recurrence, setRecurrence] = useState<Exclude<Recurrence, "none">>("weekly");
@@ -79,14 +86,11 @@ export default function PsychologistBookingScreen() {
       const [hour, minute] = time.split(":");
       const firstISO = new Date(`${dates[selectedDay].isoDate}T${hour}:${minute}:00`).toISOString();
 
-      // Find an approved psychologist (for the real professional_id + saved links).
-      const { data: psy } = await supabase
-        .from("professionals")
-        .select("id, meet_link, zoom_link")
-        .eq("specialty", "psychologist")
-        .eq("verification_status", "approved")
-        .limit(1)
-        .maybeSingle();
+      // Resolve the psychologist: the one chosen from the directory, else the
+      // first approved (demo entries fall back to placeholder links).
+      const { data: psy } = chosenProId
+        ? await supabase.from("professionals").select("id, meet_link, zoom_link").eq("id", chosenProId).maybeSingle()
+        : await supabase.from("professionals").select("id, meet_link, zoom_link").eq("specialty", "psychologist").eq("verification_status", "approved").limit(1).maybeSingle();
 
       const base = {
         patient_id: user.id,
@@ -94,7 +98,8 @@ export default function PsychologistBookingScreen() {
         status: "matched" as const,
         professional_id: psy?.id ?? null,
         address: mode === "in_person" ? "Meknès, Maroc" : null,
-        notes: `Psychologue · ${t(plan === "single" ? "plan_single" : plan === "recurring" ? "plan_recurring" : "plan_subscription")}`,
+        notes: psyName, // shown as the practitioner on the confirmation page
+
         budget_min_mad: PRICE,
         budget_max_mad: PRICE,
         final_price_mad: PRICE,
@@ -140,9 +145,9 @@ export default function PsychologistBookingScreen() {
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 18 }}>
         <View style={styles.profileCard}>
           <View style={styles.profileRow}>
-            <View style={styles.avatarFallback}><Text style={styles.avatarInitials}>DM</Text></View>
+            <View style={styles.avatarFallback}><Text style={styles.avatarInitials}>{psyInitials}</Text></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.profileName}>Dr. Dalila Mansouri</Text>
+              <Text style={styles.profileName}>{psyName}</Text>
               <Text style={styles.profileRole}>{t("clinical_psychologist")}</Text>
               <View style={styles.ratingRow}>
                 <Star size={12} color="#FBBF24" fill="#FBBF24" />

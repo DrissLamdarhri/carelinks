@@ -134,7 +134,7 @@ export default function PatientHomeScreen() {
                 onPress={() =>
                   router.push(
                     s.key === "psy"
-                      ? "/patient/psychologist"
+                      ? "/patient/psychologists"
                       : s.key === "yoga"
                       ? "/patient/yoga"
                       : `/patient/request?service=${s.key}`
