@@ -49,7 +49,7 @@ enroll) · `mfa-challenge` (AAL2 step-up) · `mfa-settings`.
 - `notifications` — `<NotificationPreferences>` wrapper.
 
 ### `admin/` (Stack)
-- `index` — admin login (**hardcoded creds** `admin@carelink.ma` / `CareLinkAdmin2024!`).
+- `index` — admin login (**hardcoded creds** `admin@carelink.ma` / `<redacted>`).
 - `dashboard` — KPI dashboard (some values hardcoded, some from supabase).
 - `metrics` — analytics via direct supabase.
 - `kyc` — **pro approval/moderation** (professionals + pro_documents + profiles, realtime `professionals:kyc`).

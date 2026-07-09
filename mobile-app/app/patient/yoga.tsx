@@ -164,7 +164,15 @@ export default function YogaCatalogScreen() {
     return sessions.filter((session) => session.level === activeFilter);
   }, [activeFilter, sessions]);
 
-  const handleReserveYoga = async (session: typeof sessions[0]) => {
+  // If there was an error loading real sessions, fall back to the demo list so UI doesn't show error state
+  const displaySessions = (error ? fallbackSessions : filteredSessions) as any[];
+
+  const handleReserveYoga = async (session: any) => {
+    if (error) {
+      // DB unavailable — prevent reservations from demo/fallback sessions
+      Alert.alert("Indisponible", "Les séances réelles ne sont pas disponibles pour le moment. Réessayez plus tard.");
+      return;
+    }
     if (!user?.id) {
       Alert.alert("Erreur", t("please_login_book"));
       return;
@@ -346,12 +354,7 @@ export default function YogaCatalogScreen() {
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>{t("loading_sessions")}</Text>
           </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>❌ Erreur lors du chargement des séances</Text>
-            <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>{t("check_connection_retry")}</Text>
-          </View>
-        ) : filteredSessions.length === 0 ? (
+        ) : displaySessions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>📋 Aucune séance disponible</Text>
             <Text style={[styles.emptyText, { fontSize: 12, marginTop: 8, color: Colors.textMuted }]}>
@@ -359,7 +362,7 @@ export default function YogaCatalogScreen() {
             </Text>
           </View>
         ) : (
-          filteredSessions.map((session) => (
+          displaySessions.map((session) => (
             <View key={session.id} style={styles.card}>
             <View style={styles.cardImageWrap}>
               <Image source={{ uri: session.img }} style={styles.cardImage} />
@@ -412,9 +415,9 @@ export default function YogaCatalogScreen() {
                   {session.price} <Text style={styles.priceUnit}>MAD / séance</Text>
                 </Text>
                 <TouchableOpacity 
-                  style={[styles.bookBtn, loadingSessionId === session.id && styles.bookBtnDisabled]}
+                  style={[styles.bookBtn, (loadingSessionId === session.id || !!error) && styles.bookBtnDisabled]}
                   onPress={() => handleReserveYoga(session)}
-                  disabled={loadingSessionId === session.id}
+                  disabled={loadingSessionId === session.id || !!error}
                 >
                   {loadingSessionId === session.id ? (
                     <ActivityIndicator size="small" color="white" />

@@ -92,7 +92,7 @@ There is **no test suite**. Verify changes by `type-check` + running the app.
 
 ## Security must-knows (before any deploy)
 
-Hardcoded admin secret `carelink-admin-2024` and demo creds `admin@carelink.ma` / `CareLinkAdmin2024!` are
+Hardcoded admin secret `<redacted>` and demo creds `admin@carelink.ma` / `<redacted>` are
 committed and shipped in the web bundle; the web admin gate trusts a `localStorage` flag; several
 `supabase/fix-rls-*.sql` scripts **loosen or disable RLS** (`fix-rls-policies-option2.sql` disables storage
 RLS globally). These are dev shortcuts — **do not apply the "fix"/"nuclear" RLS scripts in production**. See

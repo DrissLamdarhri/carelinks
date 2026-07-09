@@ -106,7 +106,7 @@ export default function PatientHomeScreen() {
             <TouchableOpacity
               key={qs.id}
               style={[styles.quickBtn, { backgroundColor: qs.background }]}
-              onPress={() => router.push("/patient/request")}
+              onPress={() => router.push(qs.id === "q1" ? "/patient/urgent" : "/patient/request")}
             >
               <Icon size={14} color={qs.color} />
               <Text style={[styles.quickText, { color: qs.color }]}>{qs.label}</Text>

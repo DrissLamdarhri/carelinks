@@ -49,11 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdminAuthed, setAdminAuthed] = useState(() => {
-    return localStorage.getItem("carelink_admin_authed") === "true";
-  });
-
   const role: UserRole = profile?.role ?? null;
+  // Admin access is derived from the real Supabase session's role — NOT a
+  // localStorage flag (which a user could set in devtools to fake admin).
+  const isAdminAuthed = role === "admin";
+  const setAdminAuthed = (_v: boolean) => {}; // no-op kept for API compatibility
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -107,9 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("carelink_admin_authed", isAdminAuthed ? "true" : "false");
-  }, [isAdminAuthed]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();

@@ -26,7 +26,7 @@
 **Implementation Found**: ✅
 - Admin login credentials defined in `src/lib/api.ts`:
   - Email: `admin@carelink.ma`
-  - Password: `CareLinkAdmin2024!`
+  - Password: `<redacted>`
 - Simple credential validation implemented in `adminLogin()` function
 - Note: In production, this should verify against a real admin user in database
 
@@ -330,7 +330,7 @@ export async function sendRejectionEmail(email: string, name: string, reason?: s
 ```
 
 #### Authentication
-- ✅ Admin key authentication: `X-Admin-Key: carelink-admin-2024`
+- ✅ Admin key authentication: `X-Admin-Key: <redacted>`
 - ✅ Bearer token authentication: `Authorization: Bearer <token>`
 - ✅ Admin credentials stored in auth context
 
@@ -573,9 +573,9 @@ Icons Used (from Lucide React):
 ## Known Implementation Details
 
 ### Configuration
-- **Admin Key**: `carelink-admin-2024` (defined in `src/lib/api.ts`)
+- **Admin Key**: `<redacted>` (defined in `src/lib/api.ts`)
 - **Admin Email**: `admin@carelink.ma`
-- **Admin Password**: `CareLinkAdmin2024!`
+- **Admin Password**: `<redacted>`
 - **Base API**: `https://wjhzrovmktekfcjohhrw.supabase.co/functions/v1/make-server-aa5d1aa6`
 - **Supabase Project ID**: `wjhzrovmktekfcjohhrw`
 
@@ -613,13 +613,13 @@ Icons Used (from Lucide React):
 curl -X PUT \
   "https://wjhzrovmktekfcjohhrw.supabase.co/functions/v1/make-server-aa5d1aa6/admin/professionals/{proId}/approve" \
   -H "Authorization: Bearer <token>" \
-  -H "X-Admin-Key: carelink-admin-2024"
+  -H "X-Admin-Key: <redacted>"
 
 # Reject professional
 curl -X PUT \
   "https://wjhzrovmktekfcjohhrw.supabase.co/functions/v1/make-server-aa5d1aa6/admin/professionals/{proId}/reject" \
   -H "Authorization: Bearer <token>" \
-  -H "X-Admin-Key: carelink-admin-2024" \
+  -H "X-Admin-Key: <redacted>" \
   -d '{"reason": "Incomplete documentation"}'
 ```
 

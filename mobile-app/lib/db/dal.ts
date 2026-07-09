@@ -438,6 +438,12 @@ export const payments = {
       await supabase.from("payments").select("*").eq("professional_id", proId).order("created_at", { ascending: false })
     );
   },
+  // Escrow status for a set of bookings (used to show which subscription sessions
+  // are already paid/held vs. still to settle).
+  async listForBookings(bookingIds: UUID[]): Promise<Payment[]> {
+    if (bookingIds.length === 0) return [];
+    return unwrap(await supabase.from("payments").select("*").in("booking_id", bookingIds));
+  },
 };
 
 export const payouts = {

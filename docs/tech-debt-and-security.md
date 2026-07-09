@@ -5,10 +5,10 @@ so it carries **parallel/duplicated systems** and several **dev shortcuts that a
 
 ## 🔴 Security landmines
 
-1. **Hardcoded admin secret `carelink-admin-2024`** — committed in `src/lib/api.ts` (`ADMIN_KEY`, sent as
+1. **Hardcoded admin secret `<redacted>`** — committed in `src/lib/api.ts` (`ADMIN_KEY`, sent as
    `X-Admin-Key`) and accepted by every admin route in `supabase/functions/server/index.tsx`; `/admin/login`
    even returns it. Anyone reading the shipped web bundle gets full admin access to the KV backend.
-2. **Hardcoded admin credentials** `admin@carelink.ma` / `CareLinkAdmin2024!` — in `src/lib/api.ts`,
+2. **Hardcoded admin credentials** `admin@carelink.ma` / `<redacted>` — in `src/lib/api.ts`,
    `src/app/components/AdminLogin.tsx` (**and rendered on the login screen**), and `mobile-app/app/admin/index.tsx`.
 3. **Client-trusted web admin gate** — `RequireAuth role="admin"` only checks
    `localStorage.carelink_admin_authed === "true"`. A user can set that flag to reach `/admin/dashboard`.
