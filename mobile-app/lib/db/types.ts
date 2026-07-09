@@ -20,7 +20,7 @@ export type UrgencyLevel = "normal" | "urgent" | "emergency";
 // Psychologist appointments (0024)
 export type SessionMode = "in_person" | "remote";
 export type PlanType = "single" | "recurring" | "subscription";
-export type Recurrence = "none" | "weekly" | "biweekly" | "monthly";
+export type Recurrence = "none" | "daily" | "weekly" | "biweekly" | "monthly";
 
 export interface Profile {
   id: UUID;
