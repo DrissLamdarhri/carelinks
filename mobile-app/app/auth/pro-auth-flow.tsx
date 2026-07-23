@@ -258,11 +258,10 @@ export default function ProAuthFlowScreen() {
         snapToInterval={screenWidth}
         snapToAlignment="center"
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
+        onScroll={(e) => {
           const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-          setTab(page);
+          if (page !== tab) setTab(page);
         }}
-        scrollEnabled={false}
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}

@@ -234,11 +234,10 @@ export default function PatientAuthFlowScreen() {
         snapToInterval={screenWidth}
         snapToAlignment="center"
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
+        onScroll={(e) => {
           const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-          setTab(page);
+          if (page !== tab) setTab(page);
         }}
-        scrollEnabled={false} // Disable swipe, use buttons instead for better UX
         contentContainerStyle={{ width: screenWidth * 2 }}
       >
         {/* LOGIN SCREEN */}

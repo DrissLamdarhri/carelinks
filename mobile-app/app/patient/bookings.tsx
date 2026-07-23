@@ -370,9 +370,10 @@ export default function PatientBookingsScreen() {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
-          onMomentumScrollEnd={(e) => {
+          onScroll={(e) => {
             const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
-            setTab(i === 0 ? "upcoming" : "past");
+            const next = i === 0 ? "upcoming" : "past";
+            if (next !== tab) setTab(next);
           }}
         >
           {([["upcoming", upcoming], ["past", past]] as const).map(([key, items]) => (

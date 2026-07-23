@@ -140,9 +140,10 @@ export default function ProScheduleScreen() {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
-          onMomentumScrollEnd={(e) => {
+          onScroll={(e) => {
             const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
-            setFilter(i === 0 ? "upcoming" : "done");
+            const next = i === 0 ? "upcoming" : "done";
+            if (next !== filter) setFilter(next);
           }}
         >
           {([["upcoming", upcoming, "no_missions_upcoming"], ["done", done, "no_missions_done"]] as const).map(

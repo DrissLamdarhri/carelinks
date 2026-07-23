@@ -286,9 +286,10 @@ export default function ProHomeScreen() {
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         style={styles.body}
-        onMomentumScrollEnd={(e) => {
+        onScroll={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
-          setTab(i === 0 ? "requests" : "schedule");
+          const next = i === 0 ? "requests" : "schedule";
+          if (next !== tab) setTab(next);
         }}
       >
         <View style={{ width: SCREEN_W }}>
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
   tabTxtActive: { color: "white" },
 
   pageContent: { paddingBottom: 28, paddingHorizontal: 16 },
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  body: { flex: 1, paddingTop: 12 }, // no horizontal padding: pages are SCREEN_W wide
 
   setupCard: { backgroundColor: "white", borderRadius: 16, padding: 18, alignItems: "center", gap: 12 },
   setupText: { color: Colors.textMuted, fontSize: 13, textAlign: "center", lineHeight: 19 },
