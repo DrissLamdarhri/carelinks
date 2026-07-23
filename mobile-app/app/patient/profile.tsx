@@ -41,7 +41,6 @@ const menuSections: Array<{
     items: [
       { icon: Globe, label: "language", color: "#0D0870", action: "language" },
       { icon: Bell, label: "notifications", color: "#6BB8C8", route: "/patient/notifications" },
-      { icon: Shield, label: "security_privacy", color: "#8B5CF6", route: "/auth/mfa-settings" },
     ],
   },
   {

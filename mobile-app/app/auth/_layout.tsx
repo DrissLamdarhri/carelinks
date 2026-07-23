@@ -6,7 +6,9 @@ import { Stack } from "expo-router";
 
 export default function AuthLayout() {
   return (
-    <Stack>
+    // Every auth screen draws its own header — hide the navigator's one globally
+    // so screens like pro-registration don't show a duplicate "pro-registration" bar.
+    <Stack screenOptions={{ headerShown: false }}>
       {/*
         The onboarding screen lives at app/auth/index.tsx.
         Expo Router maps the `index` file to the root of this segment,

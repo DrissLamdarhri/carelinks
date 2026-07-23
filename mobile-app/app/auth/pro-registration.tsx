@@ -398,15 +398,6 @@ export default function ProRegistrationScreen() {
             <Text style={styles.bigTitle}>{t("your_info")}</Text>
             <Text style={styles.bigSubtitle}>{t("enter_pro_details")}</Text>
 
-            <View style={styles.avatarWrap}>
-              <View style={styles.avatarCircle}>
-                <User size={30} color={Colors.primary} />
-              </View>
-              <View style={styles.cameraBtn}>
-                <Camera size={11} color="white" />
-              </View>
-            </View>
-
             <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>{t("first_name")}</Text>

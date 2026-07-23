@@ -35,7 +35,6 @@ const menuItems: { icon: typeof User; label: string; color: string; route?: stri
   { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
   { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
   { icon: Bell, label: "Notifications", color: "#0D0870", route: "/pro/notifications" },
-  { icon: Shield, label: "Sécurité & Confidentialité", color: "#8B5CF6", route: "/auth/mfa-settings" },
   { icon: Shield, label: "Vérification", color: "#0D0870", route: "/pro/kyc" },
 ];
 
