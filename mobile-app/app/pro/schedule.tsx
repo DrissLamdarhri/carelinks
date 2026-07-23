@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,12 +11,14 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { CalendarClock, ChevronRight, Clock, MapPin } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { formatAddress } from "@/lib/db/geo";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
+const SCREEN_W = Dimensions.get("window").width;
 const SPEC_LABEL: Record<string, string> = {
   nurse: "spec_nurse",
   physiotherapist: "spec_physio",
@@ -57,7 +60,59 @@ export default function ProScheduleScreen() {
     () => bookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
     [bookings],
   );
-  const list = filter === "upcoming" ? upcoming : done;
+  // Tabs and horizontal swipe drive the same state, so dragging left/right feels
+  // native and always stays in sync with the highlighted tab.
+  const pagerRef = useRef<ScrollView>(null);
+  const goTab = (next: "upcoming" | "done") => {
+    setFilter(next);
+    pagerRef.current?.scrollTo({ x: next === "upcoming" ? 0 : SCREEN_W, animated: true });
+  };
+
+  const renderCard = (b: Booking) => {
+    const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
+    const done_ = b.status === "completed";
+    const cancelled = b.status === "cancelled";
+    return (
+      <TouchableOpacity key={b.id} activeOpacity={0.9} onPress={() => router.push(`/pro/tracking/${b.id}`)} style={s.card}>
+        <View style={s.dateTile}>
+          <Text style={s.dateDay}>{d ? d.toLocaleDateString("fr-MA", { day: "2-digit" }) : "--"}</Text>
+          <Text style={s.dateMon}>{d ? d.toLocaleDateString("fr-MA", { month: "short" }) : ""}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={s.rowTop}>
+            <Text style={s.patient}>{t("patient")}</Text>
+            <View style={[s.pill, done_ ? s.pillDone : cancelled ? s.pillCancel : b.status === "in_progress" ? s.pillLive : s.pillSoon]}>
+              <Text style={[s.pillTxt, done_ ? s.pillTxtDone : cancelled ? s.pillTxtCancel : b.status === "in_progress" ? s.pillTxtLive : s.pillTxtSoon]}>
+                {done_ ? t("status_completed") : cancelled ? t("status_cancelled") : b.status === "in_progress" ? t("status_in_progress") : t("tab_upcoming")}
+              </Text>
+            </View>
+          </View>
+          <Text style={s.spec}>{SPEC_LABEL[b.specialty] ? t(SPEC_LABEL[b.specialty]) : b.specialty}</Text>
+          <View style={s.metaRow}>
+            <Clock size={12} color={Colors.textMuted} />
+            <Text style={s.metaTxt}>
+              {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : t("flexible_time")}
+            </Text>
+          </View>
+          {b.address ? (
+            <View style={s.metaRow}>
+              <MapPin size={12} color={Colors.textMuted} />
+              <Text style={s.metaTxt} numberOfLines={1}>{formatAddress(b.address) || t("at_home")}</Text>
+            </View>
+          ) : null}
+          <View style={s.foot}>
+            <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
+            {!done_ && !cancelled ? (
+              <View style={s.openRow}>
+                <Text style={s.openTxt}>{t("open_action")}</Text>
+                <ChevronRight size={15} color={NAVY} />
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={s.root}>
@@ -67,10 +122,10 @@ export default function ProScheduleScreen() {
           {upcoming.length} à venir · {done.length} terminée{done.length > 1 ? "s" : ""}
         </Text>
         <View style={s.tabs}>
-          <TouchableOpacity style={[s.tab, filter === "upcoming" && s.tabActive]} onPress={() => setFilter("upcoming")}>
+          <TouchableOpacity style={[s.tab, filter === "upcoming" && s.tabActive]} onPress={() => goTab("upcoming")}>
             <Text style={[s.tabTxt, filter === "upcoming" && s.tabTxtActive]}>À venir ({upcoming.length})</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.tab, filter === "done" && s.tabActive]} onPress={() => setFilter("done")}>
+          <TouchableOpacity style={[s.tab, filter === "done" && s.tabActive]} onPress={() => goTab("done")}>
             <Text style={[s.tabTxt, filter === "done" && s.tabTxtActive]}>Terminées ({done.length})</Text>
           </TouchableOpacity>
         </View>
@@ -78,76 +133,35 @@ export default function ProScheduleScreen() {
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 46 }} color={NAVY} />
-      ) : list.length === 0 ? (
-        <View style={s.emptyCard}>
-          <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
-          <Text style={s.emptyTitle}>
-            {filter === "upcoming" ? t("no_missions_upcoming") : t("no_missions_done")}
-          </Text>
-          <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
-        </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
-          {list.map((b) => {
-            const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
-            const done_ = b.status === "completed";
-            const cancelled = b.status === "cancelled";
-            return (
-              <TouchableOpacity
-                key={b.id}
-                activeOpacity={0.9}
-                onPress={() => router.push(`/pro/tracking/${b.id}`)}
-                style={s.card}
-              >
-                <View style={s.dateTile}>
-                  <Text style={s.dateDay}>{d ? d.toLocaleDateString("fr-MA", { day: "2-digit" }) : "--"}</Text>
-                  <Text style={s.dateMon}>{d ? d.toLocaleDateString("fr-MA", { month: "short" }) : ""}</Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={s.rowTop}>
-                    <Text style={s.patient}>{t("patient")}</Text>
-                    <View
-                      style={[
-                        s.pill,
-                        done_ ? s.pillDone : cancelled ? s.pillCancel : b.status === "in_progress" ? s.pillLive : s.pillSoon,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          s.pillTxt,
-                          done_ ? s.pillTxtDone : cancelled ? s.pillTxtCancel : b.status === "in_progress" ? s.pillTxtLive : s.pillTxtSoon,
-                        ]}
-                      >
-                        {done_ ? t("status_completed") : cancelled ? t("status_cancelled") : b.status === "in_progress" ? t("status_in_progress") : t("tab_upcoming")}
-                      </Text>
-                    </View>
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => {
+            const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+            setFilter(i === 0 ? "upcoming" : "done");
+          }}
+        >
+          {([["upcoming", upcoming, "no_missions_upcoming"], ["done", done, "no_missions_done"]] as const).map(
+            ([key, items, emptyKey]) => (
+              <View key={key} style={{ width: SCREEN_W }}>
+                {items.length === 0 ? (
+                  <View style={s.emptyCard}>
+                    <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
+                    <Text style={s.emptyTitle}>{t(emptyKey)}</Text>
+                    <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
                   </View>
-                  <Text style={s.spec}>{SPEC_LABEL[b.specialty] ? t(SPEC_LABEL[b.specialty]) : b.specialty}</Text>
-                  <View style={s.metaRow}>
-                    <Clock size={12} color={Colors.textMuted} />
-                    <Text style={s.metaTxt}>
-                      {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : t("flexible_time")}
-                    </Text>
-                  </View>
-                  {b.address ? (
-                    <View style={s.metaRow}>
-                      <MapPin size={12} color={Colors.textMuted} />
-                      <Text style={s.metaTxt} numberOfLines={1}>{b.address}</Text>
-                    </View>
-                  ) : null}
-                  <View style={s.foot}>
-                    <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
-                    {!done_ && !cancelled ? (
-                      <View style={s.openRow}>
-                        <Text style={s.openTxt}>{t("open_action")}</Text>
-                        <ChevronRight size={15} color={NAVY} />
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                ) : (
+                  <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
+                    {items.map(renderCard)}
+                  </ScrollView>
+                )}
+              </View>
+            ),
+          )}
         </ScrollView>
       )}
     </View>

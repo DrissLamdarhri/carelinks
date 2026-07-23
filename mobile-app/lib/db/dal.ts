@@ -167,13 +167,18 @@ export const bookings = {
     );
   },
 
-  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50): Promise<Booking[]> {
+  // Demands a professional may bid on: their OWN specialty only, and only those
+  // posted in the last `withinHours` (default 24h). Older open requests are stale
+  // — showing them clutters the feed and lets pros bid on dead demands.
+  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50, withinHours = 24): Promise<Booking[]> {
+    const since = new Date(Date.now() - withinHours * 60 * 60 * 1000).toISOString();
     return unwrap(
       await supabase
         .from("bookings")
         .select("*")
         .eq("specialty", specialty)
         .eq("status", "open")
+        .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(limit)
     );

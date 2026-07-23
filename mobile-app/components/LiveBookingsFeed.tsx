@@ -2,6 +2,7 @@
 // import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 // import { Clock, HandCoins, Loader2, Lock, MapPin, Send, ShieldAlert, Stethoscope, Zap } from "lucide-react-native";
 // import { Colors } from "@/lib/colors";
+import { formatAddress } from "@/lib/db/geo";
 // import { useI18n } from "@/lib/i18n";
 // import { useAuth } from "@/lib/auth-context";
 // import { db } from "@/lib/db/dal";
@@ -144,7 +145,7 @@
 //               {booking.address ? (
 //                 <View style={styles.metaItem}>
 //                   <MapPin size={13} color={Colors.textMuted} />
-//                   <Text style={styles.metaText} numberOfLines={1}>{booking.address}</Text>
+//                   <Text style={styles.metaText} numberOfLines={1}>{formatAddress(booking.address) || t("at_home")}</Text>
 //                 </View>
 //               ) : null}
 //               {booking.scheduled_at ? (
@@ -421,7 +422,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
               {booking.address ? (
                 <View style={styles.metaItem}>
                   <MapPin size={13} color={Colors.textMuted} />
-                  <Text style={styles.metaText} numberOfLines={1}>{booking.address}</Text>
+                  <Text style={styles.metaText} numberOfLines={1}>{formatAddress(booking.address) || t("at_home")}</Text>
                 </View>
               ) : null}
               {booking.scheduled_at ? (

@@ -30,7 +30,7 @@ import { useProDemandNotifications } from "@/lib/hooks/useProDemandNotifications
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db/dal";
-import { geo } from "@/lib/db/geo";
+import { geo, formatAddress } from "@/lib/db/geo";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import type { Booking, ProSpecialty } from "@/lib/db/types";
 
@@ -47,6 +47,7 @@ export default function ProHomeScreen() {
   const [rating, setRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 });
   const [unread, setUnread] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [verification, setVerification] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,6 +60,7 @@ export default function ProHomeScreen() {
           if (!cancelled) {
             setSpecialty(pro?.specialty ?? null);
             setIsOnline(!!pro?.is_available);
+            setVerification(pro?.verification_status ?? null);
             setRating({ avg: Number(pro?.rating_avg ?? 0), count: Number(pro?.rating_count ?? 0) });
           }
           const list = await db.bookings.listForPro(user.id);
@@ -113,15 +115,21 @@ export default function ProHomeScreen() {
     const next = !isOnline;
     setBusy(true);
     try {
-      if (next) {
-        const coords = await geo.getCurrentPosition();
-        await db.pros.upsert({ id: user.id, specialty, is_available: true });
-        await geo.setProLocation(user.id, coords.lat, coords.lng);
-        showToast(t("you_online_visible"));
-      } else {
-        await db.pros.upsert({ id: user.id, specialty, is_available: false });
-      }
+      // Availability is the source of truth and must never depend on GPS —
+      // a denied/slow location used to abort the whole toggle, leaving the pro
+      // stuck "Hors ligne". Flip availability first, then refresh the position
+      // on a best-effort basis.
+      await db.pros.upsert({ id: user.id, specialty, is_available: next });
       setIsOnline(next);
+      if (next) {
+        showToast(t("you_online_visible"));
+        try {
+          const coords = await geo.getCurrentPosition();
+          await geo.setProLocation(user.id, coords.lat, coords.lng);
+        } catch {
+          showToast(t("gps_not_saved")); // online, but position not refreshed
+        }
+      }
     } catch {
       showToast(t("action_failed"));
     } finally {
@@ -198,7 +206,7 @@ export default function ProHomeScreen() {
             {activeMission.address ? (
               <View style={styles.missionAddrRow}>
                 <MapPin size={13} color="rgba(255,255,255,0.85)" />
-                <Text style={styles.missionAddr} numberOfLines={1}>{activeMission.address}</Text>
+                <Text style={styles.missionAddr} numberOfLines={1}>{formatAddress(activeMission.address) || t("at_home")}</Text>
               </View>
             ) : null}
             <View style={styles.missionActions}>
@@ -221,6 +229,23 @@ export default function ProHomeScreen() {
         <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
           <FileText size={16} color={Colors.primary} />
           <Text style={styles.quickTxt}>{t("kyc_documents")}</Text>
+          {/* Live KYC state — a pro cannot work until this is approved. */}
+          {verification ? (
+            <View
+              style={[
+                styles.kycBadge,
+                verification === "approved"
+                  ? styles.kycOk
+                  : verification === "rejected"
+                    ? styles.kycKo
+                    : styles.kycPending,
+              ]}
+            >
+              <Text style={styles.kycBadgeTxt}>
+                {verification === "approved" ? "✓" : verification === "rejected" ? "!" : "…"}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       </View>
 
@@ -274,7 +299,7 @@ export default function ProHomeScreen() {
                       {b.address ? (
                         <View style={styles.jobAddrRow}>
                           <MapPin size={11} color={Colors.textMuted} />
-                          <Text style={styles.jobAddr} numberOfLines={1}>{b.address}</Text>
+                          <Text style={styles.jobAddr} numberOfLines={1}>{formatAddress(b.address) || t("at_home")}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -377,6 +402,11 @@ const styles = StyleSheet.create({
 
   quickActions: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 14 },
   quickBtn: { flex: 1, height: 44, borderRadius: 13, backgroundColor: "white", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  kycBadge: { marginLeft: 4, minWidth: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  kycOk: { backgroundColor: "#DCFCE7" },
+  kycPending: { backgroundColor: "#FFF7E6" },
+  kycKo: { backgroundColor: "#FDE8E8" },
+  kycBadgeTxt: { fontSize: 11, fontWeight: "800", color: Colors.textPrimary },
   quickTxt: { color: Colors.primary, fontSize: 13, fontWeight: "700" },
 
   tabs: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },

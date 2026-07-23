@@ -25,6 +25,29 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
   return R * 2 * Math.asin(Math.sqrt(h));
 }
 
+/**
+ * Google "Plus Code" (Open Location Code) detector, e.g. "3X58+Q4P".
+ * These leak out of Android reverse-geocoding and are meaningless to users.
+ */
+export function isPlusCode(v: string): boolean {
+  return /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}$/i.test(v.trim());
+}
+
+/**
+ * Presentation helper for any stored address: removes Plus-Code fragments and
+ * tidies leftover separators, so old rows like "3X58+Q4P, Fès" render as "Fès".
+ * Returns "" when nothing meaningful remains (callers fall back to a label).
+ */
+export function formatAddress(address?: string | null): string {
+  if (!address) return "";
+  const cleaned = address
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !isPlusCode(part))
+    .join(", ");
+  return cleaned.replace(/\s{2,}/g, " ").replace(/^[,\s]+|[,\s]+$/g, "");
+}
+
 export const geo = {
   async setProLocation(proId: string, lat: number, lng: number) {
     const { error } = await supabase.rpc("set_pro_location", {
@@ -153,10 +176,13 @@ export const geo = {
       const places = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
       const p = places[0];
       if (!p) return null;
-      const street = [p.name, p.street].find((v) => v && !/^\d+$/.test(v)) ?? p.street ?? null;
+      // On Android `p.name` is frequently a Plus Code (e.g. "3X58+Q4P") — never a
+      // human address. Skip those (and bare numbers) so we surface a real street.
+      const street =
+        [p.name, p.street].find((v) => v && !/^\d+$/.test(v) && !isPlusCode(v)) ?? p.street ?? null;
       const city = p.city ?? p.subregion ?? p.region ?? null;
       const label = [street, city].filter(Boolean).join(", ");
-      return label || city || null;
+      return formatAddress(label) || city || null;
     } catch {
       return null;
     }
