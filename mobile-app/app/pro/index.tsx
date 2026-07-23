@@ -26,6 +26,7 @@ import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { mockProProfile } from "@/lib/mock-data";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
+import { useProDemandNotifications } from "@/lib/hooks/useProDemandNotifications";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db/dal";
@@ -79,6 +80,9 @@ export default function ProHomeScreen() {
   );
 
   const { bookings: openReqs } = useOpenBookingsBySpecialty(specialty);
+  // Fires a local push + a bell notification row on every new matching demand.
+  // (This screen already resolves `specialty`, so we only take the callback.)
+  const { onNewDemand } = useProDemandNotifications();
 
   const displayName =
     profile?.firstName || profile?.lastName
@@ -233,7 +237,7 @@ export default function ProHomeScreen() {
       <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {tab === "requests" ? (
           specialty ? (
-            <LiveBookingsFeed specialty={specialty} />
+            <LiveBookingsFeed specialty={specialty} onNewDemand={onNewDemand} />
           ) : (
             <View style={styles.setupCard}>
               <Text style={styles.setupText}>{t("setup_specialty_hint")}</Text>
