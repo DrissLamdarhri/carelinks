@@ -118,9 +118,16 @@ export default function ProHomeScreen() {
       // Availability is the source of truth and must never depend on GPS —
       // a denied/slow location used to abort the whole toggle, leaving the pro
       // stuck "Hors ligne". Flip availability first, then refresh the position
-      // on a best-effort basis.
-      await db.pros.upsert({ id: user.id, specialty, is_available: next });
-      setIsOnline(next);
+      // on a best-effort basis. Uses a targeted UPDATE (not a partial upsert),
+      // otherwise the availability guard trigger sees a defaulted
+      // verification_status and forces the pro back offline (migration 0026).
+      const saved = await db.pros.setAvailability(user.id, next);
+      setIsOnline(!!saved.is_available);
+      if (next && !saved.is_available) {
+        // Guard refused: the account isn't approved yet.
+        showToast(t("account_pending"));
+        return;
+      }
       if (next) {
         showToast(t("you_online_visible"));
         try {

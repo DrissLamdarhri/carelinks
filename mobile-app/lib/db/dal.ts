@@ -64,6 +64,24 @@ export const pros = {
         .single()
     );
   },
+
+  /**
+   * Toggle availability with a targeted UPDATE. A partial upsert would let
+   * unsupplied columns fall back to their defaults on the INSERT pass, which made
+   * the availability guard trigger see verification_status='pending' and silently
+   * force the pro offline (see migration 0026).
+   */
+  async setAvailability(id: UUID, isAvailable: boolean): Promise<Professional> {
+    return unwrap(
+      await supabase
+        .from("professionals")
+        .update({ is_available: isAvailable, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*")
+        .single()
+    );
+  },
+
 };
 
 export const patients = {
