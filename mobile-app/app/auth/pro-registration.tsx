@@ -372,10 +372,33 @@ export default function ProRegistrationScreen() {
   return (
     <View style={styles.root}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {/* Compact header: centered title + step badge + progress */}
+        <View style={styles.smallHeaderContainer}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity
+              onPress={() => (step > 0 ? setStep((s) => s - 1) : router.push("/auth/pro-login"))}
+              style={styles.backBtn}
+            >
+              <ArrowLeft size={20} color={Colors.textPrimary} />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle}>{t("pro_registration_title")}</Text>
+
+            <Text style={styles.stepBadge}>{step + 1}/{totalSteps}</Text>
+          </View>
+
+          <View style={styles.progressRow}>
+            {[0, 1, 2, 3].map((idx) => (
+              <View key={idx} style={styles.progressTrack}>
+                <View style={[styles.progressFill, idx < step ? styles.progressDone : idx === step ? styles.progressHalf : undefined]} />
+              </View>
+            ))}
+          </View>
+        </View>
+
         {step === 0 ? (
           <View>
-            <Text style={styles.bigTitle}>{t("your_info")}</Text>
-            <Text style={styles.bigSubtitle}>{t("enter_pro_details")}</Text>
+            {/* removed large page title per design, form starts directly */}
 
             <View style={styles.row}>
               <View style={styles.col}>
@@ -886,6 +909,9 @@ const styles = StyleSheet.create({
   progressHalf: { width: "52%" },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18 },
+
+  /* Compact header container for small title + progress */
+  smallHeaderContainer: { paddingVertical: 8, marginBottom: 6, backgroundColor: "white", paddingHorizontal: 6, borderRadius: 8 },
   bigTitle: { fontSize: 24, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular" },
   bigSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 3, marginBottom: 14 },
   avatarWrap: { alignItems: "center", marginBottom: 14 },
