@@ -34,6 +34,11 @@ export default function AuthLayout() {
         options={{ headerShown: false }}
       />
 
+      <Stack.Screen
+        name="pro-registration"
+        options={{ headerShown: false }}
+      />
+
       {/*
         This is the screen Google redirects back to after authentication.
         Deep-link: ma.carelink.app://auth/callback?code=xxxx
