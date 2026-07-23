@@ -48,6 +48,20 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
 
+  // Shim for @expo/metro-runtime/error-overlay (some expo-router versions import this
+  // subpath but @expo/metro-runtime doesn't expose it via package.json `exports`). Map
+  // it to a local shim to avoid bundling failures.
+  if (
+    moduleName === "@expo/metro-runtime/error-overlay" ||
+    moduleName === "@expo/metro-runtime/error-overlay.js" ||
+    moduleName === "@expo/metro-runtime/error-overlay/index.js"
+  ) {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(__dirname, "shims", "error-overlay.js"),
+    };
+  }
+
   // Support imports starting with "@/..." by mapping to ./src/...
   if (moduleName.startsWith('@/')) {
     const rel = moduleName.slice(2);
