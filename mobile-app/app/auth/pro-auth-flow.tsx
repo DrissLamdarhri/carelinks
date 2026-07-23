@@ -109,10 +109,6 @@ export default function ProAuthFlowScreen() {
     try {
       const result = await signInWithEmail(loginEmail.trim(), loginPassword, "pro");
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       routeByRole(result.role);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : t("wrong_credentials"));
@@ -172,10 +168,6 @@ export default function ProAuthFlowScreen() {
     try {
       const result = await signInWithGoogle("pro");
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       if (tab === 0) {
         routeByRole(result.role);
       } else {
@@ -198,10 +190,6 @@ export default function ProAuthFlowScreen() {
     try {
       const result = await signInWithApple("pro");
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       if (tab === 0) {
         routeByRole(result.role);
       } else {

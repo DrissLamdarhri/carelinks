@@ -371,42 +371,11 @@ export default function ProRegistrationScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity
-            onPress={() => (step > 0 ? setStep((s) => s - 1) : router.push("/auth/pro-login"))}
-            style={styles.backBtn}
-          >
-            <ArrowLeft size={20} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("pro_registration_title")}</Text>
-          <Text style={styles.stepBadge}>
-            {step + 1}/{totalSteps}
-          </Text>
-        </View>
-        <View style={styles.progressRow}>
-          {[0, 1, 2, 3].map((idx) => (
-            <View key={idx} style={styles.progressTrack}>
-              <View style={[styles.progressFill, idx < step ? styles.progressDone : idx === step ? styles.progressHalf : undefined]} />
-            </View>
-          ))}
-        </View>
-      </View>
-
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {step === 0 ? (
           <View>
             <Text style={styles.bigTitle}>{t("your_info")}</Text>
             <Text style={styles.bigSubtitle}>{t("enter_pro_details")}</Text>
-
-            <View style={styles.avatarWrap}>
-              <View style={styles.avatarCircle}>
-                <User size={30} color={Colors.primary} />
-              </View>
-              <View style={styles.cameraBtn}>
-                <Camera size={11} color="white" />
-              </View>
-            </View>
 
             <View style={styles.row}>
               <View style={styles.col}>

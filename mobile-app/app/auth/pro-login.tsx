@@ -60,10 +60,6 @@ export default function ProLoginScreen() {
     try {
       const result = await signInWithEmail(email.trim(), password, "pro");
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
@@ -103,10 +99,6 @@ export default function ProLoginScreen() {
       }
 
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
@@ -122,10 +114,6 @@ export default function ProLoginScreen() {
     try {
       const result = await signInWithApple("pro");
       handleRoleMismatch(result.role);
-      if (result.mfaRequired) {
-        goToMfaChallenge(result.role ?? "pro");
-        return;
-      }
       routeByRole(result.role);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Connexion Apple impossible.");

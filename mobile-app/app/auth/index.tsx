@@ -30,7 +30,7 @@ const iconMap = {
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [step, setStep] = useState(0);
   const lastStep = onboardingSlides.length - 1;
   const scrollRef = useRef<FlatList<(typeof onboardingSlides)[0]> | null>(null);
@@ -73,6 +73,18 @@ export default function OnboardingScreen() {
         <View style={styles.topRow}>
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")}>
             <Text style={styles.skip}>{t("skip")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => {
+              // Language selector - will be expanded
+              const locales: Array<"fr" | "ar" | "dar"> = ["fr", "ar", "dar"];
+              const currentIndex = locales.indexOf(locale as any);
+              const nextIndex = (currentIndex + 1) % locales.length;
+              setLocale(locales[nextIndex]);
+            }}
+            style={styles.langBtn}
+          >
+            <Text style={styles.langText}>{locale.toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
 
@@ -144,13 +156,24 @@ const styles = StyleSheet.create({
   safe: { flex: 1, paddingHorizontal: 0, paddingBottom: 32 },
   topRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
     marginTop: 8,
     paddingHorizontal: 24,
     zIndex: 4,
   },
   skip: { color: "rgba(255,255,255,0.65)", fontSize: 13 },
+  langBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  langText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   center: {
     flex: 1,
     alignItems: "center",
