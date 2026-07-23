@@ -5,9 +5,9 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
-import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
+import { useOpenBookingsBySpecialty, useOpenBookingsNearPro } from "@/lib/db/realtime";
 import { toastError, toastSuccess } from "@/lib/toast";
-import type { ProSpecialty, VerificationStatus } from "@/lib/db/types";
+import type { ProSpecialty, VerificationStatus, Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 
@@ -23,7 +23,10 @@ type LiveBookingsFeedProps = { specialty: ProSpecialty };
 export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   const { user } = useAuth();
   const { t } = useI18n();
-  const { bookings, loading } = useOpenBookingsBySpecialty(specialty);
+  const { bookings: bookingsBySpecialty, loading: loadingBySpecialty } = useOpenBookingsBySpecialty(specialty);
+  const { bookings: bookingsNearPro, loading: loadingNearPro } = useOpenBookingsNearPro(user?.id ?? null);
+  const bookings = user?.id ? bookingsNearPro : bookingsBySpecialty;
+  const loading = user?.id ? loadingNearPro : loadingBySpecialty;
   const [bidFor, setBidFor] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -110,7 +113,7 @@ export function LiveBookingsFeed({ specialty }: LiveBookingsFeedProps) {
   return (
     <View style={styles.list}>
       {verificationBanner}
-      {bookings.map((booking) => {
+      {bookings.map((booking: Booking) => {
         const urgent = booking.urgency === "urgent";
         const isBidding = bidFor === booking.id;
         return (

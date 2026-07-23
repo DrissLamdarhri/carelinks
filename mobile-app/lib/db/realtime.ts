@@ -181,6 +181,44 @@ export function useOpenBookingsBySpecialty(specialty: ProSpecialty | null) {
   return { bookings: data, loading, error, refresh };
 }
 
+export function useOpenBookingsNearPro(proId: UUID | null) {
+  const { data, setData, loading, error, refresh } = useAsyncList<Booking>(
+    () => (proId ? db.bookings.listOpenNearPro(proId) : Promise.resolve([])),
+    [proId]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!proId) return;
+      const channel = supabase
+        .channel(`bookings:open:pro:${proId}:${Math.random().toString(36).slice(2)}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bookings",
+            filter: `status=eq.open`,
+          },
+          async () => {
+            // Refresh the list using the RPC so distance-based results stay accurate
+            try {
+              await refresh();
+            } catch {
+              // ignore
+            }
+          }
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    }, [proId, refresh])
+  );
+
+  return { bookings: data, loading, error, refresh };
+}
+
 export function useBookingMessages(bookingId: UUID | null) {
   const isDemo = isDemoBookingId(bookingId);
   const { data, setData, loading, error, refresh } = useAsyncList<Message>(

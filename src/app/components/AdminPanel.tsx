@@ -6,6 +6,7 @@ import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
 import { ProfessionalsManager } from "./ProfessionalsManager";
 import { YogaSessionsManager } from "./YogaSessionsManager";
+import { PsychologistPlansManager } from "./PsychologistPlansManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -26,7 +27,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "settings";
+type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "psychologist-plans" | "bookings" | "settings";
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
@@ -1386,6 +1387,7 @@ export function AdminPanel() {
     { key: "users", icon: Users, label: "Patients", badge: 0 },
     { key: "professionals", icon: UserCheck, label: "Professionnels", badge: pending.length },
     { key: "service-types", icon: Clipboard, label: "Types de soins" },
+    { key: "psychologist-plans", icon: Brain, label: "Plans d'appointment" },
     { key: "bookings", icon: BookOpen, label: "Réservations" },
     { key: "yoga", icon: Flower2, label: "Yoga" },
     { key: "settings", icon: Settings, label: "Paramètres" },
@@ -2152,6 +2154,9 @@ export function AdminPanel() {
               </div>
             </div>
           )}
+
+          {/* ======= PSYCHOLOGIST PLANS ======= */}
+          {tab === "psychologist-plans" && <PsychologistPlansManager />}
 
           {/* ======= BOOKINGS ======= */}
           {tab === "bookings" && (

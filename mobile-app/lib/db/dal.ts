@@ -179,6 +179,13 @@ export const bookings = {
     );
   },
 
+  async listOpenNearPro(proId: UUID, radiusKm = 15): Promise<Booking[]> {
+    const { data, error } = await supabase.rpc("find_open_bookings_near_pro", { p_pro_id: proId, p_radius_km: radiusKm });
+    if (error) throw error;
+    // Note: returned rows include lat/lng/distance_km columns in addition to booking fields.
+    return (data ?? []) as Booking[];
+  },
+
   async acceptBid(bookingId: UUID, professionalId: UUID, finalPrice: number): Promise<Booking> {
     return unwrap(
       await supabase
