@@ -17,10 +17,12 @@ import {
   MapPin,
   Shield,
   ChevronRight,
+  Globe,
 } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
 import { onboardingSlides } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const iconMap = {
   stethoscope: Stethoscope,
@@ -30,7 +32,8 @@ const iconMap = {
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
   const [step, setStep] = useState(0);
   const lastStep = onboardingSlides.length - 1;
   const scrollRef = useRef<FlatList<(typeof onboardingSlides)[0]> | null>(null);
@@ -71,6 +74,11 @@ export default function OnboardingScreen() {
         <View style={styles.bgCircleBottom} />
 
         <View style={styles.topRow}>
+          {/* Language switcher available from the very first screen */}
+          <TouchableOpacity style={styles.langBtn} onPress={() => setLangOpen(true)}>
+            <Globe size={15} color="white" />
+            <Text style={styles.langTxt}>{locale === "ar" ? "العربية" : "Français"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")}>
             <Text style={styles.skip}>{t("skip")}</Text>
           </TouchableOpacity>
@@ -134,6 +142,7 @@ export default function OnboardingScreen() {
             </View>
           )}
         </View>
+        <LanguageSelector visible={langOpen} onClose={() => setLangOpen(false)} />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -144,13 +153,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1, paddingHorizontal: 0, paddingBottom: 32 },
   topRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
     marginTop: 8,
     paddingHorizontal: 24,
     zIndex: 4,
   },
   skip: { color: "rgba(255,255,255,0.65)", fontSize: 13 },
+  langBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  langTxt: { color: "white", fontSize: 12.5, fontWeight: "700" },
   center: {
     flex: 1,
     alignItems: "center",

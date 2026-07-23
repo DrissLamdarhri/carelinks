@@ -89,8 +89,9 @@ export default function PatientAuthFlowScreen() {
     router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
   };
 
-  const goToMfaSetup = () => {
-    router.replace({ pathname: "/auth/mfa-setup", params: { next: "/patient" } });
+  // MFA enrolment is disabled for now — a new account goes straight into the app.
+  const goAfterSignUp = () => {
+    router.replace("/patient");
   };
 
   const handleRoleMismatch = (nextRole: string | null) => {
@@ -131,7 +132,7 @@ export default function PatientAuthFlowScreen() {
         "patient",
         { phone, city }
       );
-      goToMfaSetup();
+      goAfterSignUp();
     } catch (error) {
       setRegError(error instanceof Error ? error.message : "Inscription échouée.");
     } finally {
@@ -154,7 +155,7 @@ export default function PatientAuthFlowScreen() {
       if (tab === 0) {
         routeByRole(result.role);
       } else {
-        goToMfaSetup();
+        goAfterSignUp();
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Authentification Google impossible.";
@@ -180,7 +181,7 @@ export default function PatientAuthFlowScreen() {
       if (tab === 0) {
         routeByRole(result.role);
       } else {
-        goToMfaSetup();
+        goAfterSignUp();
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Authentification Apple impossible.";
