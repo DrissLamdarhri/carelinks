@@ -41,6 +41,9 @@ export default function ProLayout() {
       backBehavior="history"
       screenOptions={{
         headerShown: false,
+        // Stop inactive tabs from re-rendering in the background — switching
+        // between bottom-bar tabs becomes instant instead of re-running work.
+        freezeOnBlur: true,
         tabBarActiveTintColor: PRIMARY,
         tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {

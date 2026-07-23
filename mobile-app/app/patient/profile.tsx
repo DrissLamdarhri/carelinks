@@ -16,6 +16,7 @@ import {
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
+import { useFocusRefresh } from "@/lib/hooks/useFocusRefresh";
 import { useRouter, useFocusEffect } from "expo-router";
 import { db } from "@/lib/db/dal";
 import { ProfileHeaderCard } from "@/components/ProfileHeaderCard";
@@ -60,11 +61,11 @@ export default function PatientProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Refresh profile when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      void refreshProfile();
-    }, [refreshProfile])
-  );
+  // Profile changes rarely — refresh at most once a minute instead of on every
+  // tab switch (was a Supabase round-trip each time the tab regained focus).
+  useFocusRefresh(() => {
+    void refreshProfile();
+  }, 60_000);
 
   useEffect(() => {
     const loadStats = async () => {

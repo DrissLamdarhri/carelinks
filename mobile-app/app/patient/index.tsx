@@ -26,6 +26,7 @@ import {
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { useFocusRefresh } from "@/lib/hooks/useFocusRefresh";
 import {
   MOROCCAN_CITIES,
   mockPatientProfile,
@@ -52,11 +53,11 @@ export default function PatientHomeScreen() {
   const { profile, refreshProfile } = useAuth();
   
   // Refresh profile when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      void refreshProfile();
-    }, [refreshProfile])
-  );
+  // Profile changes rarely — refresh at most once a minute instead of on every
+  // tab switch (was a Supabase round-trip each time the tab regained focus).
+  useFocusRefresh(() => {
+    void refreshProfile();
+  }, 60_000);
   
   // Use real profile data, fallback to mock for display purposes
   const displayName = {

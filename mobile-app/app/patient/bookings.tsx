@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,8 @@ import type { Booking } from "@/lib/db/types";
 import { CancellationDialog } from "@/components/CancellationDialog";
 
 // Colored status pills (key → i18n key handled elsewhere; here just the colors).
+const SCREEN_W = Dimensions.get("window").width;
+
 const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
   open: { color: "#B45309", bg: "#FFF7E6" },
   matched: { color: "#2563EB", bg: "#DBEAFE" },
@@ -205,58 +208,13 @@ export default function PatientBookingsScreen() {
     () => normalized.filter((item) => item.isCompleted || item.status === "cancelled"),
     [normalized]
   );
-  const displayed = tab === "upcoming" ? upcoming : past;
+  const pagerRef = useRef<ScrollView>(null);
+  const goTab = (next: "upcoming" | "past") => {
+    setTab(next);
+    pagerRef.current?.scrollTo({ x: next === "upcoming" ? 0 : SCREEN_W, animated: true });
+  };
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>{t("my_appointments_full")}</Text>
-        <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{t("realtime_active")}</Text></View>
-      </View>
-
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === "upcoming" && styles.tabBtnActive]}
-          onPress={() => setTab("upcoming")}
-        >
-          <Text style={[styles.tabText, tab === "upcoming" && styles.tabTextActive]}>
-            {t("tab_upcoming")} ({upcoming.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === "past" && styles.tabBtnActive]}
-          onPress={() => setTab("past")}
-        >
-          <Text style={[styles.tabText, tab === "past" && styles.tabTextActive]}>
-            {t("tab_history")} ({past.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      ) : null}
-
-      {!loading && displayed.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <View style={styles.emptyIcon}>
-            <Calendar size={28} color={Colors.textSubtle} />
-          </View>
-          <Text style={styles.emptyTitle}>
-            {tab === "upcoming" ? t("no_upcoming") : t("no_history")}
-          </Text>
-          {tab === "upcoming" ? (
-            <TouchableOpacity style={styles.emptyCta} onPress={() => router.push("/patient/request")}>
-              <Text style={styles.emptyCtaText}>{t("book_appointment")}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!loading &&
-        displayed.map((item) => {
+  const renderCard = (item: CardItem) => {
           const sm = metaFor(item.specialty);
           const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.open;
           const SIcon = sm.icon;
@@ -371,7 +329,77 @@ export default function PatientBookingsScreen() {
               </View>
             </View>
           );
-        })}
+  };
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.headerBlock}>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{t("my_appointments_full")}</Text>
+        <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{t("realtime_active")}</Text></View>
+      </View>
+
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === "upcoming" && styles.tabBtnActive]}
+          onPress={() => goTab("upcoming")}
+        >
+          <Text style={[styles.tabText, tab === "upcoming" && styles.tabTextActive]}>
+            {t("tab_upcoming")} ({upcoming.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === "past" && styles.tabBtnActive]}
+          onPress={() => goTab("past")}
+        >
+          <Text style={[styles.tabText, tab === "past" && styles.tabTextActive]}>
+            {t("tab_history")} ({past.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => {
+            const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+            setTab(i === 0 ? "upcoming" : "past");
+          }}
+        >
+          {([["upcoming", upcoming], ["past", past]] as const).map(([key, items]) => (
+            <View key={key} style={{ width: SCREEN_W }}>
+              {items.length === 0 ? (
+                <View style={styles.emptyWrap}>
+                  <View style={styles.emptyIcon}>
+                    <Calendar size={28} color={Colors.textSubtle} />
+                  </View>
+                  <Text style={styles.emptyTitle}>
+                    {key === "upcoming" ? t("no_upcoming") : t("no_history")}
+                  </Text>
+                  {key === "upcoming" ? (
+                    <TouchableOpacity style={styles.emptyCta} onPress={() => router.push("/patient/request")}>
+                      <Text style={styles.emptyCtaText}>{t("book_appointment")}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+                  {items.map(renderCard)}
+                </ScrollView>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      )}
 
       {error ? <Text style={styles.errorText}>{error.message}</Text> : null}
       {cancelTarget ? (
@@ -385,7 +413,7 @@ export default function PatientBookingsScreen() {
           onCancelled={refresh}
         />
       ) : null}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -437,6 +465,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   emptyCtaText: { color: "white", fontSize: 13, fontWeight: "600" },
+  headerBlock: { paddingHorizontal: 20, paddingTop: 20 },
+  pageContent: { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 4 },
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   livePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#EAF7EF", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#16A34A" },

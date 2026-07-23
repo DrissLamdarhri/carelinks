@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef} from "react";
 import {
+  Dimensions,
   Image,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,7 @@ import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import type { Booking, ProSpecialty } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
+const SCREEN_W = Dimensions.get("window").width;
 
 export default function ProHomeScreen() {
   const router = useRouter();
@@ -48,11 +50,22 @@ export default function ProHomeScreen() {
   const [unread, setUnread] = useState(0);
   const [busy, setBusy] = useState(false);
   const [verification, setVerification] = useState<string | null>(null);
+  const pagerRef = useRef<ScrollView>(null);
+  const goTab = (next: "requests" | "schedule") => {
+    setTab(next);
+    pagerRef.current?.scrollTo({ x: next === "requests" ? 0 : SCREEN_W, animated: true });
+  };
 
+  // Skip the four-query reload when the data is still fresh — new demands arrive
+  // over realtime anyway, so re-fetching on every tab focus only added latency.
+  const lastLoadRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
-      void refreshProfile();
       let cancelled = false;
+      const now = Date.now();
+      if (now - lastLoadRef.current < 20_000) return;
+      lastLoadRef.current = now;
+      void refreshProfile();
       void (async () => {
         if (!user?.id) return;
         try {
@@ -258,27 +271,43 @@ export default function ProHomeScreen() {
 
       {/* Tabs */}
       <View style={styles.tabs}>
-        <TouchableOpacity style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]} onPress={() => setTab("requests")}>
+        <TouchableOpacity style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]} onPress={() => goTab("requests")}>
           <Text style={[styles.tabTxt, tab === "requests" && styles.tabTxtActive]}>Demandes ({openReqs.length})</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]} onPress={() => setTab("schedule")}>
+        <TouchableOpacity style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]} onPress={() => goTab("schedule")}>
           <Text style={[styles.tabTxt, tab === "schedule" && styles.tabTxtActive]}>Mon planning ({appointments.length})</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-        {tab === "requests" ? (
-          specialty ? (
-            <LiveBookingsFeed specialty={specialty} onNewDemand={onNewDemand} />
-          ) : (
-            <View style={styles.setupCard}>
-              <Text style={styles.setupText}>{t("setup_specialty_hint")}</Text>
-              <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
-                <Text style={styles.setupBtnTxt}>{t("configure")}</Text>
-              </TouchableOpacity>
-            </View>
-          )
-        ) : appointments.length === 0 ? (
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        style={styles.body}
+        onMomentumScrollEnd={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+          setTab(i === 0 ? "requests" : "schedule");
+        }}
+      >
+        <View style={{ width: SCREEN_W }}>
+          <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+            {specialty ? (
+              <LiveBookingsFeed specialty={specialty} onNewDemand={onNewDemand} />
+            ) : (
+              <View style={styles.setupCard}>
+                <Text style={styles.setupText}>{t("setup_specialty_hint")}</Text>
+                <TouchableOpacity style={styles.setupBtn} onPress={() => router.push("/pro/bids")}>
+                  <Text style={styles.setupBtnTxt}>{t("configure")}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+        <View style={{ width: SCREEN_W }}>
+          <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+            {appointments.length === 0 ? (
           <View style={styles.setupCard}>
             <Text style={styles.setupText}>{t("no_appointments")}</Text>
           </View>
@@ -327,7 +356,9 @@ export default function ProHomeScreen() {
               );
             })}
           </View>
-        )}
+            )}
+          </ScrollView>
+        </View>
       </ScrollView>
     </View>
   );
@@ -422,6 +453,7 @@ const styles = StyleSheet.create({
   tabTxt: { color: Colors.textMuted, fontSize: 13, fontWeight: "700" },
   tabTxtActive: { color: "white" },
 
+  pageContent: { paddingBottom: 28, paddingHorizontal: 16 },
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
 
   setupCard: { backgroundColor: "white", borderRadius: 16, padding: 18, alignItems: "center", gap: 12 },
