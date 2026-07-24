@@ -392,7 +392,7 @@ export default function ProRegistrationScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
         {step === 0 ? (
           <View>
             <Text style={styles.bigTitle}>{t("your_info")}</Text>

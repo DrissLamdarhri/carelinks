@@ -538,6 +538,9 @@ export default function PatientRequestScreen() {
       <ScrollView
         style={styles.sheet}
         contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
       >
         <View style={styles.grabber} />
 

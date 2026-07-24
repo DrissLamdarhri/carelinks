@@ -125,7 +125,7 @@ export default function RegistrationScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />

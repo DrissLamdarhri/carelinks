@@ -155,7 +155,7 @@ export default function ProLoginScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
         <Text style={styles.formLead}>{t("pro_login_lead")}</Text>
         <Text style={styles.formHint}>{t("pro_email_hint")}</Text>
 

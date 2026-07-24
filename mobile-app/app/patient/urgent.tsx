@@ -109,7 +109,7 @@ export default function UrgentScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView style={s.sheet} contentContainerStyle={{ padding: 20, paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={s.sheet} contentContainerStyle={{ padding: 20, paddingBottom: 30 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
         {/* Level */}
         <View style={s.levelRow}>
           {([["urgent", Clock, AMBER, "eta_urgent"], ["emergency", ChevronsUp, RED, "eta_emergency"]] as const).map(([key, Icon, col, eta]) => {
