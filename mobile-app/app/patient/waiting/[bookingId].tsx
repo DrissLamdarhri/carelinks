@@ -280,7 +280,11 @@ export default function WaitingOffersScreen() {
               bookingId={bookingId ?? ""}
               mockBids={isDemoBooking ? pendingBids : undefined}
               onAccepted={() => {
-                if (bookingId) router.push(`/patient/tracking/${encodeURIComponent(bookingId)}`);
+                // Escrow first, always: route to payment so the agreed price is
+                // held (InHold) BEFORE the nurse travels — identical to the
+                // "Offres reçues" screen. Jumping straight to tracking used to
+                // skip payment entirely, dispatching a nurse with no money held.
+                if (bookingId) router.replace(`/patient/payment/${encodeURIComponent(bookingId)}`);
               }}
             />
             <TouchableOpacity
