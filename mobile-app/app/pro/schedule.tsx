@@ -60,6 +60,37 @@ export default function ProScheduleScreen() {
     () => bookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
     [bookings],
   );
+  // Group missions under friendly date headers instead of one endless flat list.
+  const groupOf = useCallback(
+    (d: Date) => {
+      const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+      const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
+      if (diff === 0) return t("today");
+      if (diff === 1) return t("tomorrow");
+      if (diff === -1) return t("yesterday");
+      return d.toLocaleDateString("fr-MA", { weekday: "long", day: "numeric", month: "long" });
+    },
+    [t],
+  );
+  const sectionize = useCallback(
+    (items: Booking[], asc: boolean) => {
+      const withDate = items.map((b) => ({
+        b,
+        d: b.scheduled_at ? new Date(b.scheduled_at) : new Date(b.created_at),
+      }));
+      withDate.sort((a, z) => (asc ? a.d.getTime() - z.d.getTime() : z.d.getTime() - a.d.getTime()));
+      const out: { label: string; items: Booking[] }[] = [];
+      for (const { b, d } of withDate) {
+        const label = groupOf(d);
+        const last = out[out.length - 1];
+        if (last && last.label === label) last.items.push(b);
+        else out.push({ label, items: [b] });
+      }
+      return out;
+    },
+    [groupOf],
+  );
+
   // Tabs and horizontal swipe drive the same state, so dragging left/right feels
   // native and always stays in sync with the highlighted tab.
   const pagerRef = useRef<ScrollView>(null);
@@ -140,6 +171,9 @@ export default function ProScheduleScreen() {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
+          decelerationRate="fast"
+          snapToInterval={SCREEN_W}
+          disableIntervalMomentum
           onScroll={(e) => {
             const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
             const next = i === 0 ? "upcoming" : "done";
@@ -147,21 +181,29 @@ export default function ProScheduleScreen() {
           }}
         >
           {([["upcoming", upcoming, "no_missions_upcoming"], ["done", done, "no_missions_done"]] as const).map(
-            ([key, items, emptyKey]) => (
-              <View key={key} style={{ width: SCREEN_W }}>
-                {items.length === 0 ? (
-                  <View style={s.emptyCard}>
-                    <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
-                    <Text style={s.emptyTitle}>{t(emptyKey)}</Text>
-                    <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
-                  </View>
-                ) : (
-                  <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
-                    {items.map(renderCard)}
-                  </ScrollView>
-                )}
-              </View>
-            ),
+            ([key, items, emptyKey]) => {
+              const sections = sectionize(items, key === "upcoming");
+              return (
+                <View key={key} style={{ width: SCREEN_W }}>
+                  {items.length === 0 ? (
+                    <View style={s.emptyCard}>
+                      <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
+                      <Text style={s.emptyTitle}>{t(emptyKey)}</Text>
+                      <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
+                    </View>
+                  ) : (
+                    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+                      {sections.map((sec) => (
+                        <View key={sec.label} style={{ marginBottom: 18 }}>
+                          <Text style={s.sectionHeader}>{sec.label}</Text>
+                          <View style={{ gap: 12 }}>{sec.items.map(renderCard)}</View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              );
+            },
           )}
         </ScrollView>
       )}
@@ -183,6 +225,7 @@ const s = StyleSheet.create({
   tabTxt: { color: Colors.textMuted, fontSize: 12.5, fontWeight: "700" },
   tabTxtActive: { color: "white" },
 
+  sectionHeader: { fontSize: 13, fontWeight: "800", color: Colors.textPrimary, marginBottom: 10, textTransform: "capitalize" },
   emptyCard: { margin: 20, backgroundColor: "white", borderRadius: 18, paddingVertical: 30, alignItems: "center", gap: 8 },
   emptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700" },

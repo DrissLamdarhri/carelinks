@@ -342,6 +342,9 @@ export default function ProHomeScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
+        decelerationRate="fast"
+        snapToInterval={SCREEN_W}
+        disableIntervalMomentum
         style={styles.body}
         onScroll={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
