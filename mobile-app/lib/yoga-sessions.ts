@@ -44,6 +44,7 @@ export function useYogaSessions() {
             id,
             title,
             description,
+            instructor_name,
             level,
             image_url,
             starts_at,
@@ -83,10 +84,10 @@ export function useYogaSessions() {
 
         // Format sessions
         const formatted: YogaSession[] = (sessionsData ?? []).map((s: any) => {
-          // Parse instructor name from description field
-          // Description format: "Instructeur: Sara Bennani"
-          let instructorName = 'Instructeur';
-          if (s.description && s.description.includes('Instructeur:')) {
+          // Prefer the real instructor_name column; fall back to the legacy
+          // "Instructeur: X" description format for older rows.
+          let instructorName = (s.instructor_name as string) || 'Instructeur';
+          if (!s.instructor_name && s.description && s.description.includes('Instructeur:')) {
             const parts = s.description.split('Instructeur:');
             instructorName = parts[1]?.trim() || 'Instructeur';
           }

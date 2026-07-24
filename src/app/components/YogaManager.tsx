@@ -40,9 +40,10 @@ export function YogaManager() {
   const load = async () => {
     setLoading(true);
     try {
+      // NB: the deployed table uses `instructor_name` (text), not instructor_id.
       const { data: rows, error } = await supabase
         .from("yoga_sessions")
-        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_id")
+        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_name")
         .order("starts_at", { ascending: false });
       if (error) throw error;
 
@@ -53,20 +54,13 @@ export function YogaManager() {
         const { data: enr } = await supabase.from("yoga_enrollments").select("session_id").in("session_id", ids);
         for (const e of enr ?? []) counts.set(e.session_id as string, (counts.get(e.session_id as string) ?? 0) + 1);
       }
-      // Instructor names for sessions that have a linked pro.
-      const proIds = Array.from(new Set((rows ?? []).map((s: any) => s.instructor_id).filter(Boolean)));
-      const proNames = new Map<string, string>();
-      if (proIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", proIds);
-        for (const p of profs ?? []) proNames.set(p.id as string, (p.full_name as string) || "");
-      }
 
       setSessions(
         (rows ?? []).map((s: any) => ({
           id: s.id,
           title: s.title,
           instructor:
-            (s.instructor_id && proNames.get(s.instructor_id)) ||
+            s.instructor_name ||
             (s.description ?? "").replace(/^Instructeur:\s*/, "") ||
             "—",
           level: s.level ?? "Tous niveaux",
@@ -109,7 +103,7 @@ export function YogaManager() {
     setSaving(true);
     try {
       const { error } = await supabase.from("yoga_sessions").insert({
-        instructor_id: null,
+        instructor_name: form.instructor.trim() || null,
         title: form.title.trim(),
         level: form.level,
         image_url: form.imageUrl.trim() || null,
@@ -117,7 +111,7 @@ export function YogaManager() {
         duration_min: 60,
         capacity: form.capacity,
         price_mad: form.price,
-        description: form.instructor.trim() ? `Instructeur: ${form.instructor.trim()}` : null,
+        description: null,
       });
       if (error) throw error;
       toast.success("Séance créée et publiée");
