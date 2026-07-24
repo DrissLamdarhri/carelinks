@@ -526,6 +526,7 @@ import {
   isDemoBookingId,
   normalizeRouteParam,
 } from "@/lib/demo-booking";
+import { supabase } from "@/lib/supabase";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
@@ -970,14 +971,37 @@ export default function LiveTrackingScreen() {
   // Once the pro broadcasts real GPS, live positions win over the scripted glide.
   const liveActiveRef = useRef(false);
 
+  // Drives the honest "waiting" label below: until the first real GPS frame
+  // lands there is nothing to show, and a frozen map reads as a broken app.
+  const [proLive, setProLive] = useState(false);
+
   const handlePosition = useCallback((pos: TrackPosition) => {
     liveActiveRef.current = true;
+    setProLive(true);
     setProCoord({ lat: pos.lat, lng: pos.lng });
     // capture first seen pro origin for routing (only if not demo)
     if (!isDemoBooking && !liveProOrigin) {
       setLiveProOrigin({ lat: pos.lat, lng: pos.lng });
     }
   }, [isDemoBooking, liveProOrigin]);
+
+  // Keep the patient's screen honest about where the mission actually is: the pro
+  // advances `matched → en_route → in_progress → completed` on their side, and
+  // without this subscription the patient only ever saw the status they arrived with.
+  useEffect(() => {
+    if (!bookingId || isDemoBooking) return;
+    const channel = supabase
+      .channel(`booking:track:${bookingId}:${Math.random().toString(36).slice(2)}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${bookingId}` },
+        (payload) => setBooking(payload.new as Booking),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [bookingId, isDemoBooking]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const arrived      = eta === 0;
@@ -1063,7 +1087,11 @@ export default function LiveTrackingScreen() {
           {/* Progress label + value */}
           <View style={s.progressRow}>
             <Text style={s.progressLabel}>
-              {arrived ? t("pro_arrived") : t("en_route_to_you")}
+              {arrived
+                ? t("pro_arrived")
+                : !isDemoBooking && !proLive
+                  ? t("waiting_pro_departure")
+                  : t("en_route_to_you")}
             </Text>
             <Text style={s.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
           </View>

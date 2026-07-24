@@ -8,6 +8,7 @@ import { Home, CalendarDays, Wallet, User, MessageCircle } from "lucide-react-na
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "@/lib/i18n";
+import { useMissionAccepted } from "@/lib/hooks/useMissionAccepted";
 
 const PRIMARY = "#0D0870";
 const INACTIVE = "#B0B0B0";
@@ -15,6 +16,9 @@ const INACTIVE = "#B0B0B0";
 export default function ProLayout() {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
+  // A patient accepting a bid opens the mission map from wherever the pro is —
+  // the tracking screen is what broadcasts GPS to the waiting patient.
+  useMissionAccepted();
   // Normalize bottom inset: ensure a small minimum and cap to avoid excess space on some Android devices
   const safeInset = Math.min(Math.max(insets.bottom || 0, 8), 18);
   const tabBottomPadding = Platform.OS === "ios" ? Math.max(safeInset, 8) : safeInset;

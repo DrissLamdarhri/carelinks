@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -112,6 +112,26 @@ export default function PaymentScreen() {
     () => digits(cardNum).length === 16 && cardName.trim().length > 1 && digits(exp).length === 4 && digits(cvv).length === 3,
     [cardNum, cardName, exp, cvv],
   );
+
+  // Where a paid booking goes next: psychologist/subscription → appointment
+  // confirmation (Meet/Zoom links), everything else → the live map.
+  const goAfterPayment = useCallback(() => {
+    if (!bookingId) return router.replace("/patient/bookings");
+    router.replace(
+      specialty === "psychologist" || isProgram
+        ? `/patient/appointment/${encodeURIComponent(bookingId)}`
+        : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`,
+    );
+  }, [bookingId, specialty, isProgram, router]);
+
+  // The receipt is confirmation, not a destination. Hold it just long enough to
+  // be read, then continue on our own — leaving the patient parked on a screen
+  // whose button they might never press is how the flow used to dead-end.
+  useEffect(() => {
+    if (step !== 3) return;
+    const timer = setTimeout(goAfterPayment, 2600);
+    return () => clearTimeout(timer);
+  }, [step, goAfterPayment]);
 
   const confirmPayment = async () => {
     if (!bookingId || !user?.id || submitting) return;
@@ -281,18 +301,9 @@ export default function PaymentScreen() {
                 <TouchableOpacity
                   style={s.cta}
                   activeOpacity={0.9}
-                  onPress={() => {
-                    if (!bookingId) return router.replace("/patient/bookings");
-                    // Psychologist → appointment confirmation (Meet/Zoom links / directions);
-                    // other services → live tracking.
-                    router.replace(
-                      specialty === "psychologist" || isProgram
-                        ? `/patient/appointment/${encodeURIComponent(bookingId)}`
-                        : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`
-                    );
-                  }}
+                  onPress={goAfterPayment}
                 >
-                  <Text style={s.ctaTxt}>{specialty === "psychologist" || isProgram ? t("view_appointment") : t("see_my_bookings")}</Text>
+                  <Text style={s.ctaTxt}>{specialty === "psychologist" || isProgram ? t("view_appointment") : t("follow_pro_live")}</Text>
                 </TouchableOpacity>
               </>
             )}

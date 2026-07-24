@@ -94,6 +94,16 @@ export default function ProTrackingScreen() {
         const b = await db.bookings.get(bookingId);
         if (cancelled) return;
         setBooking(b);
+        // Opening this screen IS setting out — the GPS broadcast starts right
+        // below. Advance `matched → en_route` so the patient immediately sees
+        // movement and the booking never stalls in `matched` waiting on a tap
+        // nobody remembers to make (that stall is what froze 85 bookings).
+        if (b.status === "matched") {
+          db.bookings
+            .markEnRoute(b.id)
+            .then((up) => { if (!cancelled) setBooking(up); })
+            .catch(() => { /* non-blocking — the manual button still works */ });
+        }
         if (b.patient_id) {
           const pf = await db.profiles.get(b.patient_id).catch(() => null);
           if (!cancelled) setPatient(pf);
@@ -122,6 +132,21 @@ export default function ProTrackingScreen() {
   const onNursePosition = useCallback((p: { lat: number; lng: number }) => {
     setNurse({ lat: p.lat, lng: p.lng });
   }, []);
+
+  // Arriving starts the visit on its own: `en_route → in_progress` as soon as the
+  // nurse's GPS is within ~80 m of the patient. The pro has their hands full on
+  // arrival, so waiting for a button here is what leaves escrow in limbo.
+  const arrivalMarked = useRef(false);
+  useEffect(() => {
+    if (arrivalMarked.current || !nurse || !dest || !booking) return;
+    if (booking.status !== "en_route") return;
+    if (haversineKm(nurse, dest) > 0.08) return;
+    arrivalMarked.current = true;
+    db.bookings
+      .setStatus(booking.id, "in_progress")
+      .then(setBooking)
+      .catch(() => { arrivalMarked.current = false; });
+  }, [nurse, dest, booking]);
 
   // ── Fetch the road route once both endpoints are known ─────────────────────
   const routeFetched = useRef(false);
