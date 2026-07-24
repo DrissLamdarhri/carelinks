@@ -114,9 +114,11 @@ export default function PaymentScreen() {
   );
 
   // Where a paid booking goes next: psychologist/subscription → appointment
-  // confirmation (Meet/Zoom links), everything else → the live map.
+  // confirmation (Meet/Zoom links); yoga → bookings (a class has no live map);
+  // everything else → the live tracking map.
   const goAfterPayment = useCallback(() => {
     if (!bookingId) return router.replace("/patient/bookings");
+    if (specialty === "yoga_instructor") return router.replace("/patient/bookings");
     router.replace(
       specialty === "psychologist" || isProgram
         ? `/patient/appointment/${encodeURIComponent(bookingId)}`

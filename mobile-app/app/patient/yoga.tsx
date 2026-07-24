@@ -172,20 +172,20 @@ export default function YogaCatalogScreen() {
         await notifyAdminNewBooking(booking);
       }
 
-      Alert.alert(
-        "✅ Inscription confirmée!",
-        `Vous êtes inscrit à "${session.name}" avec ${session.instructor}.\n\nVous pouvez voir cette séance dans vos réservations.`,
-        [
-          {
-            text: t("see_my_bookings"),
-            onPress: () => router.push("/patient/bookings"),
-          },
-          {
-            text: "Fermer",
-            onPress: () => setLoadingSessionId(null),
-          },
-        ]
-      );
+      setLoadingSessionId(null);
+
+      // Escrow, like every other service: hold the class price up-front on the
+      // booking we just created. The payment screen routes yoga back to bookings
+      // on success (no live tracking for a class).
+      if (booking?.id) {
+        router.replace(`/patient/payment/${encodeURIComponent(booking.id)}`);
+      } else {
+        // Enrollment saved but the booking row failed — no price to hold, so
+        // just confirm and send them to their bookings.
+        Alert.alert(t("enrollment_confirmed"), t("enrollment_confirmed_msg"), [
+          { text: t("see_my_bookings"), onPress: () => router.push("/patient/bookings") },
+        ]);
+      }
     } catch (err) {
       console.error("[YogaCatalog] Erreur lors de la réservation:", err);
       Alert.alert("Erreur", "Impossible de créer la réservation. Essayez de nouveau.");
@@ -231,14 +231,14 @@ export default function YogaCatalogScreen() {
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>❌ Erreur lors du chargement des séances</Text>
+            <Text style={styles.errorText}>{t("sessions_load_error")}</Text>
             <Text style={[styles.errorText, { marginTop: 8, fontSize: 12 }]}>{t("check_connection_retry")}</Text>
           </View>
         ) : filteredSessions.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>📋 Aucune séance disponible</Text>
+            <Text style={styles.emptyText}>🧘 {t("no_sessions_available")}</Text>
             <Text style={[styles.emptyText, { fontSize: 12, marginTop: 8, color: Colors.textMuted }]}>
-              Revenez bientôt pour voir les nouvelles séances de yoga!
+              {t("sessions_come_back")}
             </Text>
           </View>
         ) : (
