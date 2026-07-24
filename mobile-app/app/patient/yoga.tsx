@@ -223,7 +223,13 @@ export default function YogaCatalogScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+      >
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -348,8 +354,17 @@ const styles = StyleSheet.create({
   filterText: { color: Colors.textMuted, fontSize: 13, fontWeight: "500" },
   filterTextActive: { color: "white" },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 20, gap: 12 },
-  card: { backgroundColor: "white", borderRadius: 16, overflow: "hidden" },
+  listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 36, gap: 14 },
+  card: {
+    backgroundColor: "white",
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
   cardImageWrap: { height: 146, position: "relative" },
   cardImage: { width: "100%", height: "100%" },
   imageOverlay: {

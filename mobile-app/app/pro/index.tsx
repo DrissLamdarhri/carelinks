@@ -193,13 +193,21 @@ export default function ProHomeScreen() {
       {/* ── Header ── */}
       <LinearGradient colors={Gradients.nurse} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
         <View style={styles.headerTop}>
-          <View style={styles.userWrap}>
+          {/* Tap the greeting to open your profile — same shortcut as the patient home. */}
+          <TouchableOpacity
+            style={styles.userWrap}
+            activeOpacity={0.7}
+            onPress={() => router.push("/pro/profile")}
+            accessibilityRole="button"
+            accessibilityLabel={t("open_my_profile")}
+          >
             <Image key={avatar} source={typeof avatar === "string" ? { uri: avatar } : avatar} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.greeting}>{t("hello")}</Text>
               <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
-          </View>
+            <ChevronRight size={16} color="rgba(255,255,255,0.55)" />
+          </TouchableOpacity>
           <View style={styles.headerIcons}>
             {/* Manual sync — the pro can force a refresh and see it happen. */}
             <TouchableOpacity
