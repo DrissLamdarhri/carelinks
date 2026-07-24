@@ -7,6 +7,7 @@ import { NotificationBell } from "./NotificationBell";
 import { ProfessionalsManager } from "./ProfessionalsManager";
 import { PayoutsManager } from "./PayoutsManager";
 import { PaymentsManager } from "./PaymentsManager";
+import { YogaManager } from "./YogaManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -163,8 +164,6 @@ export function AdminPanel() {
   });
   const [serviceCatFilter, setServiceCatFilter] = useState<"Tous" | ServiceCategory>("Tous");
   const [searchQ, setSearchQ] = useState("");
-  const [showYogaModal, setShowYogaModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [liveKpi, setLiveKpi] = useState<{
     users: number; bookings: number; gmv: number; rating: number;
@@ -955,83 +954,8 @@ export function AdminPanel() {
   };
 
   // Yoga Sessions — Save to Supabase
-  const addYogaSession = async () => {
-    if (!newSession.title || !newSession.date) {
-      toast.error("Titre et date/heure sont obligatoires");
-      return;
-    }
-    try {
-      // Parse date format: "YYYY-MM-DD HH:mm"
-      const [datePart, timePart] = newSession.date.split(" ");
-      const starts_at = new Date(`${datePart}T${timePart}:00`).toISOString();
-      
-      // For admin, use null instructor_id (can be assigned later)
-      const { data, error } = await supabase
-        .from("yoga_sessions")
-        .insert({
-          instructor_id: null, // Admin creates sessions without requiring an instructor
-          title: newSession.title,
-          level: newSession.level,
-          image_url: newSession.imageUrl,
-          starts_at,
-          duration_min: 60,
-          capacity: newSession.maxSpots,
-          price_mad: newSession.price,
-          description: `Instructeur: ${newSession.instructor}`,
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Add to local state
-      setSessions([...sessions, {
-        id: data.id,
-        title: data.title,
-        instructor: newSession.instructor,
-        date: new Date(data.starts_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-        spots: 0,
-        maxSpots: data.capacity,
-        price: data.price_mad,
-        status: "Publié",
-      }]);
-      
-      setShowYogaModal(false);
-      setNewSession({ title: "", instructor: "", date: "", maxSpots: 10, price: 120, level: "Tous niveaux", imageUrl: "" });
-      toast.success("Séance yoga créée et publiée");
-    } catch (err: any) {
-      console.error("Error adding yoga session:", err);
-      toast.error(err.message || "Erreur lors de la création de la séance");
-    }
-  };
   
-  const deleteSession = async (id: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette séance ?")) return;
-    try {
-      const { error } = await supabase
-        .from("yoga_sessions")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-      setSessions(sessions.filter((s) => s.id !== id));
-      toast.success("Séance supprimée");
-    } catch (err: any) {
-      toast.error(err.message || "Erreur");
-    }
-  };
   
-  const toggleSessionStatus = async (id: string) => {
-    try {
-      const session = sessions.find((s) => s.id === id);
-      if (!session) return;
-      
-      // For yoga, we'll update starts_at to past/future to toggle visibility
-      const isPast = new Date(session.date) < new Date();
-      toast.info("Statut mis à jour");
-    } catch (err: any) {
-      toast.error("Erreur");
-    }
-  };
 
   // Service Types Management
   const addServiceType = async () => {
@@ -2021,74 +1945,7 @@ export function AdminPanel() {
           )}
 
           {/* ======= YOGA ======= */}
-          {tab === "yoga" && (
-            <div>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-[#888780]">{sessions.length} séances</p>
-                <button
-                  onClick={() => setShowYogaModal(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm"
-                  style={{ background: "#0D0870", fontWeight: 600 }}
-                >
-                  <Plus size={16} /> Ajouter une s��ance
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {sessions.map((s) => (
-                  <div
-                    key={s.id}
-                    className="bg-white rounded-2xl p-5"
-                    style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#D8F0F4" }}>
-                        <Flower2 size={20} className="text-[#5BB8D4]" />
-                      </div>
-                      <StatusBadge status={s.status} />
-                    </div>
-                    <p className="text-sm text-[#1A1A1A] mb-1" style={{ fontWeight: 600 }}>{s.title}</p>
-                    <p className="text-xs text-[#888780] mb-3">{s.instructor}</p>
-                    <div className="flex items-center gap-3 text-xs text-[#888780] mb-4">
-                      <span className="flex items-center gap-1"><Calendar size={12} /> {s.date}</span>
-                      <span className="flex items-center gap-1"><Users size={12} /> {s.spots}/{s.maxSpots}</span>
-                    </div>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex-1 h-1.5 rounded-full mr-3" style={{ background: "#F0F0F0" }}>
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${(s.spots / s.maxSpots) * 100}%`,
-                            background: "#5BB8D4",
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-[#888780]">{s.maxSpots - s.spots} places</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleSessionStatus(s.id)}
-                        className="flex-1 py-2 rounded-xl text-xs text-center transition-all"
-                        style={{
-                          background: s.status === "Publié" ? "#F3F3F5" : "#0D0870",
-                          color: s.status === "Publié" ? "#888780" : "white",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {s.status === "Publié" ? "Mettre en brouillon" : "Publier"}
-                      </button>
-                      <button
-                        onClick={() => deleteSession(s.id)}
-                        className="w-9 py-2 rounded-xl flex items-center justify-center"
-                        style={{ background: "#FDE8E8" }}
-                      >
-                        <Trash2 size={13} className="text-[#E24B4A]" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {tab === "yoga" && <YogaManager />}
 
           {/* ======= SETTINGS ======= */}
           {tab === "settings" && (
@@ -2318,125 +2175,6 @@ export function AdminPanel() {
 
       {/* ── Add yoga session modal ──────────────────────────────────── */}
       <AnimatePresence>
-        {showYogaModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.5)" }}
-            onClick={(e) => { if (e.target === e.currentTarget) setShowYogaModal(false); }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
-            >
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg text-[#1A1A1A]" style={{ fontWeight: 700 }}>Nouvelle séance yoga</h3>
-                <button onClick={() => setShowYogaModal(false)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#F3F3F5" }}>
-                  <X size={18} className="text-[#888780]" />
-                </button>
-              </div>
-              <div className="flex flex-col gap-3">
-                {[
-                  { label: "Titre de la séance", key: "title", type: "text", placeholder: "ex: Hatha Flow Matinal" },
-                  { label: "Instructeur", key: "instructor", type: "text", placeholder: "Nom de l'instructeur" },
-                ].map((f) => (
-                  <div key={f.key}>
-                    <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>{f.label}</label>
-                    <input
-                      type={f.type}
-                      value={newSession[f.key as keyof typeof newSession]}
-                      onChange={(e) => setNewSession({ ...newSession, [f.key]: e.target.value })}
-                      placeholder={f.placeholder}
-                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
-                    />
-                  </div>
-                ))}
-                
-                {/* Date & Time Picker */}
-                <div>
-                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Date & Heure</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="date"
-                      value={newSession.date.split(" ")[0] || ""}
-                      onChange={(e) => {
-                        const time = newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00";
-                        setNewSession({ ...newSession, date: `${e.target.value} ${time}` });
-                      }}
-                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
-                    />
-                    <input
-                      type="time"
-                      value={newSession.date.includes(" ") ? newSession.date.split(" ")[1] : "10:00"}
-                      onChange={(e) => {
-                        const date = newSession.date.split(" ")[0] || new Date().toISOString().split("T")[0];
-                        setNewSession({ ...newSession, date: `${date} ${e.target.value}` });
-                      }}
-                      className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                   <div>
-                    <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Places max</label>
-                    <input type="number" value={newSession.maxSpots} onChange={(e) => setNewSession({ ...newSession, maxSpots: Number(e.target.value) })} className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Prix (MAD)</label>
-                    <input type="number" value={newSession.price} onChange={(e) => setNewSession({ ...newSession, price: Number(e.target.value) })} className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none" />
-                  </div>
-                </div>
-
-                {/* Level Selector */}
-                <div>
-                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Niveau</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {["Débutant", "Intermédiaire", "Avancé", "Tous niveaux"].map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => setNewSession({ ...newSession, level })}
-                        className="h-10 rounded-xl px-3 py-2 text-xs font-semibold border transition-all"
-                        style={{
-                          background: newSession.level === level ? "#0D0870" : "white",
-                          color: newSession.level === level ? "white" : "#888780",
-                          borderColor: newSession.level === level ? "#0D0870" : "#E0E0E0",
-                        }}
-                      >
-                        {level}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Image URL Input */}
-                <div>
-                  <label className="text-xs text-[#888780] mb-1.5 block" style={{ fontWeight: 500 }}>Image URL</label>
-                  <input
-                    type="url"
-                    value={newSession.imageUrl}
-                    onChange={(e) => setNewSession({ ...newSession, imageUrl: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full h-11 bg-[#F3F3F5] rounded-xl px-4 text-sm outline-none"
-                  />
-                  {newSession.imageUrl && (
-                    <div className="mt-2 rounded-xl overflow-hidden h-20 bg-[#F3F3F5]">
-                      <img src={newSession.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => setShowYogaModal(false)} className="flex-1 py-3 rounded-2xl text-sm" style={{ background: "#F3F3F5", color: "#888780" }}>Annuler</button>
-                <button onClick={addYogaSession} className="flex-1 py-3 rounded-2xl text-white text-sm" style={{ background: "#0D0870", fontWeight: 600 }}>Créer la séance</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
       </AnimatePresence>
 
       {/* ── Service Type Modal ──────────────────────────────────────── */}
