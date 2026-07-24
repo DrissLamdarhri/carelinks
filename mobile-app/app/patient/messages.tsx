@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
-import { MessageCircle } from "lucide-react-native";
+import { MessageCircle, Search } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -45,6 +45,12 @@ export default function PatientMessagesScreen() {
   const { bookings, loading } = usePatientBookings(user?.id ?? null);
   const [convos, setConvos] = useState<Convo[]>([]);
   const [building, setBuilding] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? convos.filter((c) => c.name.toLowerCase().includes(q)) : convos;
+  }, [convos, query]);
 
   const chatReady = bookings.filter((b) => b.status !== "cancelled");
 
@@ -52,24 +58,53 @@ export default function PatientMessagesScreen() {
     if (!user?.id || chatReady.length === 0) { setConvos([]); return; }
     setBuilding(true);
     try {
-      const items = await Promise.all(chatReady.map(async (b): Promise<Convo> => {
-        const isDemo = isDemoBookingId(b.id);
-        const profile = isDemo ? buildDemoProfile(DEMO_PRO_1_ID) : b.professional_id ? await db.profiles.get(b.professional_id).catch(() => null) : null;
-        let lastBody: string | null = null, lastMine = false, lastTime: string | null = null;
-        if (!isDemo) {
-          const { data } = await supabase.from("messages").select("body, sender_id, created_at").eq("booking_id", b.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
-          if (data) { lastBody = data.body; lastMine = data.sender_id === user.id; lastTime = data.created_at; }
-        }
-        return {
-          bookingId: b.id,
-          name: profile?.full_name ?? "Professionnel",
-          avatar: profile?.avatar_url ?? null,
-          specialty: specialtyLabels[b.specialty] ?? b.specialty.replaceAll("_", " "),
-          active: b.status === "matched" || b.status === "in_progress",
-          lastBody, lastMine, lastTime,
-          unread: !!lastBody && !lastMine,
-        };
-      }));
+      // One conversation per professional (not per booking) — group all bookings
+      // shared with the same pro so the same person never shows up twice.
+      const groups = new Map<string, typeof chatReady>();
+      for (const b of chatReady) {
+        const key = isDemoBookingId(b.id) ? `demo:${DEMO_PRO_1_ID}` : b.professional_id;
+        if (!key) continue; // open request, no pro assigned yet → nobody to chat with
+        const arr = groups.get(key) ?? [];
+        arr.push(b);
+        groups.set(key, arr);
+      }
+
+      const items = await Promise.all(
+        Array.from(groups.entries()).map(async ([key, bs]): Promise<Convo> => {
+          const isDemo = key.startsWith("demo:");
+          const rep = [...bs].sort((a, z) => +new Date(z.created_at) - +new Date(a.created_at))[0];
+          const ids = bs.map((b) => b.id);
+          const proId = isDemo ? DEMO_PRO_1_ID : (rep.professional_id as string);
+          const profile = isDemo ? buildDemoProfile(DEMO_PRO_1_ID) : await db.profiles.get(proId).catch(() => null);
+
+          let lastBody: string | null = null, lastMine = false, lastTime: string | null = null, unread = false;
+          if (!isDemo) {
+            const { data } = await supabase
+              .from("messages")
+              .select("body, sender_id, created_at")
+              .in("booking_id", ids)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (data) { lastBody = data.body; lastMine = data.sender_id === user.id; lastTime = data.created_at; }
+            const { count } = await supabase
+              .from("messages")
+              .select("id", { count: "exact", head: true })
+              .in("booking_id", ids)
+              .neq("sender_id", user.id)
+              .is("read_at", null);
+            unread = (count ?? 0) > 0;
+          }
+          return {
+            bookingId: rep.id,
+            name: profile?.full_name ?? "Professionnel",
+            avatar: profile?.avatar_url ?? null,
+            specialty: specialtyLabels[rep.specialty] ?? rep.specialty.replaceAll("_", " "),
+            active: bs.some((b) => b.status === "matched" || b.status === "in_progress"),
+            lastBody, lastMine, lastTime, unread,
+          };
+        }),
+      );
       items.sort((a, z) => (z.lastTime ? +new Date(z.lastTime) : 0) - (a.lastTime ? +new Date(a.lastTime) : 0));
       setConvos(items);
     } finally {
@@ -94,19 +129,30 @@ export default function PatientMessagesScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>{t("messaging_title")}</Text>
         <Text style={styles.subtitle}>{t("conversations_with_pros")}</Text>
+        <View style={styles.searchBar}>
+          <Search size={16} color={Colors.textSubtle} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t("search_conversation")}
+            placeholderTextColor={Colors.textSubtle}
+            style={styles.searchInput}
+            returnKeyType="search"
+          />
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {loading || building ? (
           <View style={styles.center}><ActivityIndicator size="large" color={NAVY} /></View>
-        ) : convos.length === 0 ? (
+        ) : shown.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}><MessageCircle size={22} color={Colors.textSubtle} /></View>
-            <Text style={styles.emptyTitle}>{t("no_conversation")}</Text>
-            <Text style={styles.emptySub}>{t("convos_pros_hint")}</Text>
+            <Text style={styles.emptyTitle}>{query ? t("no_results") : t("no_conversation")}</Text>
+            <Text style={styles.emptySub}>{query ? t("try_another_search") : t("convos_pros_hint")}</Text>
           </View>
         ) : (
-          convos.map((c) => (
+          shown.map((c) => (
             <TouchableOpacity key={c.bookingId} style={styles.card} activeOpacity={0.85} onPress={() => router.push(`/patient/chat/${c.bookingId}`)}>
               <View style={styles.avatarWrap}>
                 {c.avatar ? <Image source={{ uri: c.avatar }} style={styles.avatar} /> : (
@@ -139,6 +185,8 @@ const styles = StyleSheet.create({
   header: { backgroundColor: "white", paddingTop: 54, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   title: { fontSize: 26, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular" },
   subtitle: { color: Colors.textMuted, fontSize: 12.5, marginTop: 2 },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.surfaceWarm, borderRadius: 12, paddingHorizontal: 12, height: 42, marginTop: 12 },
+  searchInput: { flex: 1, fontSize: 14, color: Colors.textPrimary, paddingVertical: 0 },
   content: { padding: 14, gap: 8 },
   center: { paddingVertical: 50, alignItems: "center" },
 

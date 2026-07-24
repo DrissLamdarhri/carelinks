@@ -15,6 +15,7 @@ import { ArrowLeft, Phone, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
+import { supabase } from "@/lib/supabase";
 import { buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
@@ -28,6 +29,7 @@ export default function BookingChatScreen() {
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [recipientProfile, setRecipientProfile] = useState<Profile | null>(null);
+  const [threadIds, setThreadIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -54,6 +56,17 @@ export default function BookingChatScreen() {
         setRecipientId(counterpart);
         const profile = await db.profiles.get(counterpart).catch(() => null);
         if (active) setRecipientProfile(profile);
+        // Unify the thread across every booking shared with this professional.
+        if (booking.professional_id) {
+          const { data: shared } = await supabase
+            .from("bookings")
+            .select("id")
+            .eq("patient_id", booking.patient_id)
+            .eq("professional_id", booking.professional_id);
+          if (active) setThreadIds((shared ?? []).map((r: any) => r.id as string));
+        } else if (active) {
+          setThreadIds([bookingId]);
+        }
       } catch (error) {
         if (!active) return;
         setErrorMessage(error instanceof Error ? error.message : t("conversation_unavailable"));
@@ -122,6 +135,7 @@ export default function BookingChatScreen() {
       ) : recipientId && bookingId ? (
         <LiveChat
           bookingId={bookingId}
+          bookingIds={threadIds.length ? threadIds : [bookingId]}
           recipientId={recipientId}
           recipientName={recipientProfile?.full_name ?? "Professionnel"}
           recipientAvatar={recipientProfile?.avatar_url ?? null}

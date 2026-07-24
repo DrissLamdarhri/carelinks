@@ -15,6 +15,7 @@ import { ArrowLeft, Phone } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
+import { supabase } from "@/lib/supabase";
 import { normalizeRouteParam } from "@/lib/demo-booking";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
@@ -29,6 +30,7 @@ export default function ProChatScreen() {
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<Profile | null>(null);
+  const [threadIds, setThreadIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -43,6 +45,17 @@ export default function ProChatScreen() {
         setRecipientId(patientId);
         const profile = await db.profiles.get(patientId).catch(() => null);
         if (active) setRecipient(profile);
+        // Unify the thread across every booking shared with this patient.
+        if (booking.professional_id) {
+          const { data: shared } = await supabase
+            .from("bookings")
+            .select("id")
+            .eq("patient_id", booking.patient_id)
+            .eq("professional_id", booking.professional_id);
+          if (active) setThreadIds((shared ?? []).map((r: any) => r.id as string));
+        } else if (active) {
+          setThreadIds([bookingId]);
+        }
       } catch (error) {
         if (active) setErrorMessage(error instanceof Error ? error.message : t("conversation_unavailable"));
       } finally {
@@ -80,7 +93,7 @@ export default function ProChatScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={NAVY} /></View>
       ) : recipientId && bookingId ? (
-        <LiveChat bookingId={bookingId} recipientId={recipientId} recipientName={name} recipientAvatar={recipient?.avatar_url ?? null} />
+        <LiveChat bookingId={bookingId} bookingIds={threadIds.length ? threadIds : [bookingId]} recipientId={recipientId} recipientName={name} recipientAvatar={recipient?.avatar_url ?? null} />
       ) : (
         <View style={styles.center}><Text style={styles.errorText}>{errorMessage ?? t("recipient_not_found")}</Text></View>
       )}

@@ -31,6 +31,12 @@ type LiveChatProps = {
   recipientId: string | null;
   recipientName?: string;
   recipientAvatar?: string | null;
+  /**
+   * Every booking shared with this person. The thread is unified across all of
+   * them so the history is continuous (one conversation per person, not per
+   * booking). New messages attach to `bookingId` (the most recent one).
+   */
+  bookingIds?: string[];
 };
 
 type MessageRow = {
@@ -62,12 +68,17 @@ const dayLabel = (iso: string) => {
   return d.toLocaleDateString("fr-MA", { day: "numeric", month: "long" });
 };
 
-export function LiveChat({ bookingId, recipientId: _recipientId, recipientName = "Professionnel", recipientAvatar }: LiveChatProps) {
+export function LiveChat({ bookingId, recipientId: _recipientId, recipientName = "Professionnel", recipientAvatar, bookingIds }: LiveChatProps) {
   const { user } = useAuth();
   const { t } = useI18n();
   const isDemoBooking = isDemoBookingId(bookingId);
   const demoRecipientId = _recipientId ?? DEMO_PRO_1_ID;
   const demoPatientId = user?.id ?? DEMO_PATIENT_ID;
+  // All bookings in this conversation (defaults to just the one).
+  const threadIds = useMemo(
+    () => (bookingIds && bookingIds.length ? Array.from(new Set(bookingIds)) : [bookingId]),
+    [bookingIds, bookingId],
+  );
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -94,7 +105,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
       const { data, error } = await supabase
         .from("messages")
         .select("id, booking_id, sender_id, body, created_at")
-        .eq("booking_id", bookingId)
+        .in("booking_id", threadIds)
         .order("created_at", { ascending: true });
       if (error) throw error;
       setMessages((data ?? []) as MessageRow[]);
@@ -103,25 +114,41 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
     } finally {
       setLoading(false);
     }
-  }, [bookingId, isDemoBooking]);
+  }, [threadIds, isDemoBooking]);
 
   useEffect(() => { void loadMessages(); }, [loadMessages]);
 
+  // Mark the peer's messages as read once the thread is open, so unread counts
+  // in the conversation list clear correctly.
   useEffect(() => {
-    if (!bookingId || isDemoBooking) return;
+    if (isDemoBooking || !user?.id) return;
+    void supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .in("booking_id", threadIds)
+      .neq("sender_id", user.id)
+      .is("read_at", null);
+  }, [threadIds, isDemoBooking, user?.id]);
+
+  useEffect(() => {
+    if (isDemoBooking) return;
+    // Realtime has no reliable "in (...)" filter, so subscribe broadly and keep
+    // only inserts that belong to this conversation's bookings.
+    const idSet = new Set(threadIds);
     const channel = supabase
-      .channel(`messages:live:${bookingId}`)
+      .channel(`messages:live:${threadIds.join("_").slice(0, 40)}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `booking_id=eq.${bookingId}` },
+        { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const next = payload.new as MessageRow;
+          if (!idSet.has(next.booking_id)) return;
           setMessages((prev) => (prev.some((r) => r.id === next.id) ? prev : [...prev, next]));
         }
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [bookingId, isDemoBooking]);
+  }, [threadIds, isDemoBooking]);
 
   const sorted = useMemo(
     () => [...messages].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)),
