@@ -80,6 +80,32 @@ function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
   }));
 }
 
+// Display-only declutter: on a discovery map, pros seeded/located at nearly the
+// same point stack into a single unreadable blob. Fan any near-duplicates out on
+// a small circle (~180 m) so every face is visible and tappable. This nudges the
+// PIN only, never the pro's real stored location (this isn't a navigation map).
+function declutterPros<T extends { lat: number; lng: number }>(pros: T[]): T[] {
+  const THRESH = 0.0006; // ~65 m → treat as the same spot
+  const R = 0.0016;      // ~180 m fan radius
+  const groups: T[][] = [];
+  for (const p of pros) {
+    const g = groups.find(
+      (grp) => Math.abs(grp[0].lat - p.lat) < THRESH && Math.abs(grp[0].lng - p.lng) < THRESH,
+    );
+    if (g) g.push(p);
+    else groups.push([p]);
+  }
+  const out: T[] = [];
+  for (const g of groups) {
+    if (g.length === 1) { out.push(g[0]); continue; }
+    g.forEach((p, i) => {
+      const ang = (2 * Math.PI * i) / g.length;
+      out.push({ ...p, lat: p.lat + R * Math.cos(ang), lng: p.lng + R * Math.sin(ang) });
+    });
+  }
+  return out;
+}
+
 // ── Kiné care type icons ─────────────────────────────────────────────────────
 const kineCareIcons = [Bone, HandMetal, RotateCcw, Droplets, Activity, ShieldCheck] as const;
 
@@ -347,8 +373,9 @@ export default function PatientRequestScreen() {
 
   // Prefer REAL nearby pros from the DB; fall back to demo photo-pros only when
   // none are found (so seeding real pros makes them appear automatically).
-  const effectivePros =
-    mapPros.length > 0 ? mapPros : demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : [];
+  const effectivePros = declutterPros(
+    mapPros.length > 0 ? mapPros : demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : [],
+  );
 
   const usingRealPros = mapPros.length > 0;
   // Tapped pro → small detail card (clean, doesn't cover the map).
@@ -447,6 +474,28 @@ export default function PatientRequestScreen() {
             <Text style={styles.countChipText}>
               {effectivePros.length} {usingRealPros ? "pros (réel)" : "démo"}
             </Text>
+          </View>
+        ) : null}
+
+        {/* Friendly location activation: before GPS is granted the map is generic,
+            so invite the patient to turn on their position to see pros around them. */}
+        {!coords && !locating ? (
+          <View style={styles.locateHint} pointerEvents="box-none">
+            <View style={styles.locateCard}>
+              <View style={styles.locateIcon}>
+                <Navigation size={20} color={theme.primary} />
+              </View>
+              <Text style={styles.locateTitle}>{t("activate_location_title")}</Text>
+              <Text style={styles.locateSub}>{t("activate_location_sub")}</Text>
+              <TouchableOpacity
+                style={[styles.locateBtn, { backgroundColor: theme.primary }]}
+                onPress={handleLocate}
+                activeOpacity={0.9}
+              >
+                <Navigation size={15} color="#fff" />
+                <Text style={styles.locateBtnText}>{t("activate_location_cta")}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
@@ -820,6 +869,44 @@ const styles = StyleSheet.create({
   },
   countDot: { width: 8, height: 8, borderRadius: 4 },
   countChipText: { fontSize: 12, fontWeight: "700", color: "#0D0870" },
+  locateHint: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 30,
+  },
+  locateCard: {
+    backgroundColor: "rgba(255,255,255,0.97)",
+    borderRadius: 20,
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    alignItems: "center",
+    marginHorizontal: 40,
+    shadowColor: "#0D0870",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  locateIcon: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: "#EDE9FE",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 10,
+  },
+  locateTitle: { fontSize: 15, fontWeight: "800", color: "#0D0870", textAlign: "center" },
+  locateSub: { fontSize: 12.5, color: "#6B7280", textAlign: "center", marginTop: 4, lineHeight: 17 },
+  locateBtn: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+  locateBtnText: { color: "#fff", fontSize: 13.5, fontWeight: "700" },
   proCard: {
     position: "absolute",
     left: 12,

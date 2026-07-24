@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { Flag } from "lucide-react-native";
 import { specialtyColor } from "./engine";
-import { DEFAULT_AVATAR } from "@/lib/colors";
 import { useReducedMotion } from "@/lib/a11y";
 
 const NAVY = "#0D0870";
@@ -57,11 +56,13 @@ export function ProAvatarMarker({
   const size = driver ? 52 : selected ? 56 : 46;
   const Container: React.ComponentType<any> = onPress ? Pressable : View;
 
-  // Always resolve to an image — a default portrait for profiles with no photo yet.
+  // Prefer a REAL photo (bundled demo source, then the pro's uploaded avatar_url).
+  // When a pro genuinely has no photo, fall back to a clean initials chip on the
+  // specialty colour — honest and legible — rather than a grey silhouette blob.
+  // We never paste a stock face onto a real person's identity.
   const [imgError, setImgError] = useState(false);
-  const source: ImageSourcePropType = !imgError
-    ? pro.avatarSource ?? (pro.avatarUrl ? { uri: pro.avatarUrl } : DEFAULT_AVATAR)
-    : DEFAULT_AVATAR;
+  const source: ImageSourcePropType | null =
+    !imgError ? pro.avatarSource ?? (pro.avatarUrl ? { uri: pro.avatarUrl } : null) : null;
 
   // Spring-in / spring-out popup card
   const [cardMounted, setCardMounted] = useState(selected);
