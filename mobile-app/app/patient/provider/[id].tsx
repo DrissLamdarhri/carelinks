@@ -15,8 +15,10 @@ import {
   Award,
   BadgeCheck,
   Clock3,
+  Home,
   MapPin,
   MessageCircle,
+  ShieldCheck,
   Star,
 } from "lucide-react-native";
 import { Colors, Gradients, Shadows } from "@/lib/colors";
@@ -39,6 +41,16 @@ const SPEC_LABEL_KEY: Record<string, string> = {
   physiotherapist: "spec_physio",
   psychologist: "spec_psy",
   yoga_instructor: "spec_yoga",
+};
+
+// Real service categories per specialty (i18n keys) — keeps the profile
+// meaningful and structured even for a new pro with no reviews. Not pro-specific
+// data, so nothing is fabricated about the individual.
+const SPEC_SERVICES: Record<string, string[]> = {
+  nurse: ["svc_injection", "svc_dressing", "svc_infusion", "svc_bloodtest"],
+  physiotherapist: ["focus_motor", "focus_resp", "focus_drainage", "focus_massage"],
+  psychologist: ["svc_anxiety", "svc_stress", "svc_followup"],
+  yoga_instructor: ["svc_yoga_individual", "svc_yoga_relax"],
 };
 
 export default function ProviderProfileScreen() {
@@ -119,6 +131,7 @@ export default function ProviderProfileScreen() {
     ? `${professional.years_experience}+`
     : "—";
   const price = professional?.hourly_rate_mad ?? fallback?.minPrice ?? null;
+  const services = (SPEC_SERVICES[specialtyKey] ?? []).map((k) => t(k));
 
   return (
     <View style={styles.root}>
@@ -197,6 +210,37 @@ export default function ProviderProfileScreen() {
         <View style={styles.aboutCard}>
           <Text style={styles.aboutTitle}>{t("about_label")}</Text>
           <Text style={styles.aboutText}>{t("pro_bio_generic")}</Text>
+        </View>
+
+        {/* ── Services offered (by specialty) — real service categories, so the
+            page stays meaningful even for a brand-new pro with no reviews yet. ── */}
+        {services.length > 0 ? (
+          <View style={styles.aboutCard}>
+            <Text style={styles.aboutTitle}>{t("services_offered")}</Text>
+            <View style={styles.chipsWrap}>
+              {services.map((s) => (
+                <View key={s} style={styles.serviceChip}>
+                  <Text style={styles.serviceChipText}>{s}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── Trust row — true platform guarantees, reassuring and structured. ── */}
+        <View style={styles.trustCard}>
+          {[
+            { icon: BadgeCheck, text: t("trust_verified") },
+            { icon: ShieldCheck, text: t("trust_secure_pay") },
+            { icon: Home, text: t("trust_at_home") },
+          ].map((item, i) => (
+            <View key={i} style={styles.trustItem}>
+              <View style={styles.trustIcon}>
+                <item.icon size={16} color={Colors.primary} />
+              </View>
+              <Text style={styles.trustText}>{item.text}</Text>
+            </View>
+          ))}
         </View>
 
         {providerId ? <ReviewsList professionalId={providerId} /> : null}
@@ -288,6 +332,22 @@ const styles = StyleSheet.create({
   },
   aboutTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600", marginBottom: 6 },
   aboutText: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  serviceChip: {
+    backgroundColor: Colors.surfaceWarm, borderRadius: 10,
+    paddingHorizontal: 11, paddingVertical: 7,
+  },
+  serviceChipText: { color: Colors.textPrimary, fontSize: 12.5, fontWeight: "600" },
+  trustCard: {
+    marginTop: 12, marginHorizontal: 20, borderRadius: 14, backgroundColor: "white",
+    paddingVertical: 14, paddingHorizontal: 12, flexDirection: "row", justifyContent: "space-between",
+  },
+  trustItem: { flex: 1, alignItems: "center", gap: 6, paddingHorizontal: 4 },
+  trustIcon: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.surfaceWarm,
+    alignItems: "center", justifyContent: "center",
+  },
+  trustText: { color: Colors.textMuted, fontSize: 10.5, fontWeight: "600", textAlign: "center" },
   footer: {
     backgroundColor: "white",
     borderTopWidth: 1,
