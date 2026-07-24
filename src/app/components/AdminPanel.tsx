@@ -5,6 +5,8 @@ import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
 import { ProfessionalsManager } from "./ProfessionalsManager";
+import { PayoutsManager } from "./PayoutsManager";
+import { PaymentsManager } from "./PaymentsManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -15,7 +17,7 @@ import {
   Syringe, Heart, Brain, Baby, Bone, Ear, Pill, Thermometer,
   Bandage, HandHeart, Clipboard, Zap, CheckCircle2, XCircle,
   MoreVertical, ChevronDown, Filter, Download, RefreshCw,
-  BookOpen, ArrowUpRight, ArrowDownRight
+  BookOpen, ArrowUpRight, ArrowDownRight, Banknote, Wallet
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -25,7 +27,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "settings";
+type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "payouts" | "payments" | "settings";
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
@@ -1170,13 +1172,15 @@ export function AdminPanel() {
     { key: "professionals", icon: UserCheck, label: "Professionnels", badge: pending.length },
     { key: "service-types", icon: Clipboard, label: "Types de soins" },
     { key: "bookings", icon: BookOpen, label: "Réservations" },
+    { key: "payouts", icon: Banknote, label: "Retraits" },
+    { key: "payments", icon: Wallet, label: "Paiements" },
     { key: "yoga", icon: Flower2, label: "Yoga" },
     { key: "settings", icon: Settings, label: "Paramètres" },
   ];
 
   return (
     <div
-      className="flex min-h-screen"
+      className="flex h-screen overflow-hidden"
       style={{ fontFamily: "'DM Sans', sans-serif", background: "#F4F6FB" }}
     >
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
@@ -1776,6 +1780,10 @@ export function AdminPanel() {
 
           {/* ======= PROFESSIONALS ======= */}
           {tab === "professionals" && <ProfessionalsManager />}
+
+          {tab === "payouts" && <PayoutsManager />}
+
+          {tab === "payments" && <PaymentsManager />}
 
 
           {/* ======= SERVICE TYPES ======= */}
