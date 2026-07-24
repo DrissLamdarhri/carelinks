@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import {
   View,
@@ -7,7 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  Linking,  
+  ActivityIndicator,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -22,7 +22,6 @@ import {
   Star,
   Clock,
   MessageCircle,
-  Phone,
 } from "lucide-react-native";
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
@@ -32,9 +31,10 @@ import {
   mockPatientProfile,
   quickServices,
   primaryServices,
-  mockProfessionals,
-  mockPatientBooking,
 } from "@/lib/mock-data";
+import { db } from "@/lib/db/dal";
+import { geo, type NearbyProMapItem } from "@/lib/db/geo";
+import type { Booking } from "@/lib/db/types";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { useAuth } from "@/lib/auth-context";
@@ -47,17 +47,82 @@ const serviceIconMap = {
   activity: Activity,
 } as const;
 
+// City default (Fès) used to find nearby pros before a patient location exists.
+const HOME_CENTER = { lat: 34.037, lng: -5.004 };
+
+// Raw DB specialty → i18n key for the French/Arabic label on pro cards.
+const SPEC_LABEL: Record<string, string> = {
+  nurse: "spec_nurse",
+  physiotherapist: "spec_physio",
+  psychologist: "spec_psy",
+  yoga_instructor: "spec_yoga",
+};
+
 export default function PatientHomeScreen() {
   const router = useRouter();
   const { t } = useI18n();
-  const { profile, refreshProfile } = useAuth();
-  
+  const { user, profile, refreshProfile } = useAuth();
+
+  // Real data behind "Proches de vous" and "Prochain rendez-vous" (was mock).
+  const [nearbyPros, setNearbyPros] = useState<NearbyProMapItem[]>([]);
+  const [prosLoading, setProsLoading] = useState(true);
+  const [nextBooking, setNextBooking] = useState<Booking | null>(null);
+  const [nextProName, setNextProName] = useState<string | null>(null);
+
   // Refresh profile when screen comes into focus
   // Profile changes rarely — refresh at most once a minute instead of on every
   // tab switch (was a Supabase round-trip each time the tab regained focus).
   useFocusRefresh(() => {
     void refreshProfile();
   }, 60_000);
+
+  // Nearby professionals + the patient's next appointment, kept fresh on focus.
+  // (useFocusRefresh ignores any returned cleanup, so we guard setState with a
+  // mounted ref rather than a per-run cancel flag.)
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+  useFocusRefresh(
+    useCallback(() => {
+      void (async () => {
+        try {
+          // Search around the city default (Fès); real pros from v_pros_public.
+          const rows = await geo.findNearbyProsForMap(HOME_CENTER.lat, HOME_CENTER.lng, {
+            radiusKm: 100,
+            limit: 6,
+          });
+          if (alive.current) setNearbyPros(rows);
+        } catch {
+          if (alive.current) setNearbyPros([]);
+        } finally {
+          if (alive.current) setProsLoading(false);
+        }
+
+        if (user?.id) {
+          try {
+            const all = await db.bookings.listForPatient(user.id);
+            const upcoming = all
+              .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
+              .sort((a, b) => {
+                const ta = a.scheduled_at ? Date.parse(a.scheduled_at) : Date.parse(a.created_at);
+                const tb = b.scheduled_at ? Date.parse(b.scheduled_at) : Date.parse(b.created_at);
+                return ta - tb;
+              });
+            const next = upcoming[0] ?? null;
+            if (alive.current) setNextBooking(next);
+            if (next?.professional_id) {
+              const pro = await db.profiles.get(next.professional_id).catch(() => null);
+              if (alive.current) setNextProName(pro?.full_name ?? null);
+            } else if (alive.current) {
+              setNextProName(null);
+            }
+          } catch {
+            if (alive.current) setNextBooking(null);
+          }
+        }
+      })();
+    }, [user?.id]),
+    30_000,
+  );
   
   // Use real profile data, fallback to mock for display purposes
   const displayName = {
@@ -180,68 +245,104 @@ export default function PatientHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
-        {mockProfessionals.map((n) => (
+        {prosLoading ? (
+          <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primary} />
+        ) : nearbyPros.length === 0 ? (
+          <View style={styles.emptyPros}>
+            <Text style={styles.emptyProsText}>{t("no_pros_nearby")}</Text>
+          </View>
+        ) : (
+          nearbyPros.map((n) => {
+            const name = n.full_name || t("professional");
+            const specLabel = SPEC_LABEL[n.specialty] ? t(SPEC_LABEL[n.specialty]) : n.specialty;
+            return (
+              <TouchableOpacity
+                key={n.id}
+                style={styles.proCard}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/patient/provider/${n.id}`)}
+              >
+                <Image
+                  source={n.avatar_url ? { uri: n.avatar_url } : DEFAULT_AVATAR}
+                  style={styles.proAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.proName} numberOfLines={1}>{name}</Text>
+                  <Text style={styles.proSpecialty}>{specLabel}</Text>
+                  <View style={styles.proMetaRow}>
+                    <Star size={11} color="#FBBF24" fill="#FBBF24" />
+                    <Text style={styles.proMetaText}>{(n.rating_avg ?? 0).toFixed(1)}</Text>
+                    {n.distanceKm != null ? (
+                      <>
+                        <Text style={styles.proMetaDot}>·</Text>
+                        <MapPin size={10} color={Colors.textSubtle} />
+                        <Text style={styles.proMetaText}>{n.distanceKm.toFixed(1)} km</Text>
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={{ alignItems: "flex-end" }}>
+                  {n.hourly_rate_mad ? (
+                    <Text style={styles.proPrice}>Dès {n.hourly_rate_mad} MAD</Text>
+                  ) : null}
+                  <View style={styles.actionsRow}>
+                    {/* Both actions stay inside the app: contact happens through a
+                        booking, never a raw phone number on a discovery card
+                        (that would let patients bypass the platform). */}
+                    <TouchableOpacity style={styles.msgBtn} onPress={() => router.push(`/patient/provider/${n.id}`)}>
+                      <MessageCircle size={13} color={Colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.callBtn} onPress={() => router.push(`/patient/provider/${n.id}`)}>
+                      <ChevronRight size={14} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+
+      {nextBooking ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
           <TouchableOpacity
-            key={n.id}
-            style={styles.proCard}
-            onPress={() => router.push(`/patient/provider/${n.id}`)}
+            onPress={() => router.push(`/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`)}
+            activeOpacity={0.9}
           >
-            <Image source={{ uri: n.avatar }} style={styles.proAvatar} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.proName}>
-                {n.firstName} {n.lastName}
-              </Text>
-              <Text style={styles.proSpecialty}>{n.specialty}</Text>
-              <View style={styles.proMetaRow}>
-                <Star size={11} color="#FBBF24" fill="#FBBF24" />
-                <Text style={styles.proMetaText}>
-                  {n.rating.toFixed(1)} ({n.reviewCount})
+            <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
+              <View style={styles.bookingBadgeRow}>
+                <Text style={styles.bookingBadge}>
+                  {SPEC_LABEL[nextBooking.specialty] ? t(SPEC_LABEL[nextBooking.specialty]) : nextBooking.specialty}
                 </Text>
-                <Text style={styles.proMetaDot}>·</Text>
-                <MapPin size={10} color={Colors.textSubtle} />
-                <Text style={styles.proMetaText}>{n.city}</Text>
+                <Text style={styles.bookingStatus}>
+                  {nextBooking.status === "in_progress"
+                    ? t("status_in_progress")
+                    : nextBooking.status === "en_route"
+                    ? t("en_route_to_you")
+                    : t("confirmed")}
+                </Text>
               </View>
-            </View>
-
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.proPrice}>Dès {n.minPrice} MAD</Text>
-              <View style={styles.actionsRow}>
-                <TouchableOpacity style={styles.msgBtn} onPress={() => router.push("/patient/messages")}>
-                  <MessageCircle size={13} color={Colors.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.callBtn}
-                  onPress={() => Linking.openURL(`tel:${n.phone}`)}
-                >
-                  <Phone size={13} color="white" />
-                </TouchableOpacity>
+              <Text style={styles.bookingPro}>{nextProName ?? t("your_professional")}</Text>
+              <View style={styles.bookingTimeRow}>
+                <Clock size={13} color="rgba(255,255,255,0.75)" />
+                <Text style={styles.bookingTime}>
+                  {nextBooking.scheduled_at
+                    ? new Date(nextBooking.scheduled_at).toLocaleString("fr-MA", {
+                        weekday: "short", day: "numeric", month: "short",
+                        hour: "2-digit", minute: "2-digit",
+                      })
+                    : t("flexible_time")}
+                </Text>
               </View>
-            </View>
+              <View style={styles.bookingArrow}>
+                <ChevronRight size={20} color="white" />
+              </View>
+            </LinearGradient>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
-        <TouchableOpacity onPress={() => router.push("/patient/bookings")} activeOpacity={0.9}>
-          <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
-          <View style={styles.bookingBadgeRow}>
-            <Text style={styles.bookingBadge}>{mockPatientBooking.careType}</Text>
-            <Text style={styles.bookingStatus}>{t("confirmed")}</Text>
-          </View>
-          <Text style={styles.bookingPro}>{mockPatientBooking.proName}</Text>
-          <View style={styles.bookingTimeRow}>
-            <Clock size={13} color="rgba(255,255,255,0.75)" />
-            <Text style={styles.bookingTime}>
-              {mockPatientBooking.dateStr} — {mockPatientBooking.timeStr}
-            </Text>
-          </View>
-          <View style={styles.bookingArrow}>
-            <ChevronRight size={20} color="white" />
-          </View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -364,6 +465,14 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: "white", fontSize: 15, fontWeight: "700" },
   ctaHint: { textAlign: "center", marginTop: 6, color: Colors.textMuted, fontSize: 11 },
+  emptyPros: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  emptyProsText: { color: Colors.textMuted, fontSize: 13 },
   proCard: {
     backgroundColor: "white",
     borderRadius: 16,
