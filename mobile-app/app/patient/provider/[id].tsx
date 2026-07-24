@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,22 +9,37 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
   Award,
+  BadgeCheck,
   Clock3,
   MapPin,
   MessageCircle,
-  Phone,
-  Shield,
   Star,
 } from "lucide-react-native";
-import { Colors } from "@/lib/colors";
+import { Colors, Gradients, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { ReviewsList } from "@/components/ReviewsList";
 import { db } from "@/lib/db/dal";
 import type { Professional, Profile } from "@/lib/db/types";
 import { mockProfessionals } from "@/lib/mock-data";
+
+// Gradient tuned to the pro's specialty so the profile feels part of that
+// service's world (same palette as the psychologist "zoomed" profile).
+const SPEC_GRADIENT: Record<string, readonly [string, string]> = {
+  nurse: Gradients.nurse,
+  physiotherapist: Gradients.kine,
+  psychologist: Gradients.psy,
+  yoga_instructor: Gradients.yoga,
+};
+const SPEC_LABEL_KEY: Record<string, string> = {
+  nurse: "spec_nurse",
+  physiotherapist: "spec_physio",
+  psychologist: "spec_psy",
+  yoga_instructor: "spec_yoga",
+};
 
 export default function ProviderProfileScreen() {
   const { t } = useI18n();
@@ -76,13 +90,22 @@ export default function ProviderProfileScreen() {
     (fallback ? `${fallback.firstName} ${fallback.lastName}` : "Professionnel");
   const avatar = profile?.avatar_url || fallback?.avatar || null;
   const city = profile?.city || fallback?.city || "Maroc";
-  const phone = profile?.phone || fallback?.phone || null;
   const rating = professional?.rating_avg ?? fallback?.rating ?? 0;
   const reviewCount = professional?.rating_count ?? fallback?.reviewCount ?? 0;
   const isVerified = professional?.verification_status === "approved" || Boolean(fallback);
-  const specialty = professional?.specialty
+  const specialtyKey = professional?.specialty ?? "";
+  const specialty = SPEC_LABEL_KEY[specialtyKey]
+    ? t(SPEC_LABEL_KEY[specialtyKey])
+    : professional?.specialty
     ? professional.specialty.replaceAll("_", " ")
-    : fallback?.specialty || "professionnel de santé";
+    : fallback?.specialty || t("health_professional");
+  const gradient = SPEC_GRADIENT[specialtyKey] ?? Gradients.nurse;
+  const initials = displayName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   if (loading) {
     return (
@@ -92,75 +115,71 @@ export default function ProviderProfileScreen() {
     );
   }
 
+  const experience = professional?.years_experience
+    ? `${professional.years_experience}+`
+    : "—";
+  const price = professional?.hourly_rate_mad ?? fallback?.minPrice ?? null;
+
   return (
     <View style={styles.root}>
-      <View style={styles.top}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 16 }}>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.avatarWrap}>
-              {avatar ? (
-                <Image source={{ uri: avatar }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarFallbackText}>
-                    {displayName
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </Text>
-                </View>
-              )}
-              {isVerified ? (
-                <View style={styles.verifiedBadge}>
-                  <Shield size={10} color="white" />
-                </View>
-              ) : null}
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{displayName}</Text>
-              <Text style={styles.specialty}>{specialty}</Text>
-              <View style={styles.cityRow}>
-                <MapPin size={11} color={Colors.textMuted} />
-                <Text style={styles.city}>{city}</Text>
-              </View>
-            </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+        {/* ── Hero ── */}
+        <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <View style={styles.heroBlob} />
+          <View style={styles.heroTop}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <ArrowLeft size={20} color="white" />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.statsRow}>
-            <View style={styles.statCol}>
-              <View style={styles.ratingRow}>
-                <Star size={14} color="#FBBF24" fill="#FBBF24" />
-                <Text style={styles.statValue}>
-                  {rating > 0 ? rating.toFixed(1) : t("new_badge")}
-                </Text>
+          <View style={styles.heroAvatarWrap}>
+            {/* Photo is obligatory for trust; initials only when a pro truly has none. */}
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.heroAvatar} />
+            ) : (
+              <View style={[styles.heroAvatar, styles.heroAvatarFallback]}>
+                <Text style={styles.heroAvatarText}>{initials}</Text>
               </View>
-              <Text style={styles.statLabel}>
-                {reviewCount > 0 ? `${reviewCount} avis` : t("no_reviews_yet")}
-              </Text>
+            )}
+            {isVerified ? (
+              <View style={styles.heroVerified}>
+                <BadgeCheck size={16} color="#fff" fill={Colors.primary} />
+              </View>
+            ) : null}
+          </View>
+
+          <Text style={styles.heroName}>{displayName}</Text>
+          <Text style={styles.heroSpecialty}>{specialty}</Text>
+          <View style={styles.heroCityRow}>
+            <MapPin size={12} color="rgba(255,255,255,0.85)" />
+            <Text style={styles.heroCity}>{city}</Text>
+          </View>
+        </LinearGradient>
+
+        {/* ── Floating stats ── */}
+        <View style={styles.statsCard}>
+          <View style={styles.statCol}>
+            <View style={styles.ratingRow}>
+              <Star size={15} color="#FBBF24" fill="#FBBF24" />
+              <Text style={styles.statValue}>{rating > 0 ? rating.toFixed(1) : t("new_badge")}</Text>
             </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={styles.statValue}>{professional?.years_experience ?? "—"}</Text>
-              <Text style={styles.statLabel}>{t("experience")}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={[styles.statValue, { color: Colors.primary }]}>
-                {professional?.hourly_rate_mad ?? fallback?.minPrice ?? "—"}
-              </Text>
-              <Text style={styles.statLabel}>MAD / soin</Text>
-            </View>
+            <Text style={styles.statLabel}>
+              {reviewCount > 0 ? `${reviewCount} ${t("reviews_word")}` : t("no_reviews_yet")}
+            </Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCol}>
+            <Text style={styles.statValue}>{experience}</Text>
+            <Text style={styles.statLabel}>{t("experience")}</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCol}>
+            <Text style={[styles.statValue, { color: Colors.primary }]}>{price ?? "—"}</Text>
+            <Text style={styles.statLabel}>MAD / {t("care_unit")}</Text>
           </View>
         </View>
 
+        {/* ── Quick info ── */}
         <View style={styles.quickInfoRow}>
           {[
             { icon: Clock3, text: t("by_appointment") },
@@ -169,19 +188,15 @@ export default function ProviderProfileScreen() {
           ].map((item, index) => (
             <View key={`${item.text}-${index}`} style={styles.quickInfoChip}>
               <item.icon size={14} color={Colors.primary} />
-              <Text style={styles.quickInfoText} numberOfLines={1}>
-                {item.text}
-              </Text>
+              <Text style={styles.quickInfoText} numberOfLines={1}>{item.text}</Text>
             </View>
           ))}
         </View>
 
+        {/* ── About ── */}
         <View style={styles.aboutCard}>
-          <Text style={styles.aboutTitle}>À propos</Text>
-          <Text style={styles.aboutText}>
-            Professionnel certifié CareLink, interventions à domicile avec approche humaine et
-            ponctuelle.
-          </Text>
+          <Text style={styles.aboutTitle}>{t("about_label")}</Text>
+          <Text style={styles.aboutText}>{t("pro_bio_generic")}</Text>
         </View>
 
         {providerId ? <ReviewsList professionalId={providerId} /> : null}
@@ -189,28 +204,10 @@ export default function ProviderProfileScreen() {
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </ScrollView>
 
+      {/* ── Footer: contact stays in-app (booking / messaging), never a raw
+          phone number — that would let patients bypass the platform. ── */}
       <View style={styles.footer}>
-        {phone ? (
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => {
-              void Linking.openURL(`tel:${phone}`);
-            }}
-          >
-            <Phone size={20} color={Colors.primary} />
-          </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() => {
-            if (phone) {
-              const sanitized = phone.replace(/[^\d]/g, "");
-              void Linking.openURL(`https://wa.me/${sanitized}`);
-            } else {
-              router.push("/patient/messages");
-            }
-          }}
-        >
+        <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/patient/messages")}>
           <MessageCircle size={20} color={Colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.requestBtn} onPress={() => router.push("/patient/request")}>
@@ -223,73 +220,50 @@ export default function ProviderProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  top: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 70,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: { flex: 1, marginTop: -52 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surfaceWarm },
-  card: {
-    marginHorizontal: 20,
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 16,
-  },
-  cardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatarWrap: { position: "relative" },
-  avatar: { width: 80, height: 80, borderRadius: 18 },
-  avatarFallback: {
-    width: 80,
-    height: 80,
-    borderRadius: 18,
-    backgroundColor: Colors.surfaceWarm,
+
+  hero: {
+    paddingTop: 54,
+    paddingBottom: 44,
     alignItems: "center",
-    justifyContent: "center",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: "hidden",
   },
-  avatarFallbackText: { color: Colors.primary, fontSize: 28, fontWeight: "700" },
-  verifiedBadge: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.primary,
-    borderWidth: 2,
-    borderColor: "white",
-    alignItems: "center",
-    justifyContent: "center",
+  heroBlob: {
+    position: "absolute", top: -50, right: -40, width: 180, height: 180,
+    borderRadius: 90, backgroundColor: "rgba(255,255,255,0.08)",
   },
-  name: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700" },
-  specialty: { color: Colors.textMuted, fontSize: 13, textTransform: "capitalize", marginTop: 2 },
-  cityRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  city: { color: Colors.textMuted, fontSize: 12 },
-  statsRow: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  heroTop: { position: "absolute", top: 20, left: 20 },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center", justifyContent: "center",
   },
-  statCol: { flex: 1, alignItems: "center" },
-  statDivider: { width: 1, height: 34, backgroundColor: "#F0F0F0" },
+  heroAvatarWrap: { position: "relative", marginBottom: 12 },
+  heroAvatar: { width: 96, height: 96, borderRadius: 28, borderWidth: 3, borderColor: "rgba(255,255,255,0.5)" },
+  heroAvatarFallback: { backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  heroAvatarText: { color: "#fff", fontSize: 34, fontWeight: "800" },
+  heroVerified: {
+    position: "absolute", right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13,
+    backgroundColor: "#fff", alignItems: "center", justifyContent: "center",
+  },
+  heroName: { color: "#fff", fontSize: 21, fontWeight: "800", textAlign: "center" },
+  heroSpecialty: { color: "rgba(255,255,255,0.9)", fontSize: 13.5, marginTop: 2, textTransform: "capitalize" },
+  heroCityRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
+  heroCity: { color: "rgba(255,255,255,0.85)", fontSize: 12.5 },
+
+  statsCard: {
+    flexDirection: "row", backgroundColor: "#fff", marginHorizontal: 20, marginTop: -24,
+    borderRadius: 20, paddingVertical: 16, ...Shadows.md,
+  },
+  statCol: { flex: 1, alignItems: "center", gap: 3 },
+  statDivider: { width: 1, height: 34, backgroundColor: "#F0F0F0", alignSelf: "center" },
   statValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700" },
   statLabel: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   quickInfoRow: {
-    marginTop: 12,
+    marginTop: 14,
     marginHorizontal: 20,
     flexDirection: "row",
     gap: 8,
