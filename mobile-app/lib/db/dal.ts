@@ -7,6 +7,7 @@ import type {
   BookingStatus,
   Message,
   NotificationSettings,
+  OpenDemand,
   Patient,
   ProDocument,
   Professional,
@@ -188,14 +189,18 @@ export const bookings = {
   // Demands a professional may bid on: their OWN specialty only, and only those
   // posted in the last `withinHours` (default 24h). Older open requests are stale
   // — showing them clutters the feed and lets pros bid on dead demands.
-  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50, withinHours = 24): Promise<Booking[]> {
+  //
+  // Reads `open_demands`, not `bookings`: pros are no longer allowed to see a
+  // patient's street address, exact GPS or notes before being assigned to the
+  // job (migration 0028). RLS on `bookings` enforces this, so querying the table
+  // directly would simply return nothing.
+  async listOpenForSpecialty(specialty: ProSpecialty, limit = 50, withinHours = 24): Promise<OpenDemand[]> {
     const since = new Date(Date.now() - withinHours * 60 * 60 * 1000).toISOString();
     return unwrap(
       await supabase
-        .from("bookings")
+        .from("open_demands")
         .select("*")
         .eq("specialty", specialty)
-        .eq("status", "open")
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(limit)

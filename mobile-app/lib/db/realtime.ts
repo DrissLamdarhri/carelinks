@@ -225,7 +225,7 @@ import { useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { isDemoBookingId } from "@/lib/demo-booking";
 import { db } from "./dal";
-import type { Bid, Booking, Message, ProSpecialty, UUID } from "./types";
+import type { Bid, Booking, Message, OpenDemand, ProSpecialty, UUID } from "./types";
 
 type AsyncListState<T> = {
   data: T[];
@@ -357,18 +357,18 @@ export function usePatientBookings(patientId: UUID | null) {
 
 export interface UseOpenBookingsBySpecialtyOpts {
   /**
-   * Called once for every new booking INSERT that lands with `status === "open"`.
+   * Called once for every new redacted demand that appears in the feed.
    * Use this to fire push notifications or update a badge count on the pro side.
    * The callback is stored in a ref so changing it never re-triggers the subscription.
    */
-  onNewDemand?: (booking: Booking) => void;
+  onNewDemand?: (demand: OpenDemand) => void;
 }
 
 export function useOpenBookingsBySpecialty(
   specialty: ProSpecialty | null,
   opts?: UseOpenBookingsBySpecialtyOpts
 ) {
-  const { data, setData, loading, error, refresh } = useAsyncList<Booking>(
+  const { data, setData, loading, error, refresh } = useAsyncList<OpenDemand>(
     () => (specialty ? db.bookings.listOpenForSpecialty(specialty) : Promise.resolve([])),
     [specialty]
   );
@@ -382,37 +382,38 @@ export function useOpenBookingsBySpecialty(
   useFocusEffect(
     useCallback(() => {
       if (!specialty) return;
+      // Subscribed to `open_demands` rather than `bookings`: the demand feed is
+      // the redacted projection (migration 0028), so a realtime payload can no
+      // longer carry a patient's address. A row exists there only while the
+      // request is open, which is why leaving `open` arrives here as a DELETE.
       const channel = supabase
-        .channel(`bookings:specialty:${specialty}:${Math.random().toString(36).slice(2)}`)
+        .channel(`demands:specialty:${specialty}:${Math.random().toString(36).slice(2)}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
-            table: "bookings",
+            table: "open_demands",
             filter: `specialty=eq.${specialty}`,
           },
           (payload) => {
             setData((prev) => {
               if (payload.eventType === "INSERT") {
-                const next = payload.new as Booking;
-                if (next.status === "open") {
-                  // Notify the professional about the new demand (push + bell row).
-                  onNewDemandRef.current?.(next);
-                  return [next, ...prev];
-                }
-                return prev;
+                const next = payload.new as OpenDemand;
+                // Notify the professional about the new demand (push + bell row).
+                onNewDemandRef.current?.(next);
+                return [next, ...prev];
               }
               if (payload.eventType === "UPDATE") {
-                const next = payload.new as Booking;
-                if (next.status !== "open") {
-                  return prev.filter((row) => row.id !== next.id);
-                }
-                const exists = prev.some((row) => row.id === next.id);
-                return exists ? prev.map((row) => (row.id === next.id ? next : row)) : [next, ...prev];
+                const next = payload.new as OpenDemand;
+                const exists = prev.some((row) => row.booking_id === next.booking_id);
+                return exists
+                  ? prev.map((row) => (row.booking_id === next.booking_id ? next : row))
+                  : [next, ...prev];
               }
               if (payload.eventType === "DELETE") {
-                return prev.filter((row) => row.id !== (payload.old as Booking).id);
+                const gone = payload.old as OpenDemand;
+                return prev.filter((row) => row.booking_id !== gone.booking_id);
               }
               return prev;
             });

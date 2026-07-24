@@ -81,6 +81,27 @@ export interface ProDocument {
   uploaded_at: ISODate;
 }
 
+/**
+ * What a professional is allowed to see about a request before they are assigned
+ * to it — a redacted projection of an open `Booking` (migration 0028).
+ *
+ * Deliberately missing: `address`, exact coordinates, `notes` and `patient_id`.
+ * Pros need enough to price a job, not enough to turn up at someone's door. The
+ * full `Booking` becomes readable the moment their bid is accepted.
+ */
+export interface OpenDemand {
+  booking_id: UUID;
+  specialty: ProSpecialty;
+  urgency: UrgencyLevel | null;
+  scheduled_at: ISODate | null;
+  budget_min_mad: number | null;
+  budget_max_mad: number | null;
+  area_label: string | null; // "Agdal, Fès" — district + city, never the street
+  approx_lat: number | null; // fuzzed to a ~1 km grid
+  approx_lng: number | null;
+  created_at: ISODate;
+}
+
 export interface Booking {
   id: UUID;
   patient_id: UUID;

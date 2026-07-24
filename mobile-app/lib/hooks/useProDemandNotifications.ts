@@ -21,7 +21,7 @@ import {
   scheduleLocalDemandNotification,
   insertProDemandNotification,
 } from "@/lib/push-native";
-import type { Booking, ProSpecialty } from "@/lib/db/types";
+import type { OpenDemand, ProSpecialty } from "@/lib/db/types";
 
 export interface UseProDemandNotificationsResult {
   /** The professional's specialty sourced from their DB profile. Null while loading. */
@@ -30,7 +30,7 @@ export interface UseProDemandNotificationsResult {
    * Pass this as `onNewDemand` to <LiveBookingsFeed />.
    * Fires an immediate local push + inserts a bell notification row.
    */
-  onNewDemand: (booking: Booking) => Promise<void>;
+  onNewDemand: (demand: OpenDemand) => Promise<void>;
 }
 
 export function useProDemandNotifications(): UseProDemandNotificationsResult {
@@ -58,18 +58,18 @@ export function useProDemandNotifications(): UseProDemandNotificationsResult {
 
   /**
    * Called by <LiveBookingsFeed> (via useOpenBookingsBySpecialty) each time a
-   * new open booking matching the pro's specialty arrives via Supabase realtime.
+   * new redacted demand matching the pro's specialty arrives via Supabase realtime.
    */
   const onNewDemand = useCallback(
-    async (booking: Booking) => {
+    async (demand: OpenDemand) => {
       if (!user?.id) return;
 
       // 1. Immediate local push — visible while app is in foreground.
-      await scheduleLocalDemandNotification(booking.specialty);
+      await scheduleLocalDemandNotification(demand.specialty);
 
       // 2. Persistent bell row — shows in NotificationBell even after the
       //    foreground alert is dismissed or the user reopens the app later.
-      await insertProDemandNotification(user.id, booking.id, booking.specialty);
+      await insertProDemandNotification(user.id, demand.booking_id, demand.specialty);
     },
     [user?.id]
   );

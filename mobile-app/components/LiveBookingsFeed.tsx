@@ -2,7 +2,6 @@
 // import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 // import { Clock, HandCoins, Loader2, Lock, MapPin, Send, ShieldAlert, Stethoscope, Zap } from "lucide-react-native";
 // import { Colors } from "@/lib/colors";
-import { formatAddress } from "@/lib/db/geo";
 // import { useI18n } from "@/lib/i18n";
 // import { useAuth } from "@/lib/auth-context";
 // import { db } from "@/lib/db/dal";
@@ -113,9 +112,9 @@ import { formatAddress } from "@/lib/db/geo";
 //       {verificationBanner}
 //       {bookings.map((booking) => {
 //         const urgent = booking.urgency === "urgent";
-//         const isBidding = bidFor === booking.id;
+//         const isBidding = bidFor === booking.booking_id;
 //         return (
-//           <View key={booking.id} style={styles.card}>
+//           <View key={booking.booking_id} style={styles.card}>
 //             {/* Header */}
 //             <View style={styles.top}>
 //               <View style={styles.iconWrap}>
@@ -181,7 +180,7 @@ import { formatAddress } from "@/lib/db/geo";
 //                   />
 //                   <Text style={styles.inputUnit}>MAD</Text>
 //                 </View>
-//                 <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.id)} disabled={submitting}>
+//                 <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.booking_id)} disabled={submitting}>
 //                   {submitting ? <Loader2 size={16} color="white" /> : <Send size={15} color="white" strokeWidth={2.2} />}
 //                 </TouchableOpacity>
 //                 <TouchableOpacity style={styles.cancelBtn} onPress={() => { setBidFor(null); setErrorMessage(null); }}>
@@ -197,7 +196,7 @@ import { formatAddress } from "@/lib/db/geo";
 //               <TouchableOpacity
 //                 style={styles.offerBtn}
 //                 activeOpacity={0.9}
-//                 onPress={() => { setBidFor(booking.id); setAmount(String(booking.budget_max_mad ?? "")); }}
+//                 onPress={() => { setBidFor(booking.booking_id); setAmount(String(booking.budget_max_mad ?? "")); }}
 //               >
 //                 <HandCoins size={17} color="#FFFFFF" strokeWidth={2} />
 //                 <Text style={styles.offerTxt}>{t("make_offer")}</Text>
@@ -275,7 +274,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import { toastError, toastSuccess } from "@/lib/toast";
-import type { Booking, ProSpecialty, VerificationStatus } from "@/lib/db/types";
+import type { OpenDemand, ProSpecialty, VerificationStatus } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 
@@ -293,7 +292,7 @@ type LiveBookingsFeedProps = {
    * Supabase realtime. Pass the value returned by useProDemandNotifications()
    * to get automatic push notifications + bell rows for the professional.
    */
-  onNewDemand?: (booking: Booking) => void;
+  onNewDemand?: (demand: OpenDemand) => void;
 };
 
 export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedProps) {
@@ -390,9 +389,9 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
       {verificationBanner}
       {bookings.map((booking) => {
         const urgent = booking.urgency === "urgent";
-        const isBidding = bidFor === booking.id;
+        const isBidding = bidFor === booking.booking_id;
         return (
-          <View key={booking.id} style={styles.card}>
+          <View key={booking.booking_id} style={styles.card}>
             {/* Header */}
             <View style={styles.top}>
               <View style={styles.iconWrap}>
@@ -419,12 +418,12 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
 
             {/* Meta */}
             <View style={styles.meta}>
-              {booking.address ? (
-                <View style={styles.metaItem}>
-                  <MapPin size={13} color={Colors.textMuted} />
-                  <Text style={styles.metaText} numberOfLines={1}>{formatAddress(booking.address) || t("at_home")}</Text>
-                </View>
-              ) : null}
+              {/* District + city only. The exact address is deliberately withheld
+                  until this pro is assigned to the job — see migration 0028. */}
+              <View style={styles.metaItem}>
+                <MapPin size={13} color={Colors.textMuted} />
+                <Text style={styles.metaText} numberOfLines={1}>{booking.area_label || t("at_home")}</Text>
+              </View>
               {booking.scheduled_at ? (
                 <View style={styles.metaItem}>
                   <Clock size={13} color={Colors.textMuted} />
@@ -438,9 +437,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
                   </Text>
                 </View>
               ) : null}
-              {booking.notes ? (
-                <Text style={styles.note} numberOfLines={2}>"{booking.notes}"</Text>
-              ) : null}
+
             </View>
 
             {/* CTA / bid */}
@@ -458,7 +455,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
                   />
                   <Text style={styles.inputUnit}>MAD</Text>
                 </View>
-                <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.id)} disabled={submitting}>
+                <TouchableOpacity style={styles.sendBtn} onPress={() => submitBid(booking.booking_id)} disabled={submitting}>
                   {submitting ? <Loader2 size={16} color="white" /> : <Send size={15} color="white" strokeWidth={2.2} />}
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => { setBidFor(null); setErrorMessage(null); }}>
@@ -474,7 +471,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
               <TouchableOpacity
                 style={styles.offerBtn}
                 activeOpacity={0.9}
-                onPress={() => { setBidFor(booking.id); setAmount(String(booking.budget_max_mad ?? "")); }}
+                onPress={() => { setBidFor(booking.booking_id); setAmount(String(booking.budget_max_mad ?? "")); }}
               >
                 <HandCoins size={17} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.offerTxt}>{t("make_offer")}</Text>

@@ -53,7 +53,10 @@ mobile-app/ios/
 temp/
 
 # Supabase
-supabase/migrations/
+# Migrations are the schema's source of truth and MUST be versioned. This used to
+# ignore them, so every one had to be force-added and 0028 was silently dropped
+# from a commit before anyone noticed.
+supabase/.temp/
 supabase/.env*
 
 # Testing
