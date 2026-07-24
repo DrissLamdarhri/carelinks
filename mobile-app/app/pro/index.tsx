@@ -1,5 +1,6 @@
-import { useCallback, useState, useRef} from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   ScrollView,
@@ -18,6 +19,7 @@ import {
   FileText,
   MapPin,
   Navigation,
+  RefreshCw,
   Star,
   Wifi,
   WifiOff,
@@ -50,49 +52,78 @@ export default function ProHomeScreen() {
   const [unread, setUnread] = useState(0);
   const [busy, setBusy] = useState(false);
   const [verification, setVerification] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const pagerRef = useRef<ScrollView>(null);
   const goTab = (next: "requests" | "schedule") => {
     setTab(next);
     pagerRef.current?.scrollTo({ x: next === "requests" ? 0 : SCREEN_W, animated: true });
   };
 
-  // Skip the four-query reload when the data is still fresh — new demands arrive
-  // over realtime anyway, so re-fetching on every tab focus only added latency.
+  // Single loader shared by focus-refresh and the manual refresh button.
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
+  const loadData = useCallback(async () => {
+    if (!user?.id) return;
+    setRefreshing(true);
+    void refreshProfile();
+    try {
+      const pro = await db.pros.get(user.id);
+      if (aliveRef.current) {
+        setSpecialty(pro?.specialty ?? null);
+        setIsOnline(!!pro?.is_available);
+        setVerification(pro?.verification_status ?? null);
+        setRating({ avg: Number(pro?.rating_avg ?? 0), count: Number(pro?.rating_count ?? 0) });
+      }
+      const list = await db.bookings.listForPro(user.id);
+      if (aliveRef.current) setAppointments(list.filter((b) => b.status !== "open"));
+      const un = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .is("read_at", null);
+      if (aliveRef.current) setUnread(un.count ?? 0);
+    } catch {
+      /* pro may not be set up yet */
+    } finally {
+      if (aliveRef.current) {
+        setRefreshing(false);
+        setLastSyncAt(Date.now());
+      }
+    }
+  }, [user?.id, refreshProfile]);
+
+  // Skip the reload when the data is still fresh — new demands arrive over
+  // realtime anyway, so re-fetching on every tab focus only added latency.
   const lastLoadRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
       const now = Date.now();
       if (now - lastLoadRef.current < 20_000) return;
       lastLoadRef.current = now;
-      void refreshProfile();
-      void (async () => {
-        if (!user?.id) return;
-        try {
-          const pro = await db.pros.get(user.id);
-          if (!cancelled) {
-            setSpecialty(pro?.specialty ?? null);
-            setIsOnline(!!pro?.is_available);
-            setVerification(pro?.verification_status ?? null);
-            setRating({ avg: Number(pro?.rating_avg ?? 0), count: Number(pro?.rating_count ?? 0) });
-          }
-          const list = await db.bookings.listForPro(user.id);
-          if (!cancelled) setAppointments(list.filter((b) => b.status !== "open"));
-          const un = await supabase
-            .from("notifications")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", user.id)
-            .is("read_at", null);
-          if (!cancelled) setUnread(un.count ?? 0);
-        } catch {
-          /* pro may not be set up yet */
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [user?.id, refreshProfile])
+      void loadData();
+    }, [loadData])
   );
+
+  // Manual sync from the header button — always fetches, resets the TTL.
+  const onManualRefresh = useCallback(() => {
+    lastLoadRef.current = Date.now();
+    void loadData();
+  }, [loadData]);
+
+  // Human "updated X ago" label; ticks each minute so it stays honest.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const syncLabel = (() => {
+    if (refreshing) return t("syncing");
+    if (!lastSyncAt) return "";
+    const mins = Math.floor((Date.now() - lastSyncAt) / 60_000);
+    if (mins <= 0) return t("updated_just_now");
+    return t("updated_mins_ago").replace("%d", String(mins));
+  })();
 
   const { bookings: openReqs } = useOpenBookingsBySpecialty(specialty);
   // Fires a local push + a bell notification row on every new matching demand.
@@ -169,15 +200,33 @@ export default function ProHomeScreen() {
               <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.bell} onPress={() => router.push("/pro/notifications")}>
-            <Bell size={20} color="#FFFFFF" />
-            {unread > 0 ? (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeTxt}>{unread > 9 ? "9+" : unread}</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            {/* Manual sync — the pro can force a refresh and see it happen. */}
+            <TouchableOpacity
+              style={styles.bell}
+              onPress={onManualRefresh}
+              disabled={refreshing}
+              accessibilityRole="button"
+              accessibilityLabel={t("refresh")}
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <RefreshCw size={19} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bell} onPress={() => router.push("/pro/notifications")}>
+              <Bell size={20} color="#FFFFFF" />
+              {unread > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeTxt}>{unread > 9 ? "9+" : unread}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {syncLabel ? <Text style={styles.syncLabel}>{syncLabel}</Text> : null}
 
         {/* Online switch — big + clear */}
         <TouchableOpacity onPress={toggleOnline} disabled={busy} activeOpacity={0.9} style={[styles.onlineCard, isOnline && styles.onlineCardOn]}>
@@ -246,10 +295,10 @@ export default function ProHomeScreen() {
           <Banknote size={16} color={Colors.primary} />
           <Text style={styles.quickTxt}>{t("nearby_requests")}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/pro/kyc")}>
+        {/* Passive KYC status — shows verification state, no navigation needed. */}
+        <View style={styles.quickBtn}>
           <FileText size={16} color={Colors.primary} />
           <Text style={styles.quickTxt}>{t("kyc_documents")}</Text>
-          {/* Live KYC state — a pro cannot work until this is approved. */}
           {verification ? (
             <View
               style={[
@@ -266,7 +315,7 @@ export default function ProHomeScreen() {
               </Text>
             </View>
           ) : null}
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -397,7 +446,9 @@ const styles = StyleSheet.create({
   avatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)" },
   greeting: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   userName: { color: "white", fontSize: 18, fontWeight: "700" },
+  headerIcons: { flexDirection: "row", alignItems: "center", gap: 8 },
   bell: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+  syncLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: -6, marginBottom: 10 },
   bellBadge: { position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#E24B4A", alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
   bellBadgeTxt: { color: "white", fontSize: 9, fontWeight: "800" },
 
