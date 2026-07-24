@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 import {
   View,
@@ -68,6 +68,7 @@ export default function PatientHomeScreen() {
   const [prosLoading, setProsLoading] = useState(true);
   const [nextBooking, setNextBooking] = useState<Booking | null>(null);
   const [nextProName, setNextProName] = useState<string | null>(null);
+  const [workedWithIds, setWorkedWithIds] = useState<Set<string>>(new Set());
 
   // Refresh profile when screen comes into focus
   // Profile changes rarely — refresh at most once a minute instead of on every
@@ -86,9 +87,10 @@ export default function PatientHomeScreen() {
       void (async () => {
         try {
           // Search around the city default (Fès); real pros from v_pros_public.
+          // Fetch a few extra so we can prioritise before trimming to 3.
           const rows = await geo.findNearbyProsForMap(HOME_CENTER.lat, HOME_CENTER.lng, {
             radiusKm: 100,
-            limit: 6,
+            limit: 12,
           });
           if (alive.current) setNearbyPros(rows);
         } catch {
@@ -100,6 +102,16 @@ export default function PatientHomeScreen() {
         if (user?.id) {
           try {
             const all = await db.bookings.listForPatient(user.id);
+
+            // Pros the patient has actually dealt with before — surfaced first in
+            // "Proches de vous" (a familiar face is friendlier than a stranger).
+            const worked = new Set(
+              all
+                .filter((b) => b.professional_id && ["completed", "in_progress", "en_route", "matched"].includes(b.status))
+                .map((b) => b.professional_id as string),
+            );
+            if (alive.current) setWorkedWithIds(worked);
+
             const upcoming = all
               .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
               .sort((a, b) => {
@@ -123,7 +135,20 @@ export default function PatientHomeScreen() {
     }, [user?.id]),
     30_000,
   );
-  
+
+  // Keep "Proches de vous" short and friendly: at most 3 pros, familiar faces
+  // (already consulted) first, then the nearest.
+  const topPros = useMemo(() => {
+    return [...nearbyPros]
+      .sort((a, b) => {
+        const aw = workedWithIds.has(a.id) ? 0 : 1;
+        const bw = workedWithIds.has(b.id) ? 0 : 1;
+        if (aw !== bw) return aw - bw;
+        return (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9);
+      })
+      .slice(0, 3);
+  }, [nearbyPros, workedWithIds]);
+
   // Use real profile data, fallback to mock for display purposes
   const displayName = {
     firstName: profile?.firstName || mockPatientProfile.firstName,
@@ -139,20 +164,28 @@ export default function PatientHomeScreen() {
         <View style={styles.headerCircle2} />
 
         <View style={styles.headerTop}>
-          <View style={styles.userWrap}>
-              <AvatarWithDefault
-                avatarUrl={avatar}
-                size={44}
-                borderRadius={22}
-                useDefaultImage={!avatar}
-              />
+          {/* Tap the greeting to open your profile — a friendly, expected shortcut. */}
+          <TouchableOpacity
+            style={styles.userWrap}
+            activeOpacity={0.7}
+            onPress={() => router.push("/patient/profile")}
+            accessibilityRole="button"
+            accessibilityLabel={t("open_my_profile")}
+          >
+            <AvatarWithDefault
+              avatarUrl={avatar}
+              size={44}
+              borderRadius={22}
+              useDefaultImage={!avatar}
+            />
             <View>
               <Text style={styles.greeting}>{t("hello")}</Text>
               <Text style={styles.userName}>
                 {displayName.firstName} {displayName.lastName}
               </Text>
             </View>
-          </View>
+            <ChevronRight size={16} color="rgba(255,255,255,0.55)" />
+          </TouchableOpacity>
           <View style={styles.headerActions}>
             <NotificationBell />
           </View>
@@ -247,14 +280,15 @@ export default function PatientHomeScreen() {
         <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
         {prosLoading ? (
           <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primary} />
-        ) : nearbyPros.length === 0 ? (
+        ) : topPros.length === 0 ? (
           <View style={styles.emptyPros}>
             <Text style={styles.emptyProsText}>{t("no_pros_nearby")}</Text>
           </View>
         ) : (
-          nearbyPros.map((n) => {
+          topPros.map((n) => {
             const name = n.full_name || t("professional");
             const specLabel = SPEC_LABEL[n.specialty] ? t(SPEC_LABEL[n.specialty]) : n.specialty;
+            const knownBefore = workedWithIds.has(n.id);
             return (
               <TouchableOpacity
                 key={n.id}
@@ -268,7 +302,14 @@ export default function PatientHomeScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.proName} numberOfLines={1}>{name}</Text>
-                  <Text style={styles.proSpecialty}>{specLabel}</Text>
+                  <View style={styles.proSpecRow}>
+                    <Text style={styles.proSpecialty}>{specLabel}</Text>
+                    {knownBefore ? (
+                      <View style={styles.knownBadge}>
+                        <Text style={styles.knownBadgeText}>{t("worked_together")}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <View style={styles.proMetaRow}>
                     <Star size={11} color="#FBBF24" fill="#FBBF24" />
                     <Text style={styles.proMetaText}>{(n.rating_avg ?? 0).toFixed(1)}</Text>
@@ -308,7 +349,17 @@ export default function PatientHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
           <TouchableOpacity
-            onPress={() => router.push(`/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`)}
+            onPress={() => {
+              // Only open the live map when the pro is actually moving/working —
+              // opening tracking for a future 'matched' booking would show a
+              // frozen, meaningless "live" session. Otherwise go to the booking.
+              const live = nextBooking.status === "en_route" || nextBooking.status === "in_progress";
+              router.push(
+                live
+                  ? `/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`
+                  : "/patient/bookings",
+              );
+            }}
             activeOpacity={0.9}
           >
             <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
@@ -490,6 +541,9 @@ const styles = StyleSheet.create({
   proAvatar: { width: 54, height: 54, borderRadius: 16 },
   proName: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600", marginBottom: 1 },
   proSpecialty: { color: Colors.textMuted, fontSize: 12, marginBottom: 4, textTransform: "capitalize" },
+  proSpecRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  knownBadge: { backgroundColor: "#E7F6EC", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 4 },
+  knownBadgeText: { color: "#16A34A", fontSize: 9.5, fontWeight: "700" },
   proMetaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   proMetaText: { color: Colors.textMuted, fontSize: 11 },
   proMetaDot: { color: Colors.textSubtle, fontSize: 11 },
