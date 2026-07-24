@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { Buffer } from "buffer";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/lib/toast";
 
@@ -36,23 +37,24 @@ export async function uploadAvatarToSupabase(
   mimeType: string = "image/jpeg"
 ): Promise<string | null> {
   try {
-    const fileName = `${userId}-${Date.now()}.jpg`;
-    
-    // Read file as binary
+    // MUST live in a folder named after the user's UID: the avatars RLS policy
+    // checks `storage.foldername(name)[1] = auth.uid()`. A flat "uid-123.jpg"
+    // has no folder, so the insert was rejected → StorageApiError. Use "uid/…".
+    const filePath = `${userId}/${Date.now()}.jpg`;
+
+    // Read file as base64, then to bytes for a reliable binary upload in RN.
     const fileContent = await FileSystem.readAsStringAsync(imageUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
-
-    // Convert base64 to bytes
-    const binaryString = atob(fileContent);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    if (!fileContent) {
+      showToast("Image vide, réessayez.");
+      return null;
     }
+    const bytes = Buffer.from(fileContent, "base64");
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from("avatars")
-      .upload(fileName, bytes, {
+      .upload(filePath, bytes, {
         contentType: mimeType,
         cacheControl: "3600",
         upsert: true,
@@ -66,7 +68,7 @@ export async function uploadAvatarToSupabase(
 
     const {
       data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(fileName);
+    } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
     return publicUrl;
   } catch (error) {

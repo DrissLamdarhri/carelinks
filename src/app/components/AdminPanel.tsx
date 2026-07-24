@@ -1444,7 +1444,9 @@ export function AdminPanel() {
                       {pending.length}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-3">
+                  {/* Scroll the list inside its own box so a long queue doesn't
+                      blow out the dashboard height. */}
+                  <div className="flex flex-col gap-3 overflow-y-auto pr-1" style={{ maxHeight: 520 }}>
                     {pending.length === 0 ? (
                       <div className="flex flex-col items-center py-6">
                         <CheckCircle2 size={32} className="text-[#16A34A] mb-2" />

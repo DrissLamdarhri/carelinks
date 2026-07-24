@@ -8,8 +8,12 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+
+const SCREEN_W = Dimensions.get("window").width;
+const CARD_W = Math.round(SCREEN_W * 0.82);
 import { ArrowLeft, Calendar, Clock3, Heart, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
@@ -223,13 +227,7 @@ export default function YogaCatalogScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.list}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -248,7 +246,18 @@ export default function YogaCatalogScreen() {
             </Text>
           </View>
         ) : (
-          filteredSessions.map((session) => (
+          // Friendly left/right carousel: swipe through classes; the level chips
+          // above filter what shows here.
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={CARD_W + 14}
+            snapToAlignment="start"
+            contentContainerStyle={styles.carousel}
+            scrollEventThrottle={16}
+          >
+          {filteredSessions.map((session) => (
             <View key={session.id} style={styles.card}>
             <View style={styles.cardImageWrap}>
               <Image source={{ uri: session.img }} style={styles.cardImage} />
@@ -314,9 +323,10 @@ export default function YogaCatalogScreen() {
               </View>
             </View>
           </View>
-        ))
+          ))}
+          </ScrollView>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -355,7 +365,9 @@ const styles = StyleSheet.create({
   filterTextActive: { color: "white" },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 36, gap: 14 },
+  carousel: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 24, gap: 14 },
   card: {
+    width: CARD_W,
     backgroundColor: "white",
     borderRadius: 18,
     overflow: "hidden",
