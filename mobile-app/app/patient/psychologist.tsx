@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
 import type { PlanType, Recurrence, SessionMode } from "@/lib/db/types";
+import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 const DEFAULT_PRICE = 200; // MAD per session
 // Fallback remote links used only if the psychologist hasn't saved their own yet.
@@ -45,6 +46,7 @@ export default function PsychologistBookingScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
+  const { ensureVerified } = useIdentityGate();
   const params = useLocalSearchParams<{ proId?: string; name?: string; price?: string }>();
   const psyName = (typeof params.name === "string" && params.name) || "Dr. Dalila Mansouri";
   const psyInitials = psyName.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "DM";
@@ -80,6 +82,8 @@ export default function PsychologistBookingScreen() {
   const handleReserve = async () => {
     if (!user?.id) { Alert.alert(t("error"), t("please_login_book")); return; }
     if (!canConfirm) return;
+    // Identity gate — verified once, before the first booking (migration 0030).
+    if (!(await ensureVerified())) return;
     setConfirming(true);
     try {
       const time = selectedSlot !== null ? slots[selectedSlot] : "09:00";

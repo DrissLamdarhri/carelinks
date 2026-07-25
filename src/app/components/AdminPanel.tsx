@@ -7,6 +7,7 @@ import { NotificationBell } from "./NotificationBell";
 import { ProfessionalsManager } from "./ProfessionalsManager";
 import { PayoutsManager } from "./PayoutsManager";
 import { PaymentsManager } from "./PaymentsManager";
+import { PatientIdentityManager } from "./PatientIdentityManager";
 import { YogaManager } from "./YogaManager";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
@@ -18,7 +19,7 @@ import {
   Syringe, Heart, Brain, Baby, Bone, Ear, Pill, Thermometer,
   Bandage, HandHeart, Clipboard, Zap, CheckCircle2, XCircle,
   MoreVertical, ChevronDown, Filter, Download, RefreshCw,
-  BookOpen, ArrowUpRight, ArrowDownRight, Banknote, Wallet
+  BookOpen, ArrowUpRight, ArrowDownRight, Banknote, Wallet, ShieldCheck
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -28,7 +29,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type AdminTab = "dashboard" | "users" | "professionals" | "service-types" | "yoga" | "bookings" | "payouts" | "payments" | "settings";
+type AdminTab = "dashboard" | "users" | "identities" | "professionals" | "service-types" | "yoga" | "bookings" | "payouts" | "payments" | "settings";
 
 type ServiceCategory = "Infirmier" | "Psychologue" | "Yoga" | "Pédiatrie" | "Urgences" | "Autre";
 type Service = {
@@ -1093,6 +1094,7 @@ export function AdminPanel() {
   const navItems: { key: AdminTab; icon: typeof LayoutDashboard; label: string; badge?: number }[] = [
     { key: "dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
     { key: "users", icon: Users, label: "Patients", badge: 0 },
+    { key: "identities", icon: ShieldCheck, label: "Identités patients" },
     { key: "professionals", icon: UserCheck, label: "Professionnels", badge: pending.length },
     { key: "service-types", icon: Clipboard, label: "Types de soins" },
     { key: "bookings", icon: BookOpen, label: "Réservations" },
@@ -1706,6 +1708,8 @@ export function AdminPanel() {
 
           {/* ======= PROFESSIONALS ======= */}
           {tab === "professionals" && <ProfessionalsManager />}
+
+          {tab === "identities" && <PatientIdentityManager />}
 
           {tab === "payouts" && <PayoutsManager />}
 

@@ -45,6 +45,7 @@ import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
 import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
 import { useServiceTypes } from "@/lib/service-types";
+import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
@@ -153,6 +154,7 @@ export default function PatientRequestScreen() {
   const { t } = useI18n();
   const params = useLocalSearchParams<{ service?: string }>();
   const { user } = useAuth();
+  const { ensureVerified } = useIdentityGate();
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
   const normalizedService = initialService.toLowerCase();
   const isKine = isKineService(normalizedService);
@@ -314,6 +316,8 @@ export default function PatientRequestScreen() {
 
   const handleSubmit = async () => {
     if (!user?.id || !canSubmit || submitting) return;
+    // Identity gate — a pro is about to enter this person's home (migration 0030).
+    if (!(await ensureVerified())) return;
     setErrorMessage(null);
     setSubmitting(true);
     try {

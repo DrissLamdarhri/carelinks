@@ -10,6 +10,7 @@ import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { UrgencyLevel } from "@/lib/db/types";
+import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 const RED = "#E24B4A";
 const RED_DARK = "#B91C1C";
@@ -29,6 +30,7 @@ export default function UrgentScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
+  const { ensureVerified } = useIdentityGate();
   const [level, setLevel] = useState<Extract<UrgencyLevel, "urgent" | "emergency">>("urgent");
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [address, setAddress] = useState("");
@@ -72,6 +74,8 @@ export default function UrgentScreen() {
   const submit = async () => {
     if (!user?.id) { toastError(t("please_login_book")); return; }
     if (!canSubmit || submitting) return;
+    // Identity gate — a pro is about to enter this person's home (migration 0030).
+    if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
       let gps = coords;

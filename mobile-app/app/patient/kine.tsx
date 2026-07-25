@@ -10,6 +10,7 @@ import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
 import { toastError } from "@/lib/toast";
 import type { Recurrence } from "@/lib/db/types";
+import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 const KINE = "#059669";
 const KINE_DARK = "#065F46";
@@ -44,6 +45,7 @@ export default function KineScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
+  const { ensureVerified } = useIdentityGate();
   const [mode, setMode] = useState<"single" | "program">("program");
   const [kines, setKines] = useState<Kine[]>(DEMO_KINE);
   const [kineId, setKineId] = useState<string>(DEMO_KINE[0].id);
@@ -71,6 +73,8 @@ export default function KineScreen() {
 
   const reserve = async () => {
     if (!user?.id || submitting) return;
+    // Identity gate — a pro is about to enter this person's home (migration 0030).
+    if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
       const [h, m] = ["10", "00"];

@@ -36,11 +36,16 @@ export interface Profile {
   consent_share_data?: boolean | null;
   cancel_warnings?: number | null;
   is_suspended?: boolean | null;
+  /** Mirrored from patients.id_status (migration 0030). The ONLY identity
+   *  signal a professional is allowed to see — never the CIN number or photo. */
+  identity_verified?: boolean | null;
   consent_reminders?: boolean | null;
   consent_analytics?: boolean | null;
   created_at: ISODate;
   updated_at: ISODate;
 }
+
+export type IdentityStatus = "unverified" | "pending" | "approved" | "rejected";
 
 export interface Patient {
   id: UUID;
@@ -49,6 +54,15 @@ export interface Patient {
   emergency_contact_phone: string | null;
   medical_notes: string | null;
   created_at: ISODate;
+  // Identity (CIN) verification — migration 0030. The photo path is only ever
+  // readable by the owner and admins; pros see profiles.identity_verified.
+  cin_number: string | null;
+  cin_photo_path: string | null;
+  id_status: IdentityStatus;
+  id_submitted_at: ISODate | null;
+  id_verified_at: ISODate | null;
+  id_verified_by: UUID | null;
+  id_rejection_reason: string | null;
 }
 
 export interface Professional {

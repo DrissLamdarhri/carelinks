@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Phone } from "lucide-react-native";
+import { ArrowLeft, BadgeCheck, Phone } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
@@ -81,8 +81,14 @@ export default function ProChatScreen() {
             <View style={styles.avatarFallback}><Text style={styles.avatarFallbackText}>{initials}</Text></View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={1}>{name}</Text>
-            <Text style={styles.subtitle}>{t("patient")}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.title} numberOfLines={1}>{name}</Text>
+              {/* Identity badge only — the CIN itself is never exposed to pros. */}
+              {recipient?.identity_verified ? <BadgeCheck size={15} color="#16A34A" /> : null}
+            </View>
+            <Text style={styles.subtitle}>
+              {recipient?.identity_verified ? t("identity_verified") : t("patient")}
+            </Text>
           </View>
         </View>
         <TouchableOpacity style={styles.iconBtn} onPress={() => { if (recipient?.phone) void Linking.openURL(`tel:${recipient.phone}`); }}>
@@ -109,7 +115,8 @@ const styles = StyleSheet.create({
   avatar: { width: 40, height: 40, borderRadius: 20 },
   avatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#E7E4FA", alignItems: "center", justifyContent: "center" },
   avatarFallbackText: { color: NAVY, fontSize: 13, fontWeight: "800" },
-  title: { fontSize: 15.5, color: Colors.textPrimary, fontWeight: "800" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  title: { fontSize: 15.5, color: Colors.textPrimary, fontWeight: "800", flexShrink: 1 },
   subtitle: { fontSize: 11.5, color: "#25D366", fontWeight: "600" },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center" },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 40, flex: 1 },

@@ -126,6 +126,7 @@ function PatientTabs() {
       <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="waiting/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="verify-identity" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="patient-policy" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="addresses" options={hiddenFullScreenOptions} />
