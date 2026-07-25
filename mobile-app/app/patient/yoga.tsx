@@ -8,12 +8,9 @@ import {
   View,
   ActivityIndicator,
   Alert,
-  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 
-const SCREEN_W = Dimensions.get("window").width;
-const CARD_W = Math.round(SCREEN_W * 0.82);
 import { ArrowLeft, Calendar, Clock3, Heart, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
@@ -96,6 +93,7 @@ export default function YogaCatalogScreen() {
           hour: "2-digit", 
           minute: "2-digit" 
         }),
+        startsAtISO: s.startsAt,
         spots: s.capacity - s.enrolledCount,
         rating: 4.8,
         img: s.imageUrl || "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
@@ -104,7 +102,11 @@ export default function YogaCatalogScreen() {
 
   const filteredSessions = useMemo(() => {
     if (activeFilter === "Tous") return sessions;
-    return sessions.filter((session) => session.level === activeFilter);
+    // A "Tous niveaux" class suits every level, so it must stay visible under
+    // each filter — otherwise picking "Débutant" hides classes open to them.
+    return sessions.filter(
+      (session) => session.level === activeFilter || session.level === "Tous niveaux",
+    );
   }, [activeFilter, sessions]);
 
   const handleReserveYoga = async (session: typeof sessions[0]) => {
@@ -155,7 +157,7 @@ export default function YogaCatalogScreen() {
             specialty: "yoga_instructor",
             status: "matched",
             urgency: "normal",
-            scheduled_at: session.date || new Date().toISOString(),
+            scheduled_at: session.startsAtISO || new Date().toISOString(),
             address: t("yoga_class"),
             notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
             budget_min_mad: session.price,
@@ -246,23 +248,18 @@ export default function YogaCatalogScreen() {
             </Text>
           </View>
         ) : (
-          // Friendly left/right carousel: swipe through classes; the level chips
-          // above filter what shows here.
+          // Classes stay a vertical column — the only left/right scrolling on
+          // this screen is the level filter row above (débutant → intermédiaire…).
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            snapToInterval={CARD_W + 14}
-            snapToAlignment="start"
-            contentContainerStyle={styles.carousel}
-            scrollEventThrottle={16}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
           >
           {filteredSessions.map((session) => (
             <View key={session.id} style={styles.card}>
             <View style={styles.cardImageWrap}>
               <Image source={{ uri: session.img }} style={styles.cardImage} />
               <View style={styles.imageOverlay} />
-              <Text style={styles.levelBadge}>{t(session.level)}</Text>
+              <Text style={styles.levelBadge}>{session.level}</Text>
               <TouchableOpacity
                 onPress={() =>
                   setLikes((prev) => ({ ...prev, [session.id]: !prev[session.id] }))
@@ -365,9 +362,7 @@ const styles = StyleSheet.create({
   filterTextActive: { color: "white" },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 36, gap: 14 },
-  carousel: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 24, gap: 14 },
   card: {
-    width: CARD_W,
     backgroundColor: "white",
     borderRadius: 18,
     overflow: "hidden",

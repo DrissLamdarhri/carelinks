@@ -1925,8 +1925,9 @@ export function AdminPanel() {
                             </div>
                           </div>
                           <div className="text-right">
+                            {/* b.price already carries its " MAD" unit — a second
+                                label here rendered as "100 MAD MAD". */}
                             <p className="text-2xl text-[#0D0870] font-bold">{b.price}</p>
-                            <p className="text-xs text-[#888780]">MAD</p>
                           </div>
                         </div>
 

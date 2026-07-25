@@ -430,6 +430,10 @@ export default function ProRegistrationScreen() {
                 style={styles.phoneInput}
                 placeholder="6 12 34 56 78"
                 placeholderTextColor={Colors.textSubtle}
+                keyboardType="phone-pad"
+                textContentType="telephoneNumber"
+                autoComplete="tel"
+                maxLength={13}
               />
             </View>
 
