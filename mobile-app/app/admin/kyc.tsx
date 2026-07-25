@@ -131,6 +131,32 @@ export default function KycModerationQueueScreen() {
         .eq("id", professionalId);
       if (proError) throw proError;
 
+      // Notify the pro (in-app + email + WhatsApp) — server-side, best-effort.
+      // If the function is unreachable, or it reports that its in-app channel
+      // failed, insert the notification directly so an approved pro is never
+      // left uninformed. Never let a notification failure fail the approval.
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke("notify-pro-status", {
+          body: { proId: professionalId, decision },
+        });
+        const inApp = data?.result?.notification;
+        if (fnError || (typeof inApp === "string" && inApp.startsWith("error"))) {
+          throw fnError ?? new Error(String(inApp));
+        }
+      } catch (e) {
+        console.warn("notify-pro-status failed — falling back to direct notification:", e);
+        await supabase.from("notifications").insert({
+          user_id: professionalId,
+          kind: "system",
+          title: decision === "approved" ? "Compte approuvé ✅" : "Dossier à corriger",
+          body:
+            decision === "approved"
+              ? "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes."
+              : "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
+          payload: { decision },
+        });
+      }
+
       // Log audit (non-critical)
       try {
         const { error: auditError } = await supabase.rpc("log_audit", {

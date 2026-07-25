@@ -29,6 +29,9 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 
 const DICT: Record<Locale, Record<string, string>> = {
   en: {
+    kyc_review_title: "Application under review", kyc_review_sub: "Our team is verifying your documents. You'll be notified once approved — usually within 24–48h.", kyc_review_hint: "You'll receive an email and a WhatsApp message as soon as your account is approved.",
+    kyc_rejected_title: "Application needs changes", kyc_rejected_sub: "Some documents must be updated before approval.",
+    kyc_step_account: "Account created", kyc_step_documents: "Documents submitted", kyc_step_review: "Team verification", kyc_resubmit: "Re-submit my documents", kyc_check_status: "Refresh status", contact_support: "Contact support",
     welcome: "Welcome", booking: "Booking", bookings_mine: "My bookings", new_request: "New request",
     accept: "Accept", cancel: "Cancel", chat: "Messages", profile: "Profile", notifications: "Notifications",
     sign_out: "Sign out", pay_now: "Pay now", rate_pro: "Rate the professional", yoga: "Yoga",
@@ -49,6 +52,9 @@ const DICT: Record<Locale, Record<string, string>> = {
     request_sent: "Request sent", offer_accepted: "Offer accepted", payment_confirmed: "Payment confirmed",
   },
   ar: {
+    kyc_review_title: "ملفك قيد المراجعة", kyc_review_sub: "يقوم فريقنا بالتحقق من وثائقك. سيتم إشعارك فور الموافقة — عادة خلال 24–48 ساعة.", kyc_review_hint: "ستتوصل برسالة عبر البريد الإلكتروني وواتساب بمجرد الموافقة على حسابك.",
+    kyc_rejected_title: "ملف يحتاج إلى تصحيح", kyc_rejected_sub: "يجب تحديث بعض الوثائق قبل الموافقة.",
+    kyc_step_account: "تم إنشاء الحساب", kyc_step_documents: "تم إرسال الوثائق", kyc_step_review: "التحقق من طرف الفريق", kyc_resubmit: "إعادة إرسال الوثائق", kyc_check_status: "تحديث الحالة", contact_support: "الاتصال بالدعم",
     welcome: "مرحبا", booking: "حجز", bookings_mine: "حجوزاتي", new_request: "طلب جديد", accept: "قبول",
     cancel: "إلغاء", chat: "المحادثة", profile: "الملف الشخصي", notifications: "الإشعارات", sign_out: "تسجيل الخروج",
     pay_now: "ادفع الآن", rate_pro: "قيِّم المهني", yoga: "يوغا", nurse: "ممرض", psychologist: "طبيب نفسي",
@@ -241,6 +247,9 @@ const DICT: Record<Locale, Record<string, string>> = {
     penalty_applied: "تم تطبيق غرامة {n} درهم.", warning_count: "تحذير {n}/2.",
   },
   fr: {
+    kyc_review_title: "Dossier en cours d'examen", kyc_review_sub: "Notre équipe vérifie vos documents. Vous serez notifié dès validation — généralement sous 24–48h.", kyc_review_hint: "Vous recevrez un email et un message WhatsApp dès que votre compte sera approuvé.",
+    kyc_rejected_title: "Dossier à corriger", kyc_rejected_sub: "Certains documents doivent être mis à jour avant validation.",
+    kyc_step_account: "Compte créé", kyc_step_documents: "Documents envoyés", kyc_step_review: "Vérification par l'équipe", kyc_resubmit: "Re-soumettre mes documents", kyc_check_status: "Actualiser le statut", contact_support: "Contacter le support",
     welcome: "Bienvenue", booking: "Réservation", bookings_mine: "Mes réservations", new_request: "Nouvelle demande",
     accept: "Accepter", cancel: "Annuler", chat: "Messagerie", profile: "Profil", notifications: "Notifications",
     sign_out: "Se déconnecter", pay_now: "Payer maintenant", rate_pro: "Évaluer le pro", yoga: "Yoga", nurse: "Infirmier",

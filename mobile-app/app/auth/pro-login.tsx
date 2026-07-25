@@ -94,12 +94,9 @@ export default function ProLoginScreen() {
           return;
         }
 
-        if (proData.verification_status !== "approved") {
-          // Professional not verified - redirect to upload documents
-          showToast(t("pro_not_verified"));
-          router.replace("/auth/pro-registration");
-          return;
-        }
+        // Not-yet-approved pros are allowed in — the /pro layout gate routes
+        // them to the "under review" screen (/pro/pending) instead of bouncing
+        // them back to registration and losing their session.
       }
 
       handleRoleMismatch(result.role);

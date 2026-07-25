@@ -1,0 +1,10 @@
+{
+  "$comment": "Marks supabase/functions as Deno code. Edge Functions run on Deno, not Node — without this the editor's TypeScript server reports false errors ('Cannot find name Deno'). Enable the Deno VS Code extension for this folder to pick it up.",
+  "compilerOptions": {
+    "lib": ["deno.window", "esnext"],
+    "strict": true
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.168.0/"
+  }
+}

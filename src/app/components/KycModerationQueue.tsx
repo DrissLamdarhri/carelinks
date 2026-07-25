@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { sendApprovalEmail, sendRejectionEmail, getAdminSignedUrl, getPendingPros, getProDocumentsAdmin } from "../../lib/api";
+import { getAdminSignedUrl, getPendingPros, getProDocumentsAdmin } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -78,30 +78,32 @@ export function KycModerationQueue() {
       if (status === "approved") {
         await supabase.from("pro_documents").update({ is_verified: true }).eq("professional_id", proId);
       }
-      await supabase.from("notifications").insert({
-        user_id: proId,
-        kind: "system",
-        title: status === "approved" ? "Compte approuvé" : "Compte rejeté",
-        body: status === "approved"
-          ? "Votre dossier a été validé. Vous pouvez recevoir des demandes."
-          : "Votre dossier nécessite des corrections.",
-        payload: {},
-      });
       toast.success(status === "approved" ? "Pro approuvé" : "Pro rejeté");
 
-      // Send email (best-effort) + create notification already done above
+      // Notify the pro (in-app + email + WhatsApp) — single server-side source
+      // of truth so mobile & web admin behave identically. If the function is
+      // unreachable or its in-app channel failed, insert the notification
+      // directly so an approved pro is never left uninformed.
       try {
-        const [{ data: profile }, { data: proRow }] = await Promise.all([
-          supabase.from('profiles').select('full_name,email').eq('id', proId).single(),
-          supabase.from('professionals').select('specialty').eq('id', proId).single(),
-        ]);
-        if (profile?.email) {
-          try {
-            if (status === 'approved') await sendApprovalEmail(profile.email, profile.full_name ?? '', proRow?.specialty ?? '');
-            else await sendRejectionEmail(profile.email, profile.full_name ?? '', 'Votre dossier a été rejeté lors de la modération');
-          } catch (e) { console.warn('send email failed', e); }
+        const { data, error: fnError } = await supabase.functions.invoke("notify-pro-status", {
+          body: { proId, decision: status },
+        });
+        const inApp = (data as any)?.result?.notification;
+        if (fnError || (typeof inApp === "string" && inApp.startsWith("error"))) {
+          throw fnError ?? new Error(String(inApp));
         }
-      } catch (e) { console.warn('failed to fetch profile for email', e); }
+      } catch (e) {
+        console.warn("notify-pro-status failed — falling back to direct notification", e);
+        await supabase.from("notifications").insert({
+          user_id: proId,
+          kind: "system",
+          title: status === "approved" ? "Compte approuvé ✅" : "Dossier à corriger",
+          body: status === "approved"
+            ? "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes."
+            : "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
+          payload: { decision: status },
+        });
+      }
 
       // Broadcast optimistic UI update to other admin components
       try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status } })); } catch {}
