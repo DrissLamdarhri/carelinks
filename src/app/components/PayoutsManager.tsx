@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
-import { Banknote, Check, Clock, Copy, RefreshCw, Wallet, X } from "lucide-react";
+import { Banknote, Check, Clock, Copy, PiggyBank, RefreshCw, TrendingUp, X } from "lucide-react";
 
 // Admin view for pro withdrawal requests. Pros tap "Retirer" in the app which
 // inserts a `payouts` row (status 'requested'); this is where an admin actually
 // actions it: requested -> processing -> paid, or rejects it. Advancing the
 // status is what makes the payout real (the bank transfer itself is offline).
+//
+// Also the home of the one number that was missing anywhere in the admin
+// panel: CareLink's own revenue. Every other view showed gross transaction
+// volume (GMV) — never the commission actually kept. The money model is: a
+// patient's payment lands in full in the platform's account; the commission
+// simply never leaves, and the rest is a liability paid out later via this
+// screen. So "how much have we earned" = sum(commission_mad) on captured
+// payments, independent of whether it's been paid out to pros yet.
 
 // 007 780 0001234567890123 45 — grouped the way a bank shows it, so an admin can
 // eyeball it against their transfer form.
@@ -38,8 +46,11 @@ const STATUS_STYLE: Record<PayoutStatus, { bg: string; fg: string; label: string
   rejected: { bg: "#FDE8E8", fg: "#B91C1C", label: "Rejeté" },
 };
 
+type Revenue = { grossAllTime: number; commissionAllTime: number; commissionThisMonth: number };
+
 export function PayoutsManager() {
   const [rows, setRows] = useState<PayoutRow[]>([]);
+  const [revenue, setRevenue] = useState<Revenue>({ grossAllTime: 0, commissionAllTime: 0, commissionThisMonth: 0 });
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<PayoutStatus | "all">("all");
@@ -47,11 +58,15 @@ export function PayoutsManager() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data: payouts, error } = await supabase
-        .from("payouts")
-        .select("id, professional_id, amount_mad, status, method, note, created_at, processed_at, holder_name, bank_name, rib")
-        .order("created_at", { ascending: false });
+      const [{ data: payouts, error }, { data: payments, error: payError }] = await Promise.all([
+        supabase
+          .from("payouts")
+          .select("id, professional_id, amount_mad, status, method, note, created_at, processed_at, holder_name, bank_name, rib")
+          .order("created_at", { ascending: false }),
+        supabase.from("payments").select("amount_mad, commission_mad, status, created_at"),
+      ]);
       if (error) throw error;
+      if (payError) throw payError;
 
       const proIds = Array.from(new Set((payouts ?? []).map((p: any) => p.professional_id)));
       const names = new Map<string, string>();
@@ -63,6 +78,16 @@ export function PayoutsManager() {
         for (const p of profiles ?? []) names.set(p.id as string, (p.full_name as string) || "—");
       }
       setRows((payouts ?? []).map((p: any) => ({ ...p, pro_name: names.get(p.professional_id) ?? "—" })));
+
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      const captured = (payments ?? []).filter((p: any) => p.status === "captured");
+      setRevenue({
+        grossAllTime: captured.reduce((s: number, p: any) => s + Number(p.amount_mad), 0),
+        commissionAllTime: captured.reduce((s: number, p: any) => s + Number(p.commission_mad), 0),
+        commissionThisMonth: captured
+          .filter((p: any) => p.created_at >= monthStart)
+          .reduce((s: number, p: any) => s + Number(p.commission_mad), 0),
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Erreur de chargement des retraits");
     } finally {
@@ -75,6 +100,7 @@ export function PayoutsManager() {
     const sub = supabase
       .channel("payouts_admin")
       .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => void load())
       .subscribe();
     return () => {
       void supabase.removeChannel(sub);
@@ -110,6 +136,14 @@ export function PayoutsManager() {
     () => rows.filter((r) => r.status === "paid").reduce((s, r) => s + Number(r.amount_mad), 0),
     [rows],
   );
+  // Everything collected, minus what's already left the account (paid out)
+  // and what's already earmarked to leave (requested/processing). What
+  // remains includes the retained commission plus any pro earnings nobody
+  // has requested yet — i.e. exactly what's sitting in the account right now.
+  const netCash = useMemo(
+    () => revenue.grossAllTime - paidTotal - pendingTotal,
+    [revenue.grossAllTime, paidTotal, pendingTotal],
+  );
 
   const copyRib = async (rib: string) => {
     try {
@@ -127,8 +161,8 @@ export function PayoutsManager() {
     <div style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
-          <h2 className="text-xl" style={{ fontWeight: 700, color: "#1A1A1A" }}>Retraits</h2>
-          <p className="text-sm" style={{ color: "#888780" }}>Demandes de retrait des professionnels</p>
+          <h2 className="text-xl" style={{ fontWeight: 700, color: "#1A1A1A" }}>Retraits &amp; revenus</h2>
+          <p className="text-sm" style={{ color: "#888780" }}>Ce que gagne CareLink, et ce qui est dû aux professionnels</p>
         </div>
         <button
           onClick={() => void load()}
@@ -139,11 +173,37 @@ export function PayoutsManager() {
         </button>
       </div>
 
+      {/* Revenue — the number that was missing everywhere else in the admin
+          panel: not gross transaction volume (shown on the dashboard as GMV),
+          but what CareLink actually keeps. A patient's payment lands in full
+          in the account; the commission below is the slice that never leaves —
+          it doesn't wait for a payout to "become" revenue. */}
+      <div
+        className="rounded-2xl p-5 mb-4"
+        style={{ background: "linear-gradient(135deg, #0D0870 0%, #241A9E 100%)" }}
+      >
+        <div className="flex items-center gap-2 mb-1" style={{ color: "rgba(255,255,255,0.7)" }}>
+          <TrendingUp size={15} />
+          <span className="text-xs" style={{ fontWeight: 600 }}>Revenu CareLink (commission)</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
+          <div>
+            <div className="text-3xl" style={{ fontWeight: 800, color: "white" }}>{money(revenue.commissionAllTime)}</div>
+            <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.65)" }}>depuis le début</div>
+          </div>
+          <div>
+            <div className="text-xl" style={{ fontWeight: 700, color: "white" }}>{money(revenue.commissionThisMonth)}</div>
+            <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.65)" }}>ce mois-ci</div>
+          </div>
+        </div>
+      </div>
+
       {/* Summary cards */}
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-        <SummaryCard icon={Clock} label="À traiter" value={money(pendingTotal)} tint="#B45309" bg="#FFF7E6" />
-        <SummaryCard icon={Check} label="Déjà payé" value={money(paidTotal)} tint="#15803D" bg="#DCFCE7" />
-        <SummaryCard icon={Wallet} label="Demandes" value={String(rows.length)} tint="#0D0870" bg="#EEF0FB" />
+        <SummaryCard icon={Banknote} label="Encaissé (patients)" value={money(revenue.grossAllTime)} tint="#0D0870" bg="#EEF0FB" />
+        <SummaryCard icon={PiggyBank} label="Solde net en caisse" value={money(netCash)} tint="#15803D" bg="#DCFCE7" />
+        <SummaryCard icon={Clock} label="À traiter (dû aux pros)" value={money(pendingTotal)} tint="#B45309" bg="#FFF7E6" />
+        <SummaryCard icon={Check} label="Déjà payé aux pros" value={money(paidTotal)} tint="#0369A1" bg="#E0F2FE" />
       </div>
 
       {/* Status filter */}
