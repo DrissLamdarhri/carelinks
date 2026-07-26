@@ -16,6 +16,7 @@ Internal engineering documentation for the CareLink home-care marketplace. Start
 | [map-option-b-maplibre.md](map-option-b-maplibre.md) | Alternative: MapLibre + MapTiler (only if you need pixel-perfect custom cartography) |
 | [tech-debt-and-security.md](tech-debt-and-security.md) | Before shipping — dead code, duplication, and security landmines |
 | [setup-and-deployment.md](setup-and-deployment.md) | Set up locally or deploy the DB / Edge Functions / mobile build |
+| [BACKUP_AND_DISASTER_RECOVERY.md](BACKUP_AND_DISASTER_RECOVERY.md) | Before you need it — how the project is backed up, and the exact steps to rebuild from zero |
 
 ## Product in one paragraph
 

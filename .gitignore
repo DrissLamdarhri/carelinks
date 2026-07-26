@@ -59,6 +59,15 @@ temp/
 supabase/.temp/
 supabase/.env*
 
+# Backups — MUST NEVER be committed. Contains real patient CIN numbers, phone
+# numbers, medical/booking data and pro bank RIBs. See scripts/backup/ and
+# docs/BACKUP_AND_DISASTER_RECOVERY.md. Store the produced archive in an
+# encrypted, access-controlled location outside this repo.
+/backups/
+scripts/backup/.env.backup
+*.sql.gz
+*.dump
+
 # Testing
 coverage/
 .nyc_output/

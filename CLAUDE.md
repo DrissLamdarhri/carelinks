@@ -2,11 +2,14 @@
 
 CareLink is an **on-demand home-care marketplace for Morocco** (InDrive-style reverse bidding). Patients
 post care requests; verified professionals (nurse, psychologist, yoga instructor, physiotherapist) bid;
-the patient accepts a bid, then gets live tracking, chat, payment, and rating. Prices in **MAD**, UI in
-**French** (also Arabic + Darija). Backend is **Supabase** (Postgres + Auth + Realtime + Storage + Edge Functions).
+the patient accepts a bid, then gets live tracking, chat, payment, and rating. Prices in **MAD**, mobile UI
+ships **French, Arabic (RTL) and English**, fully translated and parity-checked (`ar`/`en`/`fr` all 887/887
+keys) — Darija (`dar`) exists in the dictionary but is not yet offered in either language picker, so it
+can't leak. Backend is **Supabase** (Postgres + Auth + Realtime + Storage + Edge Functions).
 
-> Deeper docs live in [`docs/`](docs/). Read [`docs/architecture.md`](docs/architecture.md) first, and
-> [`docs/tech-debt-and-security.md`](docs/tech-debt-and-security.md) before shipping anything.
+> Deeper docs live in [`docs/`](docs/). Read [`docs/architecture.md`](docs/architecture.md) first,
+> [`docs/tech-debt-and-security.md`](docs/tech-debt-and-security.md) before shipping anything, and
+> [`docs/BACKUP_AND_DISASTER_RECOVERY.md`](docs/BACKUP_AND_DISASTER_RECOVERY.md) before you ever need it.
 
 ## Repo layout (pnpm monorepo — `pnpm-workspace.yaml`: `.`, `shared`, `mobile-app`)
 
