@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -8,13 +8,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { CalendarClock, ChevronRight, Clock, MapPin } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { formatAddress } from "@/lib/db/geo";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
-import { db } from "@/lib/db/dal";
+import { useProBookingsWindow } from "@/lib/db/realtime";
+import { addDays, dateKey, effectiveDate, friendlyDayLabel, intlLocale, isSameDay, startOfWeek } from "@/lib/date-utils";
+import { DateStrip } from "@/components/DateStrip";
+import { MonthCalendarModal } from "@/components/MonthCalendarModal";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -27,69 +30,46 @@ const SPEC_LABEL: Record<string, string> = {
 };
 
 export default function ProScheduleScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"upcoming" | "done">("upcoming");
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      void (async () => {
-        if (!user?.id) { setLoading(false); return; }
-        try {
-          const rows = await db.bookings.listForPro(user.id);
-          if (!cancelled) setBookings(rows.filter((b) => b.status !== "open"));
-        } catch {
-          /* ignore */
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      })();
-      return () => { cancelled = true; };
-    }, [user?.id]),
+  // Scoped to the visible week instead of a pro's entire mission history —
+  // that used to be fetched and rendered in full every time this screen
+  // opened, getting slower every week as history piled up. A week is always
+  // small, so this stays fast no matter how long a pro has been active.
+  const weekStartISO = useMemo(() => weekStart.toISOString(), [weekStart]);
+  const weekEndISO = useMemo(() => addDays(weekStart, 7).toISOString(), [weekStart]);
+  const { bookings, loading } = useProBookingsWindow(user?.id ?? null, weekStartISO, weekEndISO);
+
+  const markedDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of bookings) set.add(dateKey(effectiveDate(b)));
+    return set;
+  }, [bookings]);
+
+  const dayBookings = useMemo(
+    () => bookings.filter((b) => isSameDay(effectiveDate(b), selectedDate)),
+    [bookings, selectedDate],
   );
-
   const upcoming = useMemo(
-    () => bookings.filter((b) => b.status === "matched" || b.status === "in_progress"),
-    [bookings],
+    () => dayBookings.filter((b) => b.status === "matched" || b.status === "in_progress"),
+    [dayBookings],
   );
   const done = useMemo(
-    () => bookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
-    [bookings],
+    () => dayBookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
+    [dayBookings],
   );
-  // Group missions under friendly date headers instead of one endless flat list.
-  const groupOf = useCallback(
-    (d: Date) => {
-      const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-      const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
-      if (diff === 0) return t("today");
-      if (diff === 1) return t("tomorrow");
-      if (diff === -1) return t("yesterday");
-      return d.toLocaleDateString("fr-MA", { weekday: "long", day: "numeric", month: "long" });
-    },
-    [t],
-  );
-  const sectionize = useCallback(
-    (items: Booking[], asc: boolean) => {
-      const withDate = items.map((b) => ({
-        b,
-        d: b.scheduled_at ? new Date(b.scheduled_at) : new Date(b.created_at),
-      }));
-      withDate.sort((a, z) => (asc ? a.d.getTime() - z.d.getTime() : z.d.getTime() - a.d.getTime()));
-      const out: { label: string; items: Booking[] }[] = [];
-      for (const { b, d } of withDate) {
-        const label = groupOf(d);
-        const last = out[out.length - 1];
-        if (last && last.label === label) last.items.push(b);
-        else out.push({ label, items: [b] });
-      }
-      return out;
-    },
-    [groupOf],
-  );
+
+  const selectDay = (d: Date) => {
+    setSelectedDate(d);
+    const ws = startOfWeek(d);
+    if (!isSameDay(ws, weekStart)) setWeekStart(ws);
+  };
 
   // Tabs and horizontal swipe drive the same state, so dragging left/right feels
   // native and always stays in sync with the highlighted tab.
@@ -106,8 +86,8 @@ export default function ProScheduleScreen() {
     return (
       <TouchableOpacity key={b.id} activeOpacity={0.9} onPress={() => router.push(`/pro/tracking/${b.id}`)} style={s.card}>
         <View style={s.dateTile}>
-          <Text style={s.dateDay}>{d ? d.toLocaleDateString("fr-MA", { day: "2-digit" }) : "--"}</Text>
-          <Text style={s.dateMon}>{d ? d.toLocaleDateString("fr-MA", { month: "short" }) : ""}</Text>
+          <Text style={s.dateDay}>{d ? d.toLocaleDateString(intlLocale(locale), { day: "2-digit" }) : "--"}</Text>
+          <Text style={s.dateMon}>{d ? d.toLocaleDateString(intlLocale(locale), { month: "short" }) : ""}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={s.rowTop}>
@@ -122,7 +102,7 @@ export default function ProScheduleScreen() {
           <View style={s.metaRow}>
             <Clock size={12} color={Colors.textMuted} />
             <Text style={s.metaTxt}>
-              {d ? d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" }) : t("flexible_time")}
+              {d ? d.toLocaleTimeString(intlLocale(locale), { hour: "2-digit", minute: "2-digit" }) : t("flexible_time")}
             </Text>
           </View>
           {b.address ? (
@@ -149,15 +129,24 @@ export default function ProScheduleScreen() {
     <View style={s.root}>
       <View style={s.header}>
         <Text style={s.title}>{t("my_missions")}</Text>
-        <Text style={s.subtitle}>
-          {upcoming.length} à venir · {done.length} terminée{done.length > 1 ? "s" : ""}
-        </Text>
+        <Text style={s.subtitle}>{friendlyDayLabel(selectedDate, t, intlLocale(locale))}</Text>
+
+        <DateStrip
+          weekStart={weekStart}
+          selectedDate={selectedDate}
+          markedDates={markedDates}
+          onSelectDate={selectDay}
+          onChangeWeek={setWeekStart}
+          onOpenCalendar={() => setCalendarOpen(true)}
+          locale={locale}
+        />
+
         <View style={s.tabs}>
           <TouchableOpacity style={[s.tab, filter === "upcoming" && s.tabActive]} onPress={() => goTab("upcoming")}>
-            <Text style={[s.tabTxt, filter === "upcoming" && s.tabTxtActive]}>À venir ({upcoming.length})</Text>
+            <Text style={[s.tabTxt, filter === "upcoming" && s.tabTxtActive]}>{t("tab_upcoming")} ({upcoming.length})</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[s.tab, filter === "done" && s.tabActive]} onPress={() => goTab("done")}>
-            <Text style={[s.tabTxt, filter === "done" && s.tabTxtActive]}>Terminées ({done.length})</Text>
+            <Text style={[s.tabTxt, filter === "done" && s.tabTxtActive]}>{t("status_completed")} ({done.length})</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -181,32 +170,31 @@ export default function ProScheduleScreen() {
           }}
         >
           {([["upcoming", upcoming, "no_missions_upcoming"], ["done", done, "no_missions_done"]] as const).map(
-            ([key, items, emptyKey]) => {
-              const sections = sectionize(items, key === "upcoming");
-              return (
-                <View key={key} style={{ width: SCREEN_W }}>
-                  {items.length === 0 ? (
-                    <View style={s.emptyCard}>
-                      <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
-                      <Text style={s.emptyTitle}>{t(emptyKey)}</Text>
-                      <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
-                    </View>
-                  ) : (
-                    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-                      {sections.map((sec) => (
-                        <View key={sec.label} style={{ marginBottom: 18 }}>
-                          <Text style={s.sectionHeader}>{sec.label}</Text>
-                          <View style={{ gap: 12 }}>{sec.items.map(renderCard)}</View>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              );
-            },
+            ([key, items, emptyKey]) => (
+              <View key={key} style={{ width: SCREEN_W }}>
+                {items.length === 0 ? (
+                  <View style={s.emptyCard}>
+                    <View style={s.emptyIcon}><CalendarClock size={22} color={Colors.textSubtle} /></View>
+                    <Text style={s.emptyTitle}>{t(emptyKey)}</Text>
+                    <Text style={s.emptySub}>{t("fill_schedule_hint")}</Text>
+                  </View>
+                ) : (
+                  <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} showsVerticalScrollIndicator={false}>
+                    {items.map(renderCard)}
+                  </ScrollView>
+                )}
+              </View>
+            ),
           )}
         </ScrollView>
       )}
+
+      <MonthCalendarModal
+        visible={calendarOpen}
+        initialDate={selectedDate}
+        onClose={() => setCalendarOpen(false)}
+        onSelect={selectDay}
+      />
     </View>
   );
 }
@@ -218,14 +206,13 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#F0F0F0",
   },
   title: { fontSize: 24, color: Colors.textPrimary, fontFamily: "DMSerifDisplay_400Regular" },
-  subtitle: { fontSize: 12.5, color: Colors.textMuted, marginTop: 2, marginBottom: 12 },
-  tabs: { flexDirection: "row", gap: 8, backgroundColor: Colors.input, borderRadius: 12, padding: 4 },
+  subtitle: { fontSize: 12.5, color: Colors.textMuted, marginTop: 2, marginBottom: 12, textTransform: "capitalize" },
+  tabs: { flexDirection: "row", gap: 8, backgroundColor: Colors.input, borderRadius: 12, padding: 4, marginTop: 12 },
   tab: { flex: 1, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   tabActive: { backgroundColor: NAVY },
   tabTxt: { color: Colors.textMuted, fontSize: 12.5, fontWeight: "700" },
   tabTxtActive: { color: "white" },
 
-  sectionHeader: { fontSize: 13, fontWeight: "800", color: Colors.textPrimary, marginBottom: 10, textTransform: "capitalize" },
   emptyCard: { margin: 20, backgroundColor: "white", borderRadius: 18, paddingVertical: 30, alignItems: "center", gap: 8 },
   emptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.surfaceWarm, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700" },

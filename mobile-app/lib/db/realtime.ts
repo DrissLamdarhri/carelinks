@@ -353,6 +353,66 @@ export function usePatientBookings(patientId: UUID | null) {
   return { bookings: data, loading, error, refresh };
 }
 
+// Scoped to a single window (a calendar week) instead of the patient's entire
+// history — what patient/bookings.tsx uses now so the appointments list stops
+// getting slower as history piles up. usePatientBookings above stays
+// unbounded on purpose: patient/messages.tsx needs full history to group
+// conversations correctly across every booking ever shared with a pro.
+export function usePatientBookingsWindow(patientId: UUID | null, startISO: string, endISO: string) {
+  const { data, loading, error, refresh } = useAsyncList<Booking>(
+    () => (patientId ? db.bookings.listForPatientInWindow(patientId, startISO, endISO) : Promise.resolve([])),
+    [patientId, startISO, endISO]
+  );
+
+  // The window is small, so a wholesale refetch on any change is cheap and
+  // avoids having to reason about whether a patched-in row still belongs to
+  // the currently-visible window.
+  useFocusEffect(
+    useCallback(() => {
+      if (!patientId) return;
+      const channel = supabase
+        .channel(`bookings:patient-window:${patientId}:${Math.random().toString(36).slice(2)}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "bookings", filter: `patient_id=eq.${patientId}` },
+          () => void refresh()
+        )
+        .subscribe();
+      return () => { void supabase.removeChannel(channel); };
+    }, [patientId, refresh])
+  );
+
+  return { bookings: data, loading, error, refresh };
+}
+
+// Same idea for the pro side — pro/schedule.tsx used to fetch every mission a
+// pro had ever had (unbounded, rendered as one long list). Scoped to a
+// calendar week instead, so the screen stays fast no matter how long a pro
+// has been active.
+export function useProBookingsWindow(proId: UUID | null, startISO: string, endISO: string) {
+  const { data, loading, error, refresh } = useAsyncList<Booking>(
+    () => (proId ? db.bookings.listForProInWindow(proId, startISO, endISO) : Promise.resolve([])),
+    [proId, startISO, endISO]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!proId) return;
+      const channel = supabase
+        .channel(`bookings:pro-window:${proId}:${Math.random().toString(36).slice(2)}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "bookings", filter: `professional_id=eq.${proId}` },
+          () => void refresh()
+        )
+        .subscribe();
+      return () => { void supabase.removeChannel(channel); };
+    }, [proId, refresh])
+  );
+
+  return { bookings: data, loading, error, refresh };
+}
+
 // ─── Professional: open bookings by specialty ─────────────────────────────────
 
 export interface UseOpenBookingsBySpecialtyOpts {

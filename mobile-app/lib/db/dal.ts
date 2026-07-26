@@ -186,6 +186,45 @@ export const bookings = {
     );
   },
 
+  // Scoped to a single window (typically one calendar week) instead of a
+  // pro/patient's entire history. Rendering every booking ever made got
+  // slower every week as history piled up — these are what the missions /
+  // appointments calendars use instead, so cost stays flat forever.
+  //
+  // A booking is "in" the window by its scheduled_at, or by created_at when
+  // it has none (on-demand/urgent requests never get a scheduled_at) — this
+  // mirrors the client-side bucketing pro/schedule.tsx used to do by hand.
+  async listForProInWindow(proId: UUID, startISO: string, endISO: string): Promise<Booking[]> {
+    return unwrap(
+      await supabase
+        .from("bookings")
+        .select("*")
+        .eq("professional_id", proId)
+        .neq("status", "open")
+        .or(
+          `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO}),` +
+            `and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`
+        )
+        .order("scheduled_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
+    );
+  },
+
+  async listForPatientInWindow(patientId: UUID, startISO: string, endISO: string): Promise<Booking[]> {
+    return unwrap(
+      await supabase
+        .from("bookings")
+        .select("*")
+        .eq("patient_id", patientId)
+        .or(
+          `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO}),` +
+            `and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`
+        )
+        .order("scheduled_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
+    );
+  },
+
   // Demands a professional may bid on: their OWN specialty only, and only those
   // posted in the last `withinHours` (default 24h). Older open requests are stale
   // — showing them clutters the feed and lets pros bid on dead demands.
