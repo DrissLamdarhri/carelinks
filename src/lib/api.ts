@@ -3,13 +3,7 @@
  * client under RLS. No KV edge function (make-server-aa5d1aa6 was retired with
  * the old web patient/pro preview demo).
  */
-import { publicAnonKey } from "../../utils/supabase/info";
 import { supabase } from "./supabase";
-
-async function getToken(): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token || publicAnonKey;
-}
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -127,32 +121,45 @@ export async function rejectPro(proId: string) {
   return { success: true };
 }
 
-export async function sendApprovalEmail(email: string, name: string, specialty?: string) {
-  const token = await getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-approval-email`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ email, name, specialty }),
-  });
-  return res.json();
-}
-
-export async function sendRejectionEmail(email: string, name: string, reason?: string) {
-  const token = await getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejection-email`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ email, name, reason }),
-  });
-  return res.json();
+// Single source of truth for telling a pro they were approved/rejected —
+// in-app notification + email (Resend) + WhatsApp (Meta Cloud API), all sent
+// server-side by the notify-pro-status edge function (auth'd via the caller's
+// Supabase session; the function itself uses the service-role key to read the
+// pro's contact details regardless of RLS).
+//
+// This replaced two separate edge functions (send-approval-email /
+// send-rejection-email) that took no auth at all — anyone who found the URL
+// could make them email an arbitrary address pretending to be CareLink. They
+// were also never actually deployed to this project, so every caller of the
+// old helpers was silently failing to notify anyone by email or WhatsApp
+// (only the client-side in-app notification insert ever worked). Three
+// separate admin screens each called them directly; all three now call this.
+export async function notifyProStatus(
+  proId: string,
+  decision: "approved" | "rejected",
+  reason?: string,
+): Promise<void> {
+  try {
+    const { data, error } = await supabase.functions.invoke("notify-pro-status", {
+      body: { proId, decision, reason },
+    });
+    const inApp = (data as { result?: { notification?: string } } | null)?.result?.notification;
+    if (error || (typeof inApp === "string" && inApp.startsWith("error"))) {
+      throw error ?? new Error(String(inApp));
+    }
+  } catch (e) {
+    console.warn("notify-pro-status failed — falling back to a direct in-app notification", e);
+    await supabase.from("notifications").insert({
+      user_id: proId,
+      kind: "system",
+      title: decision === "approved" ? "Compte approuvé ✅" : "Dossier à corriger",
+      body:
+        decision === "approved"
+          ? "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes."
+          : reason || "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
+      payload: { decision },
+    });
+  }
 }
 
 export async function getRecentBookings() {

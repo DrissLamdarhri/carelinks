@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { approvePro, rejectPro, getProDocumentsAdmin, getAdminSignedUrl } from "../../lib/api";
+import { approvePro, rejectPro, getProDocumentsAdmin, getAdminSignedUrl, notifyProStatus } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
 type ProfessionalStatus = "pending" | "approved" | "rejected";
@@ -425,71 +425,26 @@ export function ProfessionalsManager() {
     }
   };
 
+  // Notify the pro (in-app + email + WhatsApp) — single server-side source of
+  // truth (notify-pro-status edge function) so every admin screen behaves
+  // identically. This replaced two direct, unauthenticated fetches to
+  // send-approval-email / send-rejection-email: those functions took no auth
+  // at all (anyone with the URL could trigger them), and weren't even
+  // deployed to this project, so every call here was silently failing —
+  // approving/rejecting from this screen never actually emailed anyone.
   const sendApprovalNotification = async (pro: Professional) => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (token) {
-        await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-approval-email`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              email: pro.email,
-              name: pro.full_name,
-              specialty: pro.specialty,
-            }),
-          }
-        );
-      }
-
-      await supabase.from("notifications").insert({
-        user_id: pro.id,
-        kind: "approval",
-        title: "Compte approuvé",
-        body: "Votre compte professionnel a été approuvé! Vous pouvez maintenant accéder à toutes les fonctionnalités.",
-      });
+      await notifyProStatus(pro.id, "approved");
     } catch (error) {
-      console.error("Error sending approval notification:", error);
+      console.error("Error notifying pro of approval:", error);
     }
   };
 
   const sendRejectionNotification = async (pro: Professional, reason: string) => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (token) {
-        await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejection-email`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              email: pro.email,
-              name: pro.full_name,
-              reason: reason,
-            }),
-          }
-        );
-      }
-
-      await supabase.from("notifications").insert({
-        user_id: pro.id,
-        kind: "rejection",
-        title: "Compte rejeté",
-        body: `Votre candidature a été rejetée pour la raison suivante: ${reason}`,
-      });
+      await notifyProStatus(pro.id, "rejected", reason);
     } catch (error) {
-      console.error("Error sending rejection notification:", error);
+      console.error("Error notifying pro of rejection:", error);
     }
   };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { getAdminStats, getPendingPros, approvePro, rejectPro, sendApprovalEmail, sendRejectionEmail, getAdminServices, createAdminService, updateAdminService, deleteAdminService } from "../../lib/api";
+import { getAdminStats, getPendingPros, approvePro, rejectPro, notifyProStatus, getAdminServices, createAdminService, updateAdminService, deleteAdminService } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 import { KycModerationQueue } from "./KycModerationQueue";
 import { NotificationBell } from "./NotificationBell";
@@ -900,23 +900,12 @@ export function AdminPanel() {
       // Immediately refresh the professionals list
       await refreshProfessionalsList();
 
-      // Create in-app notification + send email (best-effort)
+      // Notify the pro (in-app + email + WhatsApp) — single server-side source
+      // of truth so every admin screen behaves identically.
       try {
-        const [{ data: profile }, { data: proRow }] = await Promise.all([
-          supabase.from('profiles').select('full_name,email').eq('id', proId).single(),
-          supabase.from('professionals').select('specialty').eq('id', proId).single(),
-        ]);
-        await supabase.from('notifications').insert({
-          user_id: proId,
-          kind: 'approval',
-          title: 'Compte approuvé',
-          body: 'Votre compte professionnel a été approuvé! Vous pouvez maintenant recevoir des demandes.',
-        });
-        if (profile?.email) {
-          try { await sendApprovalEmail(profile.email, profile.full_name ?? '', proRow?.specialty ?? ''); } catch (e) { console.warn('sendApprovalEmail failed', e); }
-        }
+        await notifyProStatus(proId, "approved");
       } catch (e) {
-        console.warn('Failed to send approval notification/email', e);
+        console.warn('Failed to notify pro of approval', e);
       }
 
       toast.success("Professionnel approuvé !");
@@ -934,20 +923,12 @@ export function AdminPanel() {
       // Immediately refresh the professionals list
       await refreshProfessionalsList();
 
-      // Create in-app notification + send email (best-effort)
+      // Notify the pro (in-app + email + WhatsApp) — single server-side source
+      // of truth so every admin screen behaves identically.
       try {
-        const { data: profile } = await supabase.from('profiles').select('full_name,email').eq('id', proId).single();
-        await supabase.from('notifications').insert({
-          user_id: proId,
-          kind: 'rejection',
-          title: 'Compte rejeté',
-          body: "Votre dossier a été rejeté. Veuillez consulter l'application pour plus d'informations.",
-        });
-        if (profile?.email) {
-          try { await sendRejectionEmail(profile.email, profile.full_name ?? '', 'Dossier rejeté par l\'administration'); } catch (e) { console.warn('sendRejectionEmail failed', e); }
-        }
+        await notifyProStatus(proId, "rejected");
       } catch (e) {
-        console.warn('Failed to send rejection notification/email', e);
+        console.warn('Failed to notify pro of rejection', e);
       }
 
       toast.info("Professionnel refusé");

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, FileText, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
-import { getAdminSignedUrl, getPendingPros, getProDocumentsAdmin } from "../../lib/api";
+import { getAdminSignedUrl, getPendingPros, getProDocumentsAdmin, notifyProStatus } from "../../lib/api";
 
 interface PendingPro {
   id: string;
@@ -81,29 +81,8 @@ export function KycModerationQueue() {
       toast.success(status === "approved" ? "Pro approuvé" : "Pro rejeté");
 
       // Notify the pro (in-app + email + WhatsApp) — single server-side source
-      // of truth so mobile & web admin behave identically. If the function is
-      // unreachable or its in-app channel failed, insert the notification
-      // directly so an approved pro is never left uninformed.
-      try {
-        const { data, error: fnError } = await supabase.functions.invoke("notify-pro-status", {
-          body: { proId, decision: status },
-        });
-        const inApp = (data as any)?.result?.notification;
-        if (fnError || (typeof inApp === "string" && inApp.startsWith("error"))) {
-          throw fnError ?? new Error(String(inApp));
-        }
-      } catch (e) {
-        console.warn("notify-pro-status failed — falling back to direct notification", e);
-        await supabase.from("notifications").insert({
-          user_id: proId,
-          kind: "system",
-          title: status === "approved" ? "Compte approuvé ✅" : "Dossier à corriger",
-          body: status === "approved"
-            ? "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes."
-            : "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
-          payload: { decision: status },
-        });
-      }
+      // of truth so every admin screen behaves identically.
+      await notifyProStatus(proId, status);
 
       // Broadcast optimistic UI update to other admin components
       try { (window as any).dispatchEvent(new CustomEvent('pro-status-changed', { detail: { id: proId, status } })); } catch {}

@@ -17,7 +17,9 @@ carelinks/
 └─ *.md / *.sql (root)    ~30 historical implementation notes & one-off SQL fixes (see below).
 ```
 
-**Supabase project ref:** `wjhzrovmktekfcjohhrw`. Edge Function base: `.../functions/v1/make-server-aa5d1aa6`.
+**Supabase project ref:** `wjhzrovmktekfcjohhrw`. `make-server-aa5d1aa6` (the retired KV backend's Edge
+Function, referenced below as historical context) was undeployed on 2026-07-26 — the only Edge Function
+running today is `notify-pro-status`.
 
 > The ~30 markdown files at the repo root (`ADMIN_*`, `PROFESSIONAL_*`, `DOCUMENT_UPLOAD_*`, `*_FIX*.md`,
 > etc.) are point-in-time implementation notes from prior work. They are historical, sometimes stale, and

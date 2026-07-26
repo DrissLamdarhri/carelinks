@@ -21,7 +21,7 @@ can't leak. Backend is **Supabase** (Postgres + Auth + Realtime + Storage + Edge
 | `shared/` | Legacy shared lib (auth/i18n/supabase/realtime/DAL) | **Not imported by `mobile-app`** — see note below |
 | `utils/supabase/info.ts` | Web Supabase `projectId` + anon key | — |
 
-**Supabase project ref:** `wjhzrovmktekfcjohhrw`. Edge Function base path: `make-server-aa5d1aa6`.
+**Supabase project ref:** `wjhzrovmktekfcjohhrw`.
 
 ## Backend: one source of truth — Postgres
 
@@ -32,12 +32,11 @@ The **entire product runs on direct Postgres tables** under RLS + Realtime: the
 
 The old **Figma-Make KV edge function** (`make-server-aa5d1aa6`) + its
 `kv_store_aa5d1aa6` blob table + the web "iPhone preview" patient/pro demo have
-been **retired** — there is no second backend. The only edge functions left are
-`send-approval-email` / `send-rejection-email`. Details: [`docs/architecture.md`](docs/architecture.md).
-
-> One leftover cleanup on the Supabase side: the deployed `server` function + the
-> `kv_store_aa5d1aa6` table still physically exist in the project — drop them when
-> convenient (`supabase functions delete server`; `drop table kv_store_aa5d1aa6;`).
+been **retired** — there is no second backend. The deployed leftover function was
+undeployed and the table-drop migration (`0033`) shipped on 2026-07-26; there is
+now exactly one Edge Function, **`notify-pro-status`** — approval/rejection
+notifications (in-app + email + WhatsApp), called by every admin approve/reject
+action. Details: [`docs/architecture.md`](docs/architecture.md).
 
 ## Commands
 

@@ -3,30 +3,39 @@
 Read this before shipping. The codebase is a Figma-Make export that was ported web → mobile and rebranded,
 so it carries **parallel/duplicated systems** and several **dev shortcuts that are unsafe in production**.
 
-## 🔴 Security landmines
+## ✅ Resolved (kept here as history — verify before assuming any "known landmine" is still live)
 
-1. **Hardcoded admin secret `<redacted>`** — committed in `src/lib/api.ts` (`ADMIN_KEY`, sent as
-   `X-Admin-Key`) and accepted by every admin route in `supabase/functions/server/index.tsx`; `/admin/login`
-   even returns it. Anyone reading the shipped web bundle gets full admin access to the KV backend.
-2. **Hardcoded admin credentials** `admin@carelink.ma` / `<redacted>` — in `src/lib/api.ts`,
-   `src/app/components/AdminLogin.tsx` (**and rendered on the login screen**), and `mobile-app/app/admin/index.tsx`.
-3. **Client-trusted web admin gate** — `RequireAuth role="admin"` only checks
-   `localStorage.carelink_admin_authed === "true"`. A user can set that flag to reach `/admin/dashboard`.
-   (Path-B admin data is still protected by RLS; Path-A admin routes rely on the shared key.)
-4. **RLS-loosening SQL scripts** — **do not apply in production:**
-   - `supabase/fixes.sql` → `profiles_insert WITH CHECK (true)`, pro insert when `auth.uid() IS NULL`.
-   - `supabase/fix-rls-policies.sql` → **public (anyone) uploads** to `pro-documents`.
-   - `supabase/fix-rls-policies-option2.sql` → **disables RLS on `storage.objects` globally** ("nuclear").
-5. **Unauthenticated email Edge Functions** — `send-approval-email` / `send-rejection-email` accept any caller
-   (CORS `*`, no body-sender auth) and send via Resend.
-6. **Committed keys / placeholders** — hardcoded Supabase URL + anon key fallbacks in
-   `mobile-app/lib/supabase.ts`; project ref `wjhzrovmktekfcjohhrw` in `kv_store.tsx`; `push.ts`
-   `VAPID_PUBLIC_KEY` is a non-functional placeholder. (Anon key is public by design, but the fallbacks mean
-   env misconfig fails silently instead of loudly.)
+Everything below was found already fixed when re-audited on 2026-07-26, except #5/#6 which were fixed that
+day. The lesson that earned this section: this doc nearly caused a fix to be re-applied to code that no
+longer existed — **always check the file is still there and still says what the doc claims before acting
+on this list.**
 
-**Remediation sketch:** move admin auth to real Supabase roles + RLS everywhere; delete the shared key and
-demo creds; server-verify the admin gate; require auth on email functions; never apply the `fix-rls-*` scripts
-to prod; move secrets to env.
+1. ~~Hardcoded admin secret / `X-Admin-Key`~~ — the KV edge function that accepted it
+   (`supabase/functions/server/index.tsx`) no longer exists in the repo, and its **deployed** copy
+   (`make-server-aa5d1aa6`, still ACTIVE months after the source was deleted) was undeployed on 2026-07-26.
+   `src/lib/api.ts` now runs entirely on Supabase Auth + Postgres RLS.
+2. ~~Hardcoded admin credentials~~ — `adminLogin()` in `src/lib/api.ts` does real
+   `supabase.auth.signInWithPassword` + a `profiles.role === 'admin'` check. No credentials in source.
+3. ~~Client-trusted web admin gate~~ — `isAdminAuthed` in `src/lib/auth-context.tsx` is derived from
+   `profile.role` (a real DB-backed value under RLS), not a localStorage flag. `setAdminAuthed` is a no-op
+   kept only for old call-site compatibility.
+4. ~~RLS-loosening "nuclear" SQL scripts~~ — `supabase/fixes.sql`, `fix-rls-policies.sql`,
+   `fix-rls-policies-option2.sql` no longer exist in the repo.
+5. **Unauthenticated email Edge Functions** — `send-approval-email` / `send-rejection-email` accepted any
+   caller (CORS `*`, no auth check) **and were never actually deployed to this project** — every admin
+   screen that called them (there were three: `KycModerationQueue.tsx`, `AdminPanel.tsx`,
+   `ProfessionalsManager.tsx`) was silently failing to email anyone. Fixed 2026-07-26: both deleted from the
+   repo; all three call sites now go through `notifyProStatus()` (`src/lib/api.ts`) →
+   `supabase/functions/notify-pro-status`, one authenticated function that sends the in-app notification,
+   email (Resend) and WhatsApp (Meta Cloud API) consistently everywhere.
+6. **`kv_store_aa5d1aa6` table** — the KV blob table itself. Migration `0033_drop_legacy_kv_backend.sql`
+   drops it; run it in the SQL Editor like every other migration.
+
+**Still true and worth knowing:** the Supabase anon key + a hardcoded fallback project URL are committed in
+`mobile-app/lib/supabase.ts` — this is normal (the anon key is public by design, protected by RLS), but the
+fallback means a misconfigured env var fails silently instead of loudly. A MapTiler API key is also
+committed in plaintext across every profile in `mobile-app/eas.json` — low severity (map tiles, not user
+data), worth rotating once usage/billing matters since anyone with repo access can spend the quota.
 
 ## 🟠 Architectural debt
 
