@@ -21,7 +21,9 @@ import { showToast } from "@/lib/toast";
 export default function RegistrationScreen() {
   const { t } = useI18n();
   const router = useRouter();
-  const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signInWithApple, resendConfirmationEmail } = useAuth();
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
   const goToMfaChallenge = (nextRole: "patient" | "pro" | "admin") => {
     router.replace({ pathname: "/auth/mfa-challenge", params: { role: nextRole } });
   };
@@ -111,10 +113,14 @@ export default function RegistrationScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      await signUpWithEmail(email.trim(), password, fullName, "patient", {
+      const { needsEmailConfirmation } = await signUpWithEmail(email.trim(), password, fullName, "patient", {
         phone: phone.trim(),
         city,
       });
+      if (needsEmailConfirmation) {
+        setNeedsConfirmation(true);
+        return;
+      }
       goToMfaSetup();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t("signup_failed"));
@@ -122,6 +128,38 @@ export default function RegistrationScreen() {
       setSubmitting(false);
     }
   };
+
+  if (needsConfirmation) {
+    return (
+      <View style={styles.confirmRoot}>
+        <View style={styles.confirmIconWrap}>
+          <Mail size={44} color={Colors.primary} />
+        </View>
+        <Text style={styles.confirmTitle}>{t("confirm_email_title")}</Text>
+        <Text style={styles.confirmSub}>{t("confirm_email_sub").replace("%s", email.trim())}</Text>
+        <TouchableOpacity
+          style={[styles.submit, resending && styles.submitDisabled, { marginTop: 26 }]}
+          disabled={resending}
+          onPress={async () => {
+            setResending(true);
+            try {
+              await resendConfirmationEmail(email.trim());
+              showToast(t("confirm_email_resent"));
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("action_failed"));
+            } finally {
+              setResending(false);
+            }
+          }}
+        >
+          {resending ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.submitText}>{t("resend")}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 14, padding: 8 }} onPress={() => router.replace("/auth/patient-login")}>
+          <Text style={{ color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" }}>{t("back_to_login")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -315,6 +353,10 @@ export default function RegistrationScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "white" },
+  confirmRoot: { flex: 1, backgroundColor: "white", alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  confirmIconWrap: { width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  confirmTitle: { fontSize: 20, fontWeight: "700", color: Colors.textPrimary, textAlign: "center" },
+  confirmSub: { fontSize: 13.5, color: Colors.textMuted, textAlign: "center", marginTop: 10, lineHeight: 20 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 28 },
   header: { marginBottom: 12 },
   backBtn: {

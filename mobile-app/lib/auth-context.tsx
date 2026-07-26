@@ -16,6 +16,8 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
+import { Buffer } from "buffer";
 import * as Linking from "expo-linking";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
@@ -68,6 +70,14 @@ export type SignInResult = {
   mfaRequired: boolean;
 };
 
+export type SignUpResult = {
+  userId: string | null;
+  /** True when "Confirm email" is on and the account needs the link in their
+   *  inbox clicked before they have a usable session. No profile/professional
+   *  row exists yet in that case — see fetchProfile's bootstrap. */
+  needsEmailConfirmation: boolean;
+};
+
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
@@ -90,7 +100,8 @@ interface AuthContextValue {
     fullName: string,
     role: "patient" | "pro",
     options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
-  ) => Promise<string | null>;
+  ) => Promise<SignUpResult>;
+  resendConfirmationEmail: (email: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
@@ -111,7 +122,8 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithGoogle: async () => ({ role: null, mfaRequired: false }),
   signInWithApple: async () => ({ role: null, mfaRequired: false }),
   signInWithEmail: async () => ({ role: null, mfaRequired: false }),
-  signUpWithEmail: async () => null,
+  signUpWithEmail: async () => ({ userId: null, needsEmailConfirmation: false }),
+  resendConfirmationEmail: async () => {},
   sendPasswordReset: async () => {},
   updatePassword: async () => {},
   enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
@@ -207,10 +219,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .upsert({ id: authUser.id });
         if (patientError) throw patientError;
       } else {
+        // profession/experience come from user_metadata rather than being
+        // hardcoded: when "Confirm email" is on, signUpWithEmail can't write
+        // this row itself (no session exists yet at signup time), so this is
+        // the only place it's ever created for an email/password pro — it
+        // must carry through what they actually chose at registration.
+        const specialty = (authUser.user_metadata?.profession as string | undefined) || "nurse";
+        const experience = authUser.user_metadata?.experience
+          ? parseInt(authUser.user_metadata.experience as string, 10) || 0
+          : 0;
         const { error: professionalError } = await supabase
           .from("professionals")
-          .upsert({ id: authUser.id, specialty: "nurse" });
+          .upsert({ id: authUser.id, specialty, years_experience: experience });
         if (professionalError) throw professionalError;
+
+        // Documents picked before signup couldn't be uploaded then either (no
+        // session, and the pro-documents bucket requires one) — pro-registration.tsx
+        // stashes them locally keyed by this uid; upload them now that a real
+        // session finally exists. Best-effort: if this fails (e.g. the app was
+        // closed and cache cleared before confirming), the pro can still
+        // re-upload from Profil → Documents, which already exists.
+        try {
+          const raw = await AsyncStorage.getItem(`pending_pro_docs_${authUser.id}`);
+          if (raw) {
+            const pending = JSON.parse(raw) as Array<{ type: string; uri: string; name: string; mimeType: string }>;
+            for (const doc of pending) {
+              try {
+                const fileContent = await FileSystem.readAsStringAsync(doc.uri, { encoding: FileSystem.EncodingType.Base64 });
+                const bytes = Buffer.from(fileContent, "base64");
+                const ext = doc.name.split(".").pop() || "jpg";
+                const storagePath = `${authUser.id}/${doc.type}-${Date.now()}.${ext}`;
+                const { error: uploadError } = await supabase.storage
+                  .from("pro-documents")
+                  .upload(storagePath, bytes, { contentType: doc.mimeType || "image/jpeg", upsert: true });
+                if (uploadError) { console.warn("[Auth] Deferred document upload failed:", doc.type, uploadError.message); continue; }
+                await supabase.from("pro_documents").insert({
+                  professional_id: authUser.id,
+                  doc_type: doc.type,
+                  storage_path: storagePath,
+                  is_verified: false,
+                  uploaded_at: new Date().toISOString(),
+                });
+              } catch (e) {
+                console.warn("[Auth] Deferred document upload exception:", doc.type, e);
+              }
+            }
+            await AsyncStorage.removeItem(`pending_pro_docs_${authUser.id}`);
+          }
+        } catch (e) {
+          console.warn("[Auth] Reading pending documents failed:", e);
+        }
       }
 
       p = await fetchProfileFromSupabase(authUser.id);
@@ -393,7 +451,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
     });
-    if (error) throw error;
+    if (error) {
+      // Supabase's raw message here is the English string "Email not
+      // confirmed" — surfaced as a distinct code so the login screens can
+      // show a translated message with a "resend the email" action instead
+      // of a generic "wrong password" error.
+      if (error.message?.toLowerCase().includes("email not confirmed")) {
+        throw new Error("EMAIL_NOT_CONFIRMED");
+      }
+      throw error;
+    }
     if (!data.user) return { role: intendedRole, mfaRequired: false };
     const p = await fetchProfile(data.user);
     const mfaRequired = await resolveMfaRequirement(p);
@@ -420,19 +487,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     role: "patient" | "pro",
     options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
-  ) => {
+  ): Promise<SignUpResult> => {
     await AsyncStorage.setItem("carelink_intended_role", role);
     console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: getOAuthRedirectUrl(),
         data: {
           full_name: fullName,
           phone: options?.phone || null,
           city: options?.city || null,
           profession: options?.profession || null,
           services: options?.services || null,
+          // Kept in user_metadata (survives the confirmation gap below) so the
+          // professional row can be created correctly on first real login.
+          experience: options?.experience || null,
           intended_role: role === "pro" ? "professional" : "patient",
           role: role === "pro" ? "professional" : "patient", // Also pass as 'role' for the trigger
         },
@@ -448,6 +519,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(error?.message ?? "Erreur serveur lors de l'inscription. Vérifiez la configuration Supabase.");
     }
     console.log("[Auth] Signup successful, user:", data.user?.id);
+
+    // With "Confirm email" enabled, signUp returns a user but NO session until
+    // they click the link in their inbox — the client is still on the `anon`
+    // role at this point, so every RLS-protected write below (profiles,
+    // professionals, pro_documents) would be silently rejected if attempted
+    // now. Skip them entirely and let the same bootstrap that already handles
+    // first-ever OAuth login (fetchProfile, below) create everything once a
+    // real session exists — it reads full_name/phone/city/profession/
+    // experience straight back out of user_metadata.
+    if (!data.session) {
+      return { userId: data.user?.id ?? null, needsEmailConfirmation: true };
+    }
+
     if (data.user) {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
@@ -473,7 +557,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             years_experience: options?.experience ? parseInt(options.experience) : 0,
           });
         if (professionalError) throw professionalError;
-        
+
         // Insert documents if provided — prefer supabase-js client insert (uses user's session & RLS)
         if (options?.documents && options.documents.length > 0) {
           try {
@@ -500,7 +584,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-    return data.user?.id ?? null;
+    return { userId: data.user?.id ?? null, needsEmailConfirmation: false };
+  };
+
+  // Lets someone re-trigger the confirmation email (typo'd inbox, link expired,
+  // spam folder) without having to sign up again.
+  const resendConfirmationEmail = async (email: string): Promise<void> => {
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: getOAuthRedirectUrl() },
+    });
+    if (error) throw error;
   };
 
   // ── MFA helpers ─────────────────────────────────────────────────────────────
@@ -558,6 +653,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendPasswordReset,
         updatePassword,
         signUpWithEmail,
+        resendConfirmationEmail,
         enrollMfaTotp,
         verifyMfaTotp,
         challengeMfaSms,

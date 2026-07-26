@@ -24,7 +24,7 @@ import { useI18n } from "@/lib/i18n";
 export default function PatientAuthFlowScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset, resendConfirmationEmail } = useAuth();
   const { t } = useI18n();
   const screenWidth = Dimensions.get("window").width;
 
@@ -38,6 +38,10 @@ export default function PatientAuthFlowScreen() {
   const [loginShowPw, setLoginShowPw] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginUnconfirmed, setLoginUnconfirmed] = useState(false);
+  const [resendingLogin, setResendingLogin] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Registration form state
   const [firstName, setFirstName] = useState("");
@@ -104,6 +108,7 @@ export default function PatientAuthFlowScreen() {
   const handleEmailSignIn = async () => {
     if (!loginValid || loginSubmitting) return;
     setLoginError(null);
+    setLoginUnconfirmed(false);
     setLoginSubmitting(true);
     try {
       const result = await signInWithEmail(loginEmail.trim(), loginPassword, "patient");
@@ -114,7 +119,12 @@ export default function PatientAuthFlowScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+      if (error instanceof Error && error.message === "EMAIL_NOT_CONFIRMED") {
+        setLoginUnconfirmed(true);
+        setLoginError(t("email_not_confirmed"));
+      } else {
+        setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+      }
     } finally {
       setLoginSubmitting(false);
     }
@@ -125,13 +135,17 @@ export default function PatientAuthFlowScreen() {
     setRegError(null);
     setRegSubmitting(true);
     try {
-      await signUpWithEmail(
+      const { needsEmailConfirmation } = await signUpWithEmail(
         regEmail.trim(),
         password,
         fullName,
         "patient",
         { phone, city }
       );
+      if (needsEmailConfirmation) {
+        setNeedsConfirmation(true);
+        return;
+      }
       goAfterSignUp();
     } catch (error) {
       setRegError(error instanceof Error ? error.message : "Inscription échouée.");
@@ -196,6 +210,42 @@ export default function PatientAuthFlowScreen() {
     setTab(newTab);
     scrollRef.current?.scrollTo({ x: newTab * screenWidth, animated: true });
   };
+
+  if (needsConfirmation) {
+    return (
+      <View style={[styles.root, { alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }]}>
+        <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+          <Mail size={44} color={Colors.primary} />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: "700", color: Colors.textPrimary, textAlign: "center" }}>
+          {t("confirm_email_title")}
+        </Text>
+        <Text style={{ fontSize: 13.5, color: Colors.textMuted, textAlign: "center", marginTop: 10, lineHeight: 20 }}>
+          {t("confirm_email_sub").replace("%s", regEmail.trim())}
+        </Text>
+        <TouchableOpacity
+          style={[styles.submit, resending && styles.submitDisabled, { marginTop: 26 }]}
+          disabled={resending}
+          onPress={async () => {
+            setResending(true);
+            try {
+              await resendConfirmationEmail(regEmail.trim());
+              showToast(t("confirm_email_resent"));
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("action_failed"));
+            } finally {
+              setResending(false);
+            }
+          }}
+        >
+          {resending ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.submitText}>{t("resend")}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 14, padding: 8 }} onPress={() => { setNeedsConfirmation(false); switchTab(0); }}>
+          <Text style={{ color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" }}>{t("back_to_login")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -295,7 +345,17 @@ export default function PatientAuthFlowScreen() {
             </View>
           </View>
 
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => {
+              if (!loginEmail.trim()) { showToast(t("enter_email_first")); return; }
+              try {
+                await sendPasswordReset(loginEmail.trim());
+                showToast(t("reset_sent"));
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Envoi impossible");
+              }
+            }}
+          >
             <Text style={styles.forgot}>{t("forgot_password")}</Text>
           </TouchableOpacity>
 
@@ -315,6 +375,27 @@ export default function PatientAuthFlowScreen() {
           </TouchableOpacity>
 
           {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+          {loginUnconfirmed ? (
+            <TouchableOpacity
+              style={{ alignSelf: "center", marginTop: 6 }}
+              disabled={resendingLogin}
+              onPress={async () => {
+                setResendingLogin(true);
+                try {
+                  await resendConfirmationEmail(loginEmail.trim());
+                  showToast(t("confirm_email_resent"));
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : t("action_failed"));
+                } finally {
+                  setResendingLogin(false);
+                }
+              }}
+            >
+              <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: "700" }}>
+                {resendingLogin ? t("sending") : t("resend_confirmation_email")}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           <View style={styles.hintCard}>
             <Text style={styles.hintText}>💡 Première visite ? Créez un compte via l'onglet "Inscription".</Text>

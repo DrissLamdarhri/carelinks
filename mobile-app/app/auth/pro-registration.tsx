@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -61,7 +62,7 @@ const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Trait
 export default function ProRegistrationScreen() {
   const { t } = useI18n();
   const router = useRouter();
-  const { signUpWithEmail } = useAuth();
+  const { signUpWithEmail, resendConfirmationEmail } = useAuth();
   const [step, setStep] = useState(0);
 
   // servicesMap state moved inside component so hooks are valid in component body
@@ -96,6 +97,8 @@ export default function ProRegistrationScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -231,7 +234,8 @@ export default function ProRegistrationScreen() {
     setErrorMessage(null);
     try {
       // 1) Sign up the user (create auth user + profile + professionals row)
-      const newUserId = await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
+      const { userId: newUserId, needsEmailConfirmation } = await signUpWithEmail(
+        form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
@@ -241,6 +245,16 @@ export default function ProRegistrationScreen() {
 
       const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
       if (!uid) throw new Error("Impossible de récupérer l'ID utilisateur après inscription");
+
+      if (needsEmailConfirmation) {
+        // No session exists yet — uploading now would be rejected by RLS.
+        // Stash the picked documents locally; fetchProfile's bootstrap
+        // uploads them the moment this pro confirms and logs in for real.
+        await AsyncStorage.setItem(`pending_pro_docs_${uid}`, JSON.stringify(pendingUploads));
+        setNeedsConfirmation(true);
+        setSubmitting(false);
+        return;
+      }
 
       const sessionData = await supabase.auth.getSession();
       const token = sessionData.data?.session?.access_token;
@@ -344,6 +358,40 @@ export default function ProRegistrationScreen() {
       setSubmitting(false);
     }
   };
+
+  if (needsConfirmation) {
+    return (
+      <View style={styles.successRoot}>
+        <View style={styles.successIconWrap}>
+          <Mail size={50} color={Colors.primary} />
+        </View>
+        <Text style={styles.successTitle}>{t("confirm_email_title")}</Text>
+        <Text style={styles.successSubtitle}>
+          {t("confirm_email_sub").replace("%s", form.email.trim())}
+        </Text>
+        <TouchableOpacity
+          style={[styles.successBtn, resending && { opacity: 0.6 }]}
+          disabled={resending}
+          onPress={async () => {
+            setResending(true);
+            try {
+              await resendConfirmationEmail(form.email.trim());
+              showToast(t("confirm_email_resent"));
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("action_failed"));
+            } finally {
+              setResending(false);
+            }
+          }}
+        >
+          {resending ? <ActivityIndicator color="white" /> : <Text style={styles.successBtnText}>{t("resend")}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 14, padding: 8 }} onPress={() => router.replace("/auth/pro-login")}>
+          <Text style={{ color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" }}>{t("back_to_login")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (submitted) {
     return (

@@ -29,6 +29,11 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 
 const DICT: Record<Locale, Record<string, string>> = {
   en: {
+    confirm_email_title: "Confirm your email",
+    confirm_email_sub: "We sent a confirmation link to %s. Tap it to activate your account, then come back and sign in.",
+    confirm_email_resent: "Confirmation email resent ✓",
+    email_not_confirmed: "Please confirm your email before signing in.",
+    resend_confirmation_email: "Resend confirmation email",
     withdraw_confirm_body: "Withdraw %s MAD to your bank account?",
     terms_of_use: "terms of use",
     terms_general: "terms and conditions",
@@ -835,6 +840,11 @@ const DICT: Record<Locale, Record<string, string>> = {
     request_sent: "Request sent", offer_accepted: "Offer accepted", payment_confirmed: "Payment confirmed",
   },
   ar: {
+    confirm_email_title: "أكّد بريدك الإلكتروني",
+    confirm_email_sub: "أرسلنا رابط تأكيد إلى %s. اضغط عليه لتفعيل حسابك، ثم عد لتسجيل الدخول.",
+    confirm_email_resent: "تم إعادة إرسال بريد التأكيد ✓",
+    email_not_confirmed: "يرجى تأكيد بريدك الإلكتروني قبل تسجيل الدخول.",
+    resend_confirmation_email: "إعادة إرسال بريد التأكيد",
     withdraw_confirm_body: "سحب %s درهم إلى حسابك البنكي؟",
     terms_of_use: "شروط الاستخدام",
     terms_general: "الشروط العامة",
@@ -1091,6 +1101,11 @@ const DICT: Record<Locale, Record<string, string>> = {
     penalty_applied: "تم تطبيق غرامة {n} درهم.", warning_count: "تحذير {n}/2.",
   },
   fr: {
+    confirm_email_title: "Confirmez votre email",
+    confirm_email_sub: "Nous avons envoyé un lien de confirmation à %s. Cliquez dessus pour activer votre compte, puis revenez vous connecter.",
+    confirm_email_resent: "Email de confirmation renvoyé ✓",
+    email_not_confirmed: "Confirmez d'abord votre email avant de vous connecter.",
+    resend_confirmation_email: "Renvoyer l'email de confirmation",
     withdraw_confirm_body: "Retirer %s MAD vers votre compte bancaire ?",
     terms_of_use: "conditions d'utilisation",
     terms_general: "conditions générales",
