@@ -1,5 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import { showToast } from "@/lib/toast";
+import { tr } from "@/lib/i18n";
 
 export interface DocumentAsset {
   uri: string;
@@ -35,12 +36,12 @@ export async function usePickDocument(): Promise<DocumentAsset | null> {
     if (!asset) return null;
 
     if (!ALLOWED_FORMATS.includes(asset.mimeType || "")) {
-      showToast("Format non autorisé. Utilisez PDF, JPG ou PNG.");
+      showToast(tr("format_not_allowed"));
       return null;
     }
 
     if (asset.size && asset.size > MAX_FILE_SIZE) {
-      showToast("Le fichier est trop volumineux (max 5MB).");
+      showToast(tr("file_too_large"));
       return null;
     }
 
@@ -52,7 +53,7 @@ export async function usePickDocument(): Promise<DocumentAsset | null> {
     };
   } catch (error) {
     console.error("Error picking document:", error);
-    showToast("Erreur lors de la sélection du document.");
+    showToast(tr("doc_pick_error"));
     return null;
   }
 }
@@ -90,13 +91,13 @@ export async function uploadDocumentToSupabase(
         details: (error as any).details ?? null,
       });
       if (error.message?.includes("row-level security")) {
-        showToast("Erreur de sécurité. Veuillez réessayer ou contacter le support.");
+        showToast(tr("security_error_support"));
       } else if (error.message?.includes("Bucket not found")) {
-        showToast("Le bucket de stockage n'existe pas. Veuillez contacter le support.");
+        showToast(tr("bucket_missing_support"));
       } else if (error.message?.includes("Network")) {
-        showToast("Erreur réseau. Vérifiez votre connexion internet.");
+        showToast(tr("network_error_check"));
       } else {
-        showToast("Erreur lors de l'upload du document.");
+        showToast(tr("doc_upload_error"));
       }
       return null;
     }
@@ -110,9 +111,9 @@ export async function uploadDocumentToSupabase(
     console.error("Error uploading document:", error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     if (errorMsg.includes("Network")) {
-      showToast("Erreur réseau. Vérifiez votre connexion internet.");
+      showToast(tr("network_error_check"));
     } else {
-      showToast("Erreur lors de l'upload du document.");
+      showToast(tr("doc_upload_error"));
     }
     return null;
   }

@@ -110,7 +110,7 @@ export default function ProEarningsScreen() {
 
   const requestPayout = () => {
     if (!user?.id || requesting) return;
-    if (available < 50) { showToast("Minimum 50 MAD pour un retrait."); return; }
+    if (available < 50) { showToast(t("min_amount_50")); return; }
     // A payout with no RIB on file is rejected server-side (migration 0032) —
     // send the pro to add it rather than showing them that error.
     if (!payoutMethod) {
@@ -120,10 +120,10 @@ export default function ProEarningsScreen() {
       ]);
       return;
     }
-    Alert.alert("Demander un retrait", `Retirer ${available} MAD vers votre compte bancaire ?`, [
-      { text: "Annuler", style: "cancel" },
+    Alert.alert(t("withdraw"), t("withdraw_confirm_body").replace("%s", String(available)), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Confirmer",
+        text: t("confirm"),
         onPress: async () => {
           setRequesting(true);
           try {

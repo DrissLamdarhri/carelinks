@@ -1144,7 +1144,7 @@ export default function LiveTrackingScreen() {
               accessibilityLabel="Appeler le professionnel"
               onPress={() => {
                 if (proPhone) void Linking.openURL(`tel:${proPhone}`);
-                else showToast("Numéro indisponible — utilisez la messagerie 💬");
+                else showToast(t("number_unavailable_chat"));
               }}
             >
               <Phone size={18} color="#1F2937" strokeWidth={2} />

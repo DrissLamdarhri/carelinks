@@ -253,7 +253,7 @@ export default function PatientProfileInfosScreen() {
             <TextInput
               value={city}
               onChangeText={setCity}
-              placeholder="Meknès"
+              placeholder={t("city_ph")}
               placeholderTextColor={Colors.textSubtle}
               style={styles.input}
             />

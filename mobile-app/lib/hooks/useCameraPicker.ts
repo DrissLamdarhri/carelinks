@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { showToast } from "@/lib/toast";
+import { tr } from "@/lib/i18n";
 
 export interface CameraAsset {
   uri: string;
@@ -12,7 +13,7 @@ export async function useTakePhoto(): Promise<CameraAsset | null> {
   try {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      showToast("Permission d'accès à la caméra refusée.");
+      showToast(tr("perm_camera_denied"));
       return null;
     }
 
@@ -36,7 +37,7 @@ export async function useTakePhoto(): Promise<CameraAsset | null> {
     };
   } catch (error) {
     console.error("Error taking photo:", error);
-    showToast("Erreur lors de la prise de photo.");
+    showToast(tr("photo_capture_error"));
     return null;
   }
 }
@@ -72,13 +73,13 @@ export async function uploadSelfieToSupabase(
         details: (error as any).details ?? null,
       });
       if (error.message?.includes("row-level security")) {
-        showToast("Erreur de sécurité. Veuillez réessayer ou contacter le support.");
+        showToast(tr("security_error_support"));
       } else if (error.message?.includes("Bucket not found")) {
-        showToast("Le bucket de stockage n'existe pas. Veuillez contacter le support.");
+        showToast(tr("bucket_missing_support"));
       } else if (error.message?.includes("Network")) {
-        showToast("Erreur réseau. Vérifiez votre connexion internet.");
+        showToast(tr("network_error_check"));
       } else {
-        showToast("Erreur lors de l'upload du selfie.");
+        showToast(tr("selfie_upload_error"));
       }
       return null;
     }
@@ -92,9 +93,9 @@ export async function uploadSelfieToSupabase(
     console.error("Exception uploadSelfieToSupabase:", error);
     const errorMsg = error instanceof Error ? error.message : String(error);
     if (errorMsg.includes("Network")) {
-      showToast("Erreur réseau. Vérifiez votre connexion internet.");
+      showToast(tr("network_error_check"));
     } else {
-      showToast("Erreur lors de l'upload du selfie.");
+      showToast(tr("selfie_upload_error"));
     }
     return null;
   }

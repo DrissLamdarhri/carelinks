@@ -104,7 +104,7 @@ export default function PatientProfileScreen() {
       const success = await updateProfileAvatar(user.id, avatarUrl);
       if (success) {
         await refreshProfile();
-        toastSuccess("Photo de profil mise à jour ✓");
+        toastSuccess(t("photo_updated_check"));
       }
     } finally {
       setUploadingAvatar(false);

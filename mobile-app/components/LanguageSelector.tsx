@@ -5,10 +5,13 @@ import { useI18n, type Locale } from "@/lib/i18n";
 
 const NAVY = "#0D0870";
 
-// French + Arabic (Moroccan solution). Arabic switches the app to RTL.
+// The three languages the product ships: French, Arabic (RTL) and English.
+// Each is fully translated — see lib/i18n.tsx. Names are shown in their own
+// language, which is the convention for a language picker.
 const OPTIONS: { code: Locale; native: string; sub: string; flag: string }[] = [
-  { code: "fr", native: "Français", sub: "French", flag: "🇫🇷" },
-  { code: "ar", native: "العربية", sub: "Arabic · RTL", flag: "🇲🇦" },
+  { code: "fr", native: "Français", sub: "Français", flag: "🇫🇷" },
+  { code: "ar", native: "العربية", sub: "العربية · RTL", flag: "🇲🇦" },
+  { code: "en", native: "English", sub: "English", flag: "🇬🇧" },
 ];
 
 export function LanguageSelector({ visible, onClose }: { visible: boolean; onClose: () => void }) {

@@ -459,7 +459,7 @@ export default function ProAuthFlowScreen() {
                 value={specialty}
                 onChangeText={setSpecialty}
                 style={styles.input}
-                placeholder="ex: Cardiologue, Généraliste"
+                placeholder={t("specialty_ph")}
                 placeholderTextColor={Colors.textSubtle}
               />
             </View>

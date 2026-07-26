@@ -193,7 +193,7 @@ export default function PatientHomeScreen() {
 
         <Text style={styles.question}>{t("what_care")}</Text>
         <Text style={styles.questionSub}>
-          Des professionnels certifiés disponibles maintenant
+          {t("certified_pros_now")}
         </Text>
       </LinearGradient>
 

@@ -231,7 +231,7 @@ export default function PatientAddressesScreen() {
         >
           <Home size={16} color={form.is_default ? Colors.primary : Colors.textMuted} />
           <Text style={[styles.defaultText, form.is_default && styles.defaultTextActive]}>
-            Définir comme adresse par défaut
+            {t("set_default_address_label")}
           </Text>
         </TouchableOpacity>
         <View style={styles.actionsRow}>

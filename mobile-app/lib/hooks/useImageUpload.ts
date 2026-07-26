@@ -3,12 +3,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Buffer } from "buffer";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/lib/toast";
+import { tr } from "@/lib/i18n";
 
 export async function usePickImage() {
   try {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      showToast("Permission d'accès à la galerie refusée.");
+      showToast(tr("perm_gallery_denied"));
       return null;
     }
 
@@ -26,7 +27,7 @@ export async function usePickImage() {
     return result.assets[0];
   } catch (error) {
     console.error("Error picking image:", error);
-    showToast("Erreur lors de la sélection de l'image.");
+    showToast(tr("image_pick_error"));
     return null;
   }
 }
@@ -36,7 +37,7 @@ export async function useCaptureImage(aspect: [number, number] = [3, 2]) {
   try {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      showToast("Permission d'accès à la caméra refusée.");
+      showToast(tr("perm_camera_denied"));
       return null;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -49,7 +50,7 @@ export async function useCaptureImage(aspect: [number, number] = [3, 2]) {
     return result.assets[0];
   } catch (error) {
     console.error("Error capturing image:", error);
-    showToast("Erreur lors de la prise de photo.");
+    showToast(tr("photo_capture_error"));
     return null;
   }
 }
@@ -59,7 +60,7 @@ export async function usePickDocumentImage(aspect: [number, number] = [3, 2]) {
   try {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      showToast("Permission d'accès à la galerie refusée.");
+      showToast(tr("perm_gallery_denied"));
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -72,7 +73,7 @@ export async function usePickDocumentImage(aspect: [number, number] = [3, 2]) {
     return result.assets[0];
   } catch (error) {
     console.error("Error picking document:", error);
-    showToast("Erreur lors de la sélection de l'image.");
+    showToast(tr("image_pick_error"));
     return null;
   }
 }
@@ -95,7 +96,7 @@ export async function uploadPrivateDocument(
       encoding: FileSystem.EncodingType.Base64,
     });
     if (!fileContent) {
-      showToast("Image vide, réessayez.");
+      showToast(tr("image_empty_retry"));
       return null;
     }
     const bytes = Buffer.from(fileContent, "base64");
@@ -104,13 +105,13 @@ export async function uploadPrivateDocument(
       .upload(filePath, bytes, { contentType: mimeType, cacheControl: "3600", upsert: true });
     if (error) {
       console.error("Private upload error:", error);
-      showToast("Erreur lors de l'envoi du document.");
+      showToast(tr("doc_send_error"));
       return null;
     }
     return filePath;
   } catch (error) {
     console.error("Error uploading private document:", error);
-    showToast("Erreur lors de l'envoi.");
+    showToast(tr("send_failed"));
     return null;
   }
 }
@@ -131,7 +132,7 @@ export async function uploadAvatarToSupabase(
       encoding: FileSystem.EncodingType.Base64,
     });
     if (!fileContent) {
-      showToast("Image vide, réessayez.");
+      showToast(tr("image_empty_retry"));
       return null;
     }
     const bytes = Buffer.from(fileContent, "base64");
@@ -146,7 +147,7 @@ export async function uploadAvatarToSupabase(
 
     if (error) {
       console.error("Upload error:", error);
-      showToast("Erreur lors de l'upload de l'image.");
+      showToast(tr("image_upload_error"));
       return null;
     }
 
@@ -157,7 +158,7 @@ export async function uploadAvatarToSupabase(
     return publicUrl;
   } catch (error) {
     console.error("Error uploading avatar:", error);
-    showToast("Erreur lors de l'upload.");
+    showToast(tr("upload_failed"));
     return null;
   }
 }
@@ -174,15 +175,15 @@ export async function updateProfileAvatar(
 
     if (error) {
       console.error("Update error:", error);
-      showToast("Erreur lors de la mise à jour du profil.");
+      showToast(tr("profile_update_error"));
       return false;
     }
 
-    showToast("Photo de profil mise à jour.");
+    showToast(tr("avatar_updated"));
     return true;
   } catch (error) {
     console.error("Error updating profile:", error);
-    showToast("Erreur lors de la mise à jour.");
+    showToast(tr("update_failed"));
     return false;
   }
 }

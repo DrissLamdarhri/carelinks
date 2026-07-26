@@ -3,10 +3,11 @@ import { Languages } from "lucide-react-native";
 import { useI18n, type Locale } from "@/lib/i18n";
 import { Colors } from "@/lib/colors";
 
-// French + Arabic only (Moroccan solution).
+// The three shipped languages — keep in sync with LanguageSelector.
 const LABELS: Partial<Record<Locale, string>> = {
   fr: "FR",
   ar: "ع",
+  en: "EN",
 };
 
 export function LocaleSwitcher({ compact = true }: { compact?: boolean }) {

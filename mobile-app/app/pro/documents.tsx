@@ -84,7 +84,7 @@ export default function ProDocumentsScreen() {
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>{t("docs_certifications")}</Text>
-          <Text style={styles.subtitle}>KYC et vérification professionnelle</Text>
+          <Text style={styles.subtitle}>{t("kyc_pro_verification")}</Text>
         </View>
       </View>
 

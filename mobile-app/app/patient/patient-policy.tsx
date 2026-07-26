@@ -159,7 +159,7 @@ export default function PatientPolicyScreen() {
                 <Shield size={16} color={Colors.primary} />
                 <View>
                   <Text style={styles.label}>{t("anonymous_analytics")}</Text>
-                  <Text style={styles.helper}>Aider à améliorer CareLink sans données identifiantes.</Text>
+                  <Text style={styles.helper}>{t("help_improve_anon")}</Text>
                 </View>
               </View>
               <Switch

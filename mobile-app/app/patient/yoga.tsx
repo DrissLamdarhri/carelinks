@@ -163,7 +163,7 @@ export default function YogaCatalogScreen() {
       }
     } catch (err) {
       console.error("[YogaCatalog] Erreur lors de la réservation:", err);
-      Alert.alert("Erreur", "Impossible de créer la réservation. Essayez de nouveau.");
+      Alert.alert(t("error"), t("cannot_create_booking"));
       setLoadingSessionId(null);
     }
   };
@@ -283,7 +283,7 @@ export default function YogaCatalogScreen() {
 
               <View style={styles.footerRow}>
                 <Text style={styles.price}>
-                  {session.price} <Text style={styles.priceUnit}>MAD / séance</Text>
+                  {session.price} <Text style={styles.priceUnit}>{t("mad_per_session")}</Text>
                 </Text>
                 <TouchableOpacity 
                   style={[styles.bookBtn, (loadingSessionId === session.id || session.spots <= 0) && styles.bookBtnDisabled]}

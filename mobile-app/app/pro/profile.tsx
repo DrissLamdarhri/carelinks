@@ -59,7 +59,7 @@ export default function ProProfileScreen() {
       const avatarUrl = await uploadAvatarToSupabase(user.id, image.uri);
       if (avatarUrl && (await updateProfileAvatar(user.id, avatarUrl))) {
         await refreshProfile();
-        toastSuccess("Photo de profil mise à jour ✓");
+        toastSuccess(t("photo_updated_check"));
       }
     } finally {
       setUploadingAvatar(false);

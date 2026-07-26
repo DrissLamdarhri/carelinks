@@ -319,7 +319,7 @@ export default function AdminBookingsScreen() {
           <Calendar size={40} color={Colors.textMuted} />
           <Text style={styles.emptyStateText}>{t("no_bookings")}</Text>
           <Text style={styles.emptyStateSubtext}>
-            Les réservations apparaîtront ici automatiquement
+            {t("bookings_appear_auto")}
           </Text>
         </View>
       ) : (

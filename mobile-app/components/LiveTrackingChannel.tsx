@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import * as Location from "expo-location";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { tr } from "@/lib/i18n";
 
 type LiveTrackingPayload = {
   lat: number;
@@ -43,7 +44,7 @@ export function LiveTrackingChannel({
 
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Localisation", "Autorisez la localisation pour diffuser votre position.");
+        Alert.alert(tr("allow_location_title"), tr("allow_location_broadcast"));
         return;
       }
 

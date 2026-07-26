@@ -225,7 +225,7 @@ export default function MfaSetupScreen() {
 
         {isEnabled ? (
           <View style={styles.enabledCard}>
-            <Text style={styles.enabledTitle}>MFA déjà activé</Text>
+            <Text style={styles.enabledTitle}>{t("mfa_already_on")}</Text>
             <Text style={styles.enabledText}>{t("account_protected")}</Text>
           </View>
         ) : (

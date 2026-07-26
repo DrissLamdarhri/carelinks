@@ -287,8 +287,8 @@ export default function RegistrationScreen() {
             {agreed ? <CheckCircle2 size={12} color="white" /> : null}
           </View>
           <Text style={styles.termsText}>
-            J'accepte les <Text style={styles.link}>conditions d'utilisation</Text> et la{" "}
-            <Text style={styles.link}>politique de confidentialité</Text>.
+            {t("accept_terms_prefix")} <Text style={styles.link}>{t("terms_of_use")}</Text> {t("and_the_f")}{" "}
+            <Text style={styles.link}>{t("privacy_policy")}</Text>.
           </Text>
         </TouchableOpacity>
 

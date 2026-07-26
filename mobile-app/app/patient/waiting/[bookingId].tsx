@@ -216,7 +216,7 @@ export default function WaitingOffersScreen() {
 
         <Text style={styles.searchTitle}>{t("searching_pros")}</Text>
         <Text style={styles.searchSubtitle}>
-          Nous cherchons les professionnels disponibles dans votre zone
+          {t("searching_pros_zone")}
         </Text>
 
         <View style={styles.realtimeRow}>

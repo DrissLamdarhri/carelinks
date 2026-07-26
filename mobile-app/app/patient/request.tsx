@@ -281,22 +281,22 @@ export default function PatientRequestScreen() {
     if (status === "undetermined") {
       const proceed = await new Promise<boolean>((resolve) =>
         Alert.alert(
-          "Autoriser la localisation",
-          "CareLink utilise votre position pour trouver les professionnels les plus proches et estimer les temps d'arrivée.",
+          t("allow_location_title"),
+          t("allow_location_body"),
           [
-            { text: "Pas maintenant", style: "cancel", onPress: () => resolve(false) },
-            { text: "Continuer", onPress: () => resolve(true) },
+            { text: t("not_now"), style: "cancel", onPress: () => resolve(false) },
+            { text: t("continue_btn"), onPress: () => resolve(true) },
           ]
         )
       );
       if (!proceed) return;
     } else if (status === "denied") {
       Alert.alert(
-        "Localisation désactivée",
-        "Activez la localisation dans les réglages pour trouver les professionnels près de vous.",
+        t("location_disabled_title"),
+        t("location_disabled_body"),
         [
-          { text: "Annuler", style: "cancel" },
-          { text: "Ouvrir les réglages", onPress: () => Linking.openSettings() },
+          { text: t("cancel"), style: "cancel" },
+          { text: t("open_settings"), onPress: () => Linking.openSettings() },
         ]
       );
       return;
@@ -365,11 +365,11 @@ export default function PatientRequestScreen() {
         console.error("notifyAdminNewBooking failed:", err);
       }
 
-      toastSuccess("Demande envoyée — recherche de professionnels…");
+      toastSuccess(t("request_sent_searching"));
       router.push(`/patient/waiting/${booking.id}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "La demande n'a pas pu être créée.");
-      toastError("La demande n'a pas pu être créée");
+      toastError(t("request_create_failed"));
     } finally {
       setSubmitting(false);
     }

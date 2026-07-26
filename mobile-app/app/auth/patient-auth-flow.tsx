@@ -75,7 +75,7 @@ export default function PatientAuthFlowScreen() {
     agreed;
 
   const routeByRole = (nextRole: string | null) => {
-    showToast("Connexion réussie ✓", "success");
+    showToast(t("login_success"), "success");
     if (nextRole === "pro") {
       router.replace("/pro");
     } else if (nextRole === "admin") {
@@ -265,7 +265,7 @@ export default function PatientAuthFlowScreen() {
                 value={loginEmail}
                 onChangeText={setLoginEmail}
                 style={styles.input}
-                placeholder="votre@email.com"
+                placeholder={t("your_email_ph")}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholderTextColor={Colors.textSubtle}
@@ -393,7 +393,7 @@ export default function PatientAuthFlowScreen() {
                 value={regEmail}
                 onChangeText={setRegEmail}
                 style={styles.input}
-                placeholder="votre@email.com"
+                placeholder={t("your_email_ph")}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholderTextColor={Colors.textSubtle}

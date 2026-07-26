@@ -458,7 +458,7 @@ export default function ProRegistrationScreen() {
                 value={form.city}
                 onChangeText={(value) => setForm((prev) => ({ ...prev, city: value }))}
                 style={styles.inputInner}
-                placeholder="Fès"
+                placeholder={t("city_ph")}
                 placeholderTextColor={Colors.textSubtle}
               />
             </View>
@@ -754,8 +754,8 @@ export default function ProRegistrationScreen() {
                 {agreed ? <Check size={12} color="white" /> : null}
               </View>
               <Text style={styles.termsText}>
-                J'accepte les <Text style={styles.link}>conditions générales</Text> et la{" "}
-                <Text style={styles.link}>politique de confidentialité</Text> de CareLink.
+                {t("accept_terms_prefix")} <Text style={styles.link}>{t("terms_general")}</Text> {t("and_the_f")}{" "}
+                <Text style={styles.link}>{t("privacy_policy")}</Text> {t("of_carelink")}.
               </Text>
             </TouchableOpacity>
           </View>

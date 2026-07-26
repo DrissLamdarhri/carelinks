@@ -1,18 +1,15 @@
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, BadgeCheck, CalendarClock, MapPin, MessageSquare, Star, Video } from "lucide-react-native";
 import { Colors, Gradients, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { ReviewsList } from "@/components/ReviewsList";
+import { db } from "@/lib/db/dal";
 
 const initialsOf = (n: string) => n.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 
-// Demo review cards (shown for the visual "zoomed" profile).
-const DEMO_REVIEWS = [
-  { id: "r1", name: "Salma B.", stars: 5, text: "À l'écoute et très professionnelle. Je me sens beaucoup mieux.", when: "il y a 2 sem." },
-  { id: "r2", name: "Youssef T.", stars: 5, text: "Approche bienveillante, séances en visio pratiques.", when: "il y a 1 mois" },
-  { id: "r3", name: "Nadia F.", stars: 4, text: "Très bon suivi, je recommande.", when: "il y a 1 mois" },
-];
 
 export default function PsychologistProfileScreen() {
   const { t } = useI18n();
@@ -21,8 +18,30 @@ export default function PsychologistProfileScreen() {
   const name = (typeof p.name === "string" && p.name) || "Dr. Dalila Mansouri";
   const price = Number(p.price) || 200;
   const focus = (typeof p.focus === "string" && p.focus) || t("clinical_psychologist");
-  const rating = Number(p.rating) || 4.9;
-  const reviews = Number(p.reviews) || 42;
+  // Real credentials, read from the professional's record. These used to be
+  // hardcoded ("4.9", "42 reviews", "8+" years, "320" sessions) — the same
+  // invented figures shown for every psychologist, which is not something we
+  // can put in front of a patient choosing who enters their care.
+  const [stats, setStats] = useState<{ rating: number; reviews: number; years: number; sessions: number } | null>(null);
+  useEffect(() => {
+    if (!p.id) return;
+    let alive = true;
+    void (async () => {
+      const pro = await db.pros.get(p.id as string).catch(() => null);
+      if (alive && pro) {
+        setStats({
+          rating: Number(pro.rating_avg ?? 0),
+          reviews: Number(pro.rating_count ?? 0),
+          years: Number(pro.years_experience ?? 0),
+          sessions: Number(pro.total_bookings ?? 0),
+        });
+      }
+    })();
+    return () => { alive = false; };
+  }, [p.id]);
+
+  const rating = stats?.rating ?? Number(p.rating) ?? 0;
+  const reviews = stats?.reviews ?? Number(p.reviews) ?? 0;
 
   const book = () =>
     router.push(`/patient/psychologist?proId=${encodeURIComponent(p.id ?? "demo")}&name=${encodeURIComponent(name)}&price=${price}`);
@@ -47,17 +66,17 @@ export default function PsychologistProfileScreen() {
         {/* Floating stats */}
         <View style={s.statsCard}>
           <View style={s.stat}>
-            <View style={s.statTop}><Star size={15} color="#FBBF24" fill="#FBBF24" /><Text style={s.statVal}>{rating.toFixed(1)}</Text></View>
-            <Text style={s.statLbl}>{reviews} {t("reviews_word")}</Text>
+            <View style={s.statTop}><Star size={15} color="#FBBF24" fill="#FBBF24" /><Text style={s.statVal}>{reviews > 0 ? rating.toFixed(1) : "—"}</Text></View>
+            <Text style={s.statLbl}>{reviews > 0 ? `${reviews} ${t("reviews_word")}` : t("no_reviews_yet")}</Text>
           </View>
           <View style={s.statDivider} />
           <View style={s.stat}>
-            <Text style={s.statVal}>8+</Text>
+            <Text style={s.statVal}>{stats?.years ? `${stats.years}+` : "—"}</Text>
             <Text style={s.statLbl}>{t("experience")}</Text>
           </View>
           <View style={s.statDivider} />
           <View style={s.stat}>
-            <Text style={s.statVal}>320</Text>
+            <Text style={s.statVal}>{stats?.sessions ?? "—"}</Text>
             <Text style={s.statLbl}>{t("sessions_label")}</Text>
           </View>
         </View>
@@ -90,28 +109,10 @@ export default function PsychologistProfileScreen() {
             <Text style={s.priceVal}>{price} MAD</Text>
           </View>
 
-          {/* Reviews */}
-          <View style={s.reviewHead}>
-            <Text style={s.h}>{t("patient_reviews")}</Text>
-            <View style={s.reviewScore}><Star size={13} color="#FBBF24" fill="#FBBF24" /><Text style={s.reviewScoreTxt}>{rating.toFixed(1)}</Text></View>
-          </View>
-          {DEMO_REVIEWS.map((r) => (
-            <View key={r.id} style={s.reviewCard}>
-              <View style={s.reviewTop}>
-                <View style={s.reviewAvatar}><Text style={s.reviewAvatarTxt}>{initialsOf(r.name)}</Text></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.reviewName}>{r.name}</Text>
-                  <View style={s.starsRow}>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Star key={i} size={11} color={i <= r.stars ? "#FBBF24" : "#E0E0E0"} fill={i <= r.stars ? "#FBBF24" : "#E0E0E0"} />
-                    ))}
-                    <Text style={s.reviewWhen}>· {r.when}</Text>
-                  </View>
-                </View>
-              </View>
-              <Text style={s.reviewText}>{r.text}</Text>
-            </View>
-          ))}
+          {/* Reviews — real data only. Fabricated testimonials were being shown
+              here as if they were genuine patient feedback. */}
+          <Text style={s.h}>{t("patient_reviews")}</Text>
+          {p.id ? <ReviewsList professionalId={p.id} /> : null}
         </View>
       </ScrollView>
 
