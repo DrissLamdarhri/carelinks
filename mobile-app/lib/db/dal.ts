@@ -444,6 +444,43 @@ export type Payout = {
   note: string | null;
   created_at: string;
   processed_at: string | null;
+  /** Destination snapshotted when the request was made (migration 0032), so a
+   *  later RIB edit never retargets a pending payout. */
+  holder_name: string | null;
+  bank_name: string | null;
+  rib: string | null;
+};
+
+/** Where a pro's money is sent. Stored in its own table because the
+ *  `professionals` row is publicly readable (see migration 0032). */
+export type PayoutMethod = {
+  professional_id: UUID;
+  holder_name: string;
+  bank_name: string;
+  rib: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export const payoutMethods = {
+  async get(proId: UUID): Promise<PayoutMethod | null> {
+    const { data, error } = await supabase
+      .from("pro_payout_methods")
+      .select("*")
+      .eq("professional_id", proId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as PayoutMethod | null;
+  },
+  async save(input: { professional_id: UUID; holder_name: string; bank_name: string; rib: string }): Promise<PayoutMethod> {
+    return unwrap(
+      await supabase
+        .from("pro_payout_methods")
+        .upsert({ ...input, rib: input.rib.replace(/\D/g, "") }, { onConflict: "professional_id" })
+        .select("*")
+        .single(),
+    );
+  },
 };
 
 export const payments = {
@@ -499,4 +536,5 @@ export const db = {
   notificationSettings,
   payments,
   payouts,
+  payoutMethods,
 };

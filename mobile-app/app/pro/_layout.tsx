@@ -186,6 +186,7 @@ export default function ProLayout() {
         }}
       />
       <Tabs.Screen name="pending" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="payout-method" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />

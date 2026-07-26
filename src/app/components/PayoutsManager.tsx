@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
-import { Banknote, Check, Clock, RefreshCw, Wallet, X } from "lucide-react";
+import { Banknote, Check, Clock, Copy, RefreshCw, Wallet, X } from "lucide-react";
 
 // Admin view for pro withdrawal requests. Pros tap "Retirer" in the app which
 // inserts a `payouts` row (status 'requested'); this is where an admin actually
 // actions it: requested -> processing -> paid, or rejects it. Advancing the
 // status is what makes the payout real (the bank transfer itself is offline).
+
+// 007 780 0001234567890123 45 — grouped the way a bank shows it, so an admin can
+// eyeball it against their transfer form.
+const formatRib = (rib: string) => {
+  const d = rib.replace(/\D/g, "");
+  return [d.slice(0, 3), d.slice(3, 6), d.slice(6, 22), d.slice(22, 24)].filter(Boolean).join(" ");
+};
 
 type PayoutStatus = "requested" | "processing" | "paid" | "rejected";
 type PayoutRow = {
@@ -19,6 +26,9 @@ type PayoutRow = {
   created_at: string;
   processed_at: string | null;
   pro_name?: string;
+  holder_name: string | null;
+  bank_name: string | null;
+  rib: string | null;
 };
 
 const STATUS_STYLE: Record<PayoutStatus, { bg: string; fg: string; label: string }> = {
@@ -39,7 +49,7 @@ export function PayoutsManager() {
     try {
       const { data: payouts, error } = await supabase
         .from("payouts")
-        .select("id, professional_id, amount_mad, status, method, note, created_at, processed_at")
+        .select("id, professional_id, amount_mad, status, method, note, created_at, processed_at, holder_name, bank_name, rib")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
@@ -101,6 +111,15 @@ export function PayoutsManager() {
     [rows],
   );
 
+  const copyRib = async (rib: string) => {
+    try {
+      await navigator.clipboard.writeText(rib);
+      toast.success("RIB copié");
+    } catch {
+      toast.error("Copie impossible");
+    }
+  };
+
   const money = (n: number) => `${n.toLocaleString("fr-MA")} MAD`;
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-MA", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -161,7 +180,7 @@ export function PayoutsManager() {
                 <tr style={{ background: "#FAFAFC", color: "#888780" }}>
                   <Th>Professionnel</Th>
                   <Th>Montant</Th>
-                  <Th>Méthode</Th>
+                  <Th>Destination</Th>
                   <Th>Statut</Th>
                   <Th>Demandé le</Th>
                   <Th right>Action</Th>
@@ -174,7 +193,24 @@ export function PayoutsManager() {
                     <tr key={r.id} style={{ borderTop: "1px solid #F0F0F3" }}>
                       <Td><span style={{ fontWeight: 600, color: "#1A1A1A" }}>{r.pro_name}</span></Td>
                       <Td><span style={{ fontWeight: 700, color: "#0D0870" }}>{money(Number(r.amount_mad))}</span></Td>
-                      <Td><span style={{ color: "#888780", textTransform: "capitalize" }}>{r.method ?? "bank"}</span></Td>
+                      <Td>
+                        {r.rib ? (
+                          <div>
+                            <div style={{ color: "#1A1A1A", fontWeight: 600 }}>{r.holder_name}</div>
+                            <div style={{ color: "#888780", fontSize: 12 }}>{r.bank_name}</div>
+                            <button
+                              onClick={() => copyRib(r.rib!)}
+                              title="Copier le RIB"
+                              className="inline-flex items-center gap-1.5 mt-1 rounded-md px-2 py-1"
+                              style={{ background: "#F4F3F8", color: "#0D0870", fontFamily: "monospace", fontSize: 12, fontWeight: 600 }}
+                            >
+                              {formatRib(r.rib)} <Copy size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#B45309", fontSize: 12 }}>RIB manquant</span>
+                        )}
+                      </Td>
                       <Td>
                         <span className="inline-flex rounded-full px-2.5 py-1 text-xs" style={{ background: s.bg, color: s.fg, fontWeight: 600 }}>
                           {s.label}

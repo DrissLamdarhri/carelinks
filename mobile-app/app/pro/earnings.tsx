@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Wallet } from "lucide-react-native";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronRight, Landmark, Wallet } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
-import { db, type Payment, type Payout } from "@/lib/db/dal";
+import { db, type Payment, type Payout, type PayoutMethod } from "@/lib/db/dal";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
@@ -37,21 +38,25 @@ type Move = {
 
 export default function ProEarningsScreen() {
   const { t } = useI18n();
+  const router = useRouter();
   const { user } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
   const reload = async () => {
     if (!user?.id) { setLoading(false); return; }
     try {
-      const [pays, pos] = await Promise.all([
+      const [pays, pos, method] = await Promise.all([
         db.payments.listForPro(user.id).catch(() => [] as Payment[]),
         db.payouts.listForPro(user.id).catch(() => [] as Payout[]),
+        db.payoutMethods.get(user.id).catch(() => null),
       ]);
       setPayments(pays);
       setPayouts(pos);
+      setPayoutMethod(method);
     } finally {
       setLoading(false);
     }
@@ -106,6 +111,15 @@ export default function ProEarningsScreen() {
   const requestPayout = () => {
     if (!user?.id || requesting) return;
     if (available < 50) { showToast("Minimum 50 MAD pour un retrait."); return; }
+    // A payout with no RIB on file is rejected server-side (migration 0032) —
+    // send the pro to add it rather than showing them that error.
+    if (!payoutMethod) {
+      Alert.alert(t("bank_details_required"), t("bank_details_required_msg"), [
+        { text: t("cancel"), style: "cancel" },
+        { text: t("bank_details_add"), onPress: () => router.push("/pro/payout-method") },
+      ]);
+      return;
+    }
     Alert.alert("Demander un retrait", `Retirer ${available} MAD vers votre compte bancaire ?`, [
       { text: "Annuler", style: "cancel" },
       {
@@ -159,6 +173,24 @@ export default function ProEarningsScreen() {
         </View>
         <View style={s.walletBlob} />
       </LinearGradient>
+
+      {/* Where the money goes. Surfaced as its own row so a pro can set it up
+          before they have anything to withdraw, instead of discovering it only
+          when "Retirer" refuses. */}
+      <TouchableOpacity style={s.bankRow} activeOpacity={0.85} onPress={() => router.push("/pro/payout-method")}>
+        <View style={[s.bankIcon, !payoutMethod && s.bankIconWarn]}>
+          <Landmark size={17} color={payoutMethod ? NAVY : "#B45309"} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.bankTitle}>{t("bank_details")}</Text>
+          <Text style={[s.bankSub, !payoutMethod && s.bankSubWarn]} numberOfLines={1}>
+            {payoutMethod
+              ? `${payoutMethod.bank_name} · •••• ${payoutMethod.rib.slice(-4)}`
+              : t("bank_details_required_msg")}
+          </Text>
+        </View>
+        <ChevronRight size={17} color={Colors.textSubtle} />
+      </TouchableOpacity>
 
       {/* Stats */}
       <View style={s.statsRow}>
@@ -226,6 +258,16 @@ const s = StyleSheet.create({
   walletActionRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 3 },
   walletActionTxt: { color: NAVY, fontSize: 16, fontWeight: "800" },
 
+  bankRow: {
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "white",
+    borderRadius: 16, padding: 14, marginTop: 14,
+    shadowColor: NAVY, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1,
+  },
+  bankIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#E7E4FA", alignItems: "center", justifyContent: "center" },
+  bankIconWarn: { backgroundColor: "#FEF3C7" },
+  bankTitle: { fontSize: 14, fontWeight: "800", color: Colors.textPrimary },
+  bankSub: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  bankSubWarn: { color: "#B45309" },
   statsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   statCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, padding: 13 },
   statVal: { color: Colors.textPrimary, fontSize: 18, fontWeight: "800", marginTop: 6 },
