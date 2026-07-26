@@ -56,83 +56,6 @@ type CardItem = {
   isCompleted?: boolean;
 };
 
-const demoUpcoming: CardItem[] = [
-  {
-    id: "demo-upcoming-1",
-    specialtyLabel: "Infirmier",
-    specialty: "nurse",
-    statusLabel: "Confirmé",
-    statusTone: "neutral",
-    name: "Karim Benali",
-    subtitle: "Pansement",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
-    price: 120,
-    dateLabel: "15 Avr. 2025 — 14:00",
-    scheduledAt: "2025-04-15T14:00:00.000Z",
-    status: "matched",
-    bookingId: "demo-booking-upcoming-1",
-  },
-  {
-    id: "demo-upcoming-2",
-    specialtyLabel: "Psychologue",
-    specialty: "psychologist",
-    statusLabel: "En attente",
-    statusTone: "primary",
-    name: "Dr. Dalila Mansouri",
-    subtitle: "Consultation",
-    avatar: "https://images.unsplash.com/photo-1594824475317-d131f6cbf0d8?w=200&q=80",
-    price: 200,
-    dateLabel: "16 Avr. 2025 — 10:30",
-    scheduledAt: "2025-04-16T10:30:00.000Z",
-    status: "open",
-    bookingId: "demo-booking-upcoming-2",
-  },
-];
-
-const demoPast: CardItem[] = [
-  {
-    id: "demo-past-1",
-    specialtyLabel: "Infirmier",
-    specialty: "nurse",
-    statusLabel: "Terminé",
-    statusTone: "success",
-    name: "Fatima Zahra El Amrani",
-    subtitle: "Injection",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
-    price: 100,
-    dateLabel: "10 Avr. 2025 — 09:00",
-    scheduledAt: "2025-04-10T09:00:00.000Z",
-    status: "completed",
-    rating: 5,
-    bookingId: "demo-booking-past-1",
-    isCompleted: true,
-  },
-  {
-    id: "demo-past-2",
-    specialtyLabel: "Yoga",
-    specialty: "yoga_instructor",
-    statusLabel: "Terminé",
-    statusTone: "success",
-    name: "Sara Bennani",
-    subtitle: "Hatha Flow",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
-    price: 80,
-    dateLabel: "8 Avr. 2025 — 09:00",
-    scheduledAt: "2025-04-08T09:00:00.000Z",
-    status: "completed",
-    rating: 4,
-    bookingId: "demo-booking-past-2",
-    isCompleted: true,
-  },
-];
-
-const statusToneMap: Record<CardItem["statusTone"], { color: string; bg: string }> = {
-  neutral: { color: Colors.primary, bg: Colors.surfaceWarm },
-  primary: { color: Colors.primary, bg: "#EDE5CC" },
-  success: { color: "#16A34A", bg: "#DCFCE7" },
-  danger: { color: Colors.danger, bg: "#FDE8E8" },
-};
-
 export default function PatientBookingsScreen() {
   const router = useRouter();
   const { t } = useI18n();
@@ -143,10 +66,6 @@ export default function PatientBookingsScreen() {
   const { bookings, loading, error, refresh } = usePatientBookings(user?.id ?? null);
 
   const normalized = useMemo<CardItem[]>(() => {
-    if (!loading && bookings.length === 0) {
-      return tab === "upcoming" ? demoUpcoming : demoPast;
-    }
-
     return bookings.map((booking, index) => {
       const isPast = ["completed", "cancelled"].includes(booking.status);
       const statusLabel =

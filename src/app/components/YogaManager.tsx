@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import {
-  Calendar, ChevronDown, ChevronUp, Clock, Flower2, Plus, RefreshCw, Trash2, Users, X,
+  Ban, Calendar, CheckCircle2, ChevronDown, ChevronUp, Clock, Flower2, Plus, RefreshCw, Trash2, Upload, Users, X,
 } from "lucide-react";
 
 // Full yoga management for admins: create a class, see every class with its real
@@ -22,11 +22,19 @@ type Session = {
   price_mad: number;
   image_url: string | null;
   enrolled: number;
+  status: "scheduled" | "completed" | "cancelled";
+  cancel_reason: string | null;
 };
 type Enrollee = { patient_id: string; name: string; enrolled_at: string };
 
 const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
 const emptyForm = { title: "", instructor: "", date: "", time: "10:00", level: "Tous niveaux", capacity: 10, price: 120, imageUrl: "" };
+
+const STATUS_BADGE = {
+  scheduled: { bg: "#DCFCE7", fg: "#15803D", label: "Publiée" },
+  completed: { bg: "#EEF0FB", fg: "#0D0870", label: "Terminée" },
+  cancelled: { bg: "#FDE8E8", fg: "#B91C1C", label: "Annulée" },
+} as const;
 
 export function YogaManager() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -36,6 +44,8 @@ export function YogaManager() {
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [enrollees, setEnrollees] = useState<Record<string, Enrollee[]>>({});
+  const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -43,7 +53,7 @@ export function YogaManager() {
       // NB: the deployed table uses `instructor_name` (text), not instructor_id.
       const { data: rows, error } = await supabase
         .from("yoga_sessions")
-        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_name")
+        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_name, status, cancel_reason")
         .order("starts_at", { ascending: false });
       if (error) throw error;
 
@@ -70,6 +80,8 @@ export function YogaManager() {
           price_mad: Number(s.price_mad ?? 0),
           image_url: s.image_url,
           enrolled: counts.get(s.id) ?? 0,
+          status: (s.status ?? "scheduled") as Session["status"],
+          cancel_reason: s.cancel_reason ?? null,
         })),
       );
     } catch (e: any) {
@@ -122,6 +134,61 @@ export function YogaManager() {
       toast.error(e?.message ?? "Impossible de créer la séance");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // The class photo is uploaded to our own storage, never hot-linked from an
+  // external URL: third-party links rot, can be pulled at any time, and are not
+  // something we can ship to a client.
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `sessions/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("yoga-images")
+        .upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("yoga-images").getPublicUrl(path);
+      setForm((f) => ({ ...f, imageUrl: data.publicUrl }));
+      toast.success("Photo téléversée");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Téléversement impossible");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Marking the class done flips its bookings to 'completed', which is what
+  // releases the escrow to the instructor. Without it the money stays frozen.
+  const completeSession = async (id: string, title: string) => {
+    if (!confirm(`Marquer « ${title} » comme terminée ?\n\nLes paiements bloqués seront libérés.`)) return;
+    setBusyId(id);
+    try {
+      const { data, error } = await supabase.rpc("complete_yoga_session", { p_session_id: id });
+      if (error) throw error;
+      toast.success(`Séance terminée — ${data ?? 0} paiement(s) libéré(s)`);
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Impossible de terminer la séance");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const cancelSession = async (id: string, title: string) => {
+    const reason = window.prompt(`Annuler « ${title} » ?\n\nTous les inscrits seront remboursés. Motif :`, "Séance annulée par le studio.");
+    if (reason === null) return;
+    setBusyId(id);
+    try {
+      const { data, error } = await supabase.rpc("cancel_yoga_session", { p_session_id: id, p_reason: reason });
+      if (error) throw error;
+      toast.success(`Séance annulée — ${data ?? 0} remboursement(s)`);
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Impossible d'annuler la séance");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -187,8 +254,9 @@ export function YogaManager() {
       {/* How the yoga process works — the "full process" at a glance. */}
       <div className="rounded-xl px-4 py-3 mb-4 text-sm" style={{ background: "#EEF6FB", color: "#0B5563" }}>
         <strong>Comment ça marche :</strong> vous publiez une séance → elle apparaît dans l'app patient →
-        le patient s'inscrit et paie le prix (bloqué en escrow) → il assiste à l'heure prévue. La capacité
-        est respectée automatiquement.
+        le patient s'inscrit et paie le prix (bloqué en escrow) → il assiste à l'heure prévue → vous cliquez
+        <strong> « Terminer &amp; payer »</strong>, ce qui libère l'argent. « Annuler » rembourse tous les inscrits.
+        La capacité est bloquée automatiquement côté serveur. Les séances sont uniquement en présentiel.
       </div>
 
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
@@ -207,7 +275,31 @@ export function YogaManager() {
             <Field label="Heure"><input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} style={inputStyle} /></Field>
             <Field label="Capacité"><input type="number" min={1} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} style={inputStyle} /></Field>
             <Field label="Prix (MAD)"><input type="number" min={1} value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} style={inputStyle} /></Field>
-            <Field label="Image (URL)"><input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://…" style={inputStyle} /></Field>
+            <Field label="Photo de la séance">
+              <div className="flex items-center gap-2">
+                <label
+                  className="inline-flex items-center gap-2 rounded-xl px-3.5 text-sm cursor-pointer"
+                  style={{ background: "#F3F3F5", color: "#0D0870", fontWeight: 600, height: 44 }}
+                >
+                  <Upload size={15} />
+                  {uploading ? "Téléversement…" : form.imageUrl ? "Remplacer" : "Choisir une photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={uploading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadImage(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {form.imageUrl ? (
+                  <img src={form.imageUrl} alt="" style={{ height: 44, width: 60, objectFit: "cover", borderRadius: 10 }} />
+                ) : null}
+              </div>
+            </Field>
           </div>
           <div className="mt-3">
             <label className="text-xs" style={{ color: "#888780" }}>Niveau</label>
@@ -237,14 +329,16 @@ export function YogaManager() {
             const past = new Date(s.starts_at) < new Date();
             const pct = s.capacity ? Math.min(100, (s.enrolled / s.capacity) * 100) : 0;
             const full = s.enrolled >= s.capacity && s.capacity > 0;
+            const badge = STATUS_BADGE[s.status];
+            const open = s.status === "scheduled";
             return (
               <div key={s.id} className="rounded-2xl bg-white p-5" style={{ border: "1px solid #EFEFF2" }}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#D8F0F4" }}>
                     <Flower2 size={20} className="text-[#5BB8D4]" />
                   </div>
-                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs" style={{ background: past ? "#F3F3F5" : "#DCFCE7", color: past ? "#888780" : "#15803D", fontWeight: 600 }}>
-                    {past ? "Passée" : "Publiée"}
+                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs" style={{ background: badge.bg, color: badge.fg, fontWeight: 600 }}>
+                    {s.status === "scheduled" && past ? "À clôturer" : badge.label}
                   </span>
                 </div>
                 <p className="text-sm mb-1" style={{ fontWeight: 700, color: "#1A1A1A" }}>{s.title}</p>
@@ -260,6 +354,28 @@ export function YogaManager() {
                   </div>
                   <span className="text-xs" style={{ color: full ? "#DC2626" : "#888780", fontWeight: 600 }}>{s.enrolled}/{s.capacity}</span>
                 </div>
+                {/* Closing the class is what releases the escrow — it is the
+                    primary action once the class has taken place. */}
+                {open && (
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      disabled={busyId === s.id}
+                      onClick={() => void completeSession(s.id, s.title)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs disabled:opacity-50"
+                      style={{ background: past ? "#0D0870" : "#EEF0FB", color: past ? "#fff" : "#0D0870", fontWeight: 700 }}
+                    >
+                      <CheckCircle2 size={13} /> Terminer & payer
+                    </button>
+                    <button
+                      disabled={busyId === s.id}
+                      onClick={() => void cancelSession(s.id, s.title)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs disabled:opacity-50"
+                      style={{ background: "#FDE8E8", color: "#B91C1C", fontWeight: 700 }}
+                    >
+                      <Ban size={13} /> Annuler
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <button onClick={() => toggleEnrollees(s.id)} className="inline-flex items-center gap-1 text-xs" style={{ color: "#0D0870", fontWeight: 600 }}>
                     <Users size={13} /> Inscrits {expanded === s.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -268,6 +384,9 @@ export function YogaManager() {
                     <Trash2 size={13} /> Supprimer
                   </button>
                 </div>
+                {s.status === "cancelled" && s.cancel_reason ? (
+                  <p className="text-xs mt-2" style={{ color: "#B91C1C" }}>{s.cancel_reason}</p>
+                ) : null}
                 {expanded === s.id && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0F0F3" }}>
                     {!enrollees[s.id] ? (

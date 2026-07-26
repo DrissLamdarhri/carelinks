@@ -29,6 +29,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 
 const DICT: Record<Locale, Record<string, string>> = {
   en: {
+    session_full: "Class full", session_full_msg: "This class has no seats left. Pick another one.", spots_left: "seats left", full: "Full",
     identity_verified: "Identity verified",
     id_verification: "Identity verification", id_title: "Verify your identity", id_subtitle: "Before your first booking, we verify your identity — a professional will be entering your home. This is done once.",
     cin_number: "CIN number", cin_format_hint: "Format: 1–2 letters then 5–6 digits (e.g. AB123456).", cin_photo: "Photo of your CIN",
@@ -61,6 +62,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     request_sent: "Request sent", offer_accepted: "Offer accepted", payment_confirmed: "Payment confirmed",
   },
   ar: {
+    session_full: "الحصة مكتملة", session_full_msg: "لم تعد هناك أماكن في هذه الحصة. اختر حصة أخرى.", spots_left: "أماكن", full: "مكتملة",
     identity_verified: "هوية مُتحقَّقة",
     id_verification: "التحقق من الهوية", id_title: "تحقّق من هويتك", id_subtitle: "قبل حجزك الأول، نتحقق من هويتك — سيدخل مهني إلى منزلك. تتم العملية مرة واحدة فقط.",
     cin_number: "رقم البطاقة الوطنية", cin_format_hint: "الصيغة: حرف أو حرفان ثم 5–6 أرقام (مثال AB123456).", cin_photo: "صورة البطاقة الوطنية",
@@ -265,6 +267,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     penalty_applied: "تم تطبيق غرامة {n} درهم.", warning_count: "تحذير {n}/2.",
   },
   fr: {
+    session_full: "Séance complète", session_full_msg: "Cette séance n'a plus de places. Choisissez-en une autre.", spots_left: "places", full: "Complet",
     identity_verified: "Identité vérifiée",
     id_verification: "Vérification d'identité", id_title: "Vérifiez votre identité", id_subtitle: "Avant votre première réservation, nous vérifions votre identité — un professionnel va entrer chez vous. C'est une seule fois.",
     cin_number: "Numéro de CIN", cin_format_hint: "Format : 1–2 lettres puis 5–6 chiffres (ex. AB123456).", cin_photo: "Photo de votre CIN",

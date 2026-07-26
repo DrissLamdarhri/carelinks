@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { ArrowLeft, Calendar, Clock3, Heart, Star, Users } from "lucide-react-native";
+import { ArrowLeft, Calendar, Clock3, Flower2, Heart, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -20,52 +20,6 @@ import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
 import { useYogaSessions } from "@/lib/yoga-sessions";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
-
-// Fallback sessions for when database is unavailable
-const fallbackSessions = [
-  {
-    id: "s1",
-    name: "Hatha Flow Matinal",
-    level: "level_beginner",
-    instructor: "Sara Bennani",
-    instructorImg:
-      "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "60 min",
-    price: 80,
-    date: "18 Avr. — 09h00",
-    spots: 4,
-    rating: 4.8,
-    img: "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-  {
-    id: "s2",
-    name: "Vinyasa Dynamique",
-    level: "level_intermediate",
-    instructor: "Omar Tazi",
-    instructorImg:
-      "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "75 min",
-    price: 100,
-    date: "19 Avr. — 10h30",
-    spots: 2,
-    rating: 4.9,
-    img: "https://images.unsplash.com/photo-1667890785988-8da12fd0989b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-  {
-    id: "s3",
-    name: "Yin Yoga Profond",
-    level: "level_all",
-    instructor: "Nadia Filali",
-    instructorImg:
-      "https://images.unsplash.com/photo-1670191247079-f9713ae06dcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    duration: "90 min",
-    price: 90,
-    date: "20 Avr. — 18h00",
-    spots: 6,
-    rating: 4.7,
-    img: "https://images.unsplash.com/photo-1559185590-fcf099ac62c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-  },
-];
 
 export default function YogaCatalogScreen() {
   const { t } = useI18n();
@@ -84,7 +38,6 @@ export default function YogaCatalogScreen() {
         name: s.title,
         level: s.level || "Tous niveaux",
         instructor: s.instructor,
-        instructorImg: "https://images.unsplash.com/photo-1612944095914-33fd0a85fcfc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
         duration: `${s.durationMin} min`,
         price: s.priceMad,
         date: new Date(s.startsAt).toLocaleDateString("fr-FR", { 
@@ -96,7 +49,7 @@ export default function YogaCatalogScreen() {
         startsAtISO: s.startsAt,
         spots: s.capacity - s.enrolledCount,
         rating: 4.8,
-        img: s.imageUrl || "https://images.unsplash.com/photo-1760774714285-61ff516f86c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
+        img: s.imageUrl || null,
       }))
     : []; // Empty array, not fallback
 
@@ -112,6 +65,11 @@ export default function YogaCatalogScreen() {
   const handleReserveYoga = async (session: typeof sessions[0]) => {
     if (!user?.id) {
       Alert.alert("Erreur", t("please_login_book"));
+      return;
+    }
+
+    if (session.spots <= 0) {
+      Alert.alert(t("session_full"), t("session_full_msg"));
       return;
     }
 
@@ -171,6 +129,17 @@ export default function YogaCatalogScreen() {
       if (bookingError) {
         // Even if booking fails, enrollment succeeded
         console.warn("Booking creation failed but enrollment succeeded:", bookingError);
+      }
+
+      // Link the enrollment to the booking that carries its payment. Without
+      // this the admin's "Terminer & payer" cannot find the escrow to release,
+      // and the money would stay frozen (migration 0031).
+      if (booking?.id && enrollment?.id) {
+        const { error: linkError } = await supabase
+          .from("yoga_enrollments")
+          .update({ booking_id: booking.id })
+          .eq("id", enrollment.id);
+        if (linkError) console.warn("Could not link enrollment to booking:", linkError.message);
       }
 
       if (booking) {
@@ -257,7 +226,13 @@ export default function YogaCatalogScreen() {
           {filteredSessions.map((session) => (
             <View key={session.id} style={styles.card}>
             <View style={styles.cardImageWrap}>
-              <Image source={{ uri: session.img }} style={styles.cardImage} />
+              {session.img ? (
+                <Image source={{ uri: session.img }} style={styles.cardImage} />
+              ) : (
+                <View style={[styles.cardImage, styles.cardImageFallback]}>
+                  <Flower2 size={34} color="#5BB8D4" strokeWidth={1.5} />
+                </View>
+              )}
               <View style={styles.imageOverlay} />
               <Text style={styles.levelBadge}>{session.level}</Text>
               <TouchableOpacity
@@ -281,7 +256,11 @@ export default function YogaCatalogScreen() {
             <View style={styles.cardBody}>
               <Text style={styles.sessionName}>{session.name}</Text>
               <View style={styles.instructorRow}>
-                <Image source={{ uri: session.instructorImg }} style={styles.instructorAvatar} />
+                <View style={[styles.instructorAvatar, styles.instructorAvatarFallback]}>
+                  <Text style={styles.instructorInitials}>
+                    {(session.instructor || "?").split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase()}
+                  </Text>
+                </View>
                 <Text style={styles.instructorName}>{session.instructor}</Text>
               </View>
 
@@ -297,7 +276,7 @@ export default function YogaCatalogScreen() {
                 <View style={styles.metaItem}>
                   <Users size={12} color={Colors.accent} />
                   <Text style={[styles.metaText, { color: Colors.accent }]}>
-                    {session.spots} places
+                    {session.spots > 0 ? `${session.spots} ${t("spots_left")}` : t("full")}
                   </Text>
                 </View>
               </View>
@@ -307,14 +286,14 @@ export default function YogaCatalogScreen() {
                   {session.price} <Text style={styles.priceUnit}>MAD / séance</Text>
                 </Text>
                 <TouchableOpacity 
-                  style={[styles.bookBtn, loadingSessionId === session.id && styles.bookBtnDisabled]}
+                  style={[styles.bookBtn, (loadingSessionId === session.id || session.spots <= 0) && styles.bookBtnDisabled]}
                   onPress={() => handleReserveYoga(session)}
-                  disabled={loadingSessionId === session.id}
+                  disabled={loadingSessionId === session.id || session.spots <= 0}
                 >
                   {loadingSessionId === session.id ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
-                    <Text style={styles.bookBtnText}>{t("reserve")}</Text>
+                    <Text style={styles.bookBtnText}>{session.spots <= 0 ? t("full") : t("reserve")}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -373,6 +352,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardImageWrap: { height: 146, position: "relative" },
+  cardImageFallback: { backgroundColor: "#D8F0F4", alignItems: "center", justifyContent: "center" },
+  instructorAvatarFallback: { backgroundColor: "#E7E4FA", alignItems: "center", justifyContent: "center" },
+  instructorInitials: { color: "#0D0870", fontSize: 10, fontWeight: "800" },
   cardImage: { width: "100%", height: "100%" },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
