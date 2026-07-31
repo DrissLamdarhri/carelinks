@@ -83,6 +83,20 @@ export const pros = {
     );
   },
 
+  /**
+   * How many approved, online pros currently serve this specialty — used to
+   * block a patient from posting a request nobody is around to see.
+   */
+  async countAvailableForSpecialty(specialty: ProSpecialty): Promise<number> {
+    const { count, error } = await supabase
+      .from("v_pros_public")
+      .select("id", { count: "exact", head: true })
+      .eq("specialty", specialty)
+      .eq("is_available", true);
+    if (error) throw error;
+    return count ?? 0;
+  },
+
 };
 
 export const patients = {
@@ -244,6 +258,18 @@ export const bookings = {
         .order("created_at", { ascending: false })
         .limit(limit)
     );
+  },
+
+  /**
+   * Urgent/emergency requests skip bidding entirely: a pro calls this instead
+   * of submitting a bid, and the server-side claim_open_demand() RPC (0034)
+   * does an atomic compare-and-swap so only the first pro to reach Postgres
+   * wins — everyone else's call throws "Déjà pris en charge...".
+   */
+  async claimOpenDemand(bookingId: UUID): Promise<Booking> {
+    const { data, error } = await supabase.rpc("claim_open_demand", { p_booking_id: bookingId });
+    if (error) throw error;
+    return data as Booking;
   },
 
   async acceptBid(bookingId: UUID, professionalId: UUID, finalPrice: number): Promise<Booking> {

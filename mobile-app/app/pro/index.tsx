@@ -188,6 +188,29 @@ export default function ProHomeScreen() {
     }
   };
 
+  // "Online" used to mean nothing more than a boolean flipped once, with
+  // whatever GPS point happened to be captured at that exact moment — a pro
+  // could toggle on at home, then actually be 10 km away running an errand,
+  // and the app would still match/estimate distance from the stale point.
+  // While online, keep refreshing the real position in the background so
+  // matching and ETAs reflect where the pro actually is right now, not where
+  // they were when they tapped the toggle. Foreground-only (no background
+  // task registered), so it only runs while this screen is mounted and open.
+  useEffect(() => {
+    if (!isOnline || !user?.id) return;
+    const refresh = async () => {
+      try {
+        const coords = await geo.getCurrentPosition();
+        await geo.setProLocation(user.id, coords.lat, coords.lng);
+      } catch {
+        // best-effort — a missed refresh just means the next one (or the
+        // toggle-on point) stays the last known position a bit longer
+      }
+    };
+    const iv = setInterval(refresh, 3 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, [isOnline, user?.id]);
+
   return (
     <View style={styles.root}>
       {/* ── Header ── */}

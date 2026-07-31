@@ -147,7 +147,10 @@ function buildDates() {
 }
 
 const dates = buildDates();
-const times = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+// "now" is a sentinel, not a real HH:mm slot — on-demand requests default to
+// ASAP (scheduled_at: null), not a fixed 14:00 the patient never chose.
+const NOW_SLOT = "now";
+const times = [NOW_SLOT, "08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
 export default function PatientRequestScreen() {
   const router = useRouter();
@@ -184,7 +187,7 @@ export default function PatientRequestScreen() {
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
-  const [selectedTime, setSelectedTime] = useState(4);
+  const [selectedTime, setSelectedTime] = useState(0);
   const [price, setPrice] = useState(isKine ? 120 : 80);
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
@@ -330,10 +333,29 @@ export default function PatientRequestScreen() {
       }
 
       // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
+      const specialty = toDbSpecialty(serviceKey);
+
+      // Don't let a patient post into a void — check someone is actually online first.
+      const availablePros = await db.pros.countAvailableForSpecialty(specialty).catch(() => 1);
+      if (availablePros === 0) {
+        setErrorMessage(t("no_pros_online_block"));
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
+
       await db.patients.upsert({ id: user.id });
 
-      const [hour, minute] = times[selectedTime].split(":");
-      const scheduledAt = new Date(`${dates[selectedDate].isoDate}T${hour}:${minute}:00`).toISOString();
+      // "Maintenant" means exactly that — no fake future slot the patient
+      // never picked. Matches how urgent/emergency requests already work
+      // (scheduled_at stays null, waiting screen shows "Flexible").
+      const scheduledAt =
+        times[selectedTime] === NOW_SLOT
+          ? null
+          : (() => {
+              const [hour, minute] = times[selectedTime].split(":");
+              return new Date(`${dates[selectedDate].isoDate}T${hour}:${minute}:00`).toISOString();
+            })();
 
       let gps = coords;
       if (!gps) {
@@ -347,7 +369,7 @@ export default function PatientRequestScreen() {
 
       const booking = await db.bookings.create({
         patient_id: user.id,
-        specialty: toDbSpecialty(serviceKey),
+        specialty,
         notes: notes.trim() || null,
         address: address.trim(),
         budget_min_mad: Math.max(50, price - 20),
@@ -714,7 +736,7 @@ export default function PatientRequestScreen() {
                 onPress={() => setSelectedTime(index)}
               >
                 <Text style={[styles.timeText, selectedTime === index && styles.timeTextActive]}>
-                  {time}
+                  {time === NOW_SLOT ? t("time_now") : time}
                 </Text>
               </TouchableOpacity>
             ))}

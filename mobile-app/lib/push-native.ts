@@ -244,17 +244,30 @@ const SPECIALTY_LABELS: Record<string, string> = {
  * For background delivery, pair with the Supabase Edge Function
  * `supabase/functions/notify-pro-demand` that calls the Expo Push API directly.
  */
-export async function scheduleLocalDemandNotification(specialty: string): Promise<void> {
+export async function scheduleLocalDemandNotification(
+  specialty: string,
+  urgency?: string | null
+): Promise<void> {
   const modules = await loadNotificationsModules();
   if (!modules) return;
   const { Notifications } = modules;
 
+  const isPriority = urgency === "urgent" || urgency === "emergency";
+  const title = urgency === "emergency"
+    ? "🚨 Demande d'urgence"
+    : urgency === "urgent"
+      ? "⚡ Demande urgente"
+      : "📋 Nouvelle demande";
+  const body = isPriority
+    ? `Un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} est demandé(e) en priorité — premier arrivé, premier servi`
+    : `Un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} est demandé(e) près de vous`;
+
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "📋 Nouvelle demande",
-        body: `Un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} est demandé(e) près de vous`,
-        data: { type: "new_demand", specialty },
+        title,
+        body,
+        data: { type: "new_demand", specialty, urgency: urgency ?? "normal" },
         sound: true,
       },
       trigger: null, // immediate
@@ -274,15 +287,21 @@ export async function scheduleLocalDemandNotification(specialty: string): Promis
 export async function insertProDemandNotification(
   userId: string,
   bookingId: string,
-  specialty: string
+  specialty: string,
+  urgency?: string | null
 ): Promise<void> {
+  const isPriority = urgency === "urgent" || urgency === "emergency";
   try {
     const { error } = await supabase.from("notifications").insert({
       user_id: userId,
       kind: "new_demand",
-      title: "Nouvelle demande",
-      body: `Un patient cherche un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} — Répondez maintenant`,
-      data: { booking_id: bookingId, specialty },
+      title: isPriority
+        ? (urgency === "emergency" ? "🚨 Demande d'urgence" : "⚡ Demande urgente")
+        : "Nouvelle demande",
+      body: isPriority
+        ? `Un patient a besoin d'un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} en priorité — premier arrivé, premier servi`
+        : `Un patient cherche un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} — Répondez maintenant`,
+      data: { booking_id: bookingId, specialty, urgency: urgency ?? "normal" },
     } as any);
     if (error) console.warn("[push] insertProDemandNotification failed:", error.message);
   } catch (error) {

@@ -22,6 +22,7 @@ import { useReducedMotion } from "@/lib/a11y";
 const NAVY = "#0D0870";
 const GREEN = "#22C55E";
 const CARD = "#FFFFFF";
+const CYAN = "#22D3EE"; // "you are here" accent — matches the live/en-route dot used elsewhere
 
 export type ProMarkerInfo = {
   /** Local (require'd) image — preferred, always renders. */
@@ -190,7 +191,9 @@ function DriverPulse({ size, color }: { size: number; color: string }) {
   );
 }
 
-/** "You are here" — solid navy dot with two offset-phase ripple rings. */
+/** "You are here" — bright cyan puck (distinct from the navy destination pin
+ *  at a glance) with two offset-phase ripple rings and a white halo so it
+ *  reads clearly against both the light and dark map styles. Anchor center. */
 export function MeMarker() {
   const reduced = useReducedMotion();
   const a = useRef(new Animated.Value(0)).current;
@@ -212,27 +215,32 @@ export function MeMarker() {
   }, [a, b, reduced]);
 
   const ringStyle = (val: Animated.Value) => ({
-    opacity: val.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.32, 0] }),
-    transform: [{ scale: val.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.7] }) }],
+    opacity: val.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.35, 0] }),
+    transform: [{ scale: val.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.8] }) }],
   });
 
   return (
     <View style={styles.meWrap} pointerEvents="none">
       <Animated.View style={[styles.meRing, ringStyle(a)]} />
       <Animated.View style={[styles.meRing, ringStyle(b)]} />
-      <View style={styles.meDot} />
+      <View style={styles.meHalo}>
+        <View style={styles.meDot} />
+      </View>
     </View>
   );
 }
 
-/** Destination drop-pin — white teardrop head with a navy flag icon. Anchor bottom. */
+/** Destination drop-pin — bold navy teardrop with a white flag icon and a
+ *  soft ground shadow, so it reads as clearly "planted" at the exact point
+ *  rather than floating. Anchor bottom (the tail's point is the real coord). */
 export function DestinationPin() {
   return (
     <View style={styles.destWrap} pointerEvents="none">
       <View style={styles.destHead}>
-        <Flag size={15} color={NAVY} fill={NAVY} />
+        <Flag size={19} color="#FFFFFF" fill="#FFFFFF" />
       </View>
       <View style={styles.destTail} />
+      <View style={styles.destGroundShadow} />
     </View>
   );
 }
@@ -308,47 +316,67 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
 
-  meWrap: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
-  meRing: { position: "absolute", width: 26, height: 26, borderRadius: 13, backgroundColor: NAVY },
-  meDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: NAVY,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: NAVY,
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+  meWrap: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  meRing: { position: "absolute", width: 34, height: 34, borderRadius: 17, backgroundColor: CYAN },
+  meHalo: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
+    elevation: 6,
+  },
+  meDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: CYAN,
+    borderWidth: 2.5,
+    borderColor: "#FFFFFF",
+    shadowColor: CYAN,
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
   },
 
   destWrap: { alignItems: "center", justifyContent: "flex-end" },
   destHead: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 2.5,
-    borderColor: NAVY,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: NAVY,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: NAVY,
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 9,
   },
   destTail: {
     width: 0,
     height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 8,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 11,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
     borderTopColor: NAVY,
-    marginTop: -1,
+    marginTop: -2,
+  },
+  destGroundShadow: {
+    width: 16,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "rgba(13,8,112,0.28)",
+    marginTop: 1,
   },
 });

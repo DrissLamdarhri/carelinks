@@ -91,10 +91,17 @@ export default function PsychologistBookingScreen() {
       const firstISO = new Date(`${dates[selectedDay].isoDate}T${hour}:${minute}:00`).toISOString();
 
       // Resolve the psychologist: the one chosen from the directory, else the
-      // first approved (demo entries fall back to placeholder links).
+      // first approved AND currently online one — never match a patient to
+      // someone who isn't around to see the booking.
       const { data: psy } = chosenProId
-        ? await supabase.from("professionals").select("id, meet_link, zoom_link").eq("id", chosenProId).maybeSingle()
-        : await supabase.from("professionals").select("id, meet_link, zoom_link").eq("specialty", "psychologist").eq("verification_status", "approved").limit(1).maybeSingle();
+        ? await supabase.from("professionals").select("id, meet_link, zoom_link, is_available").eq("id", chosenProId).maybeSingle()
+        : await supabase.from("professionals").select("id, meet_link, zoom_link, is_available").eq("specialty", "psychologist").eq("verification_status", "approved").eq("is_available", true).limit(1).maybeSingle();
+
+      if (!psy || !psy.is_available) {
+        Alert.alert(t("error"), t("no_pros_online_block"));
+        setConfirming(false);
+        return;
+      }
 
       const base = {
         patient_id: user.id,

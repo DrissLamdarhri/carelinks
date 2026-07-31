@@ -502,6 +502,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -644,10 +645,11 @@ export default function LiveTrackingScreen() {
 
   const [booking,    setBooking]    = useState<Booking | null>(null);
   const [proProfile, setProProfile] = useState<Profile | null>(null);
+  const [proRating,  setProRating]  = useState<{ avg: number; count: number } | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [eta,        setEta]        = useState(10);
+  const [eta,        setEta]        = useState<number | null>(isDemoBooking ? 10 : null);
   const [errorMsg,   setErrorMsg]   = useState<string | null>(null);
-  const [proCoord,   setProCoord]   = useState<LatLng>(DEMO_PATH[0]);
+  const [proCoord,   setProCoord]   = useState<LatLng | null>(isDemoBooking ? DEMO_PATH[0] : null);
   const [routeCoords, setRouteCoords] = useState<LatLng[] | null>(null);
   const [routeCenter, setRouteCenter] = useState<LatLng | null>(null);
   const [routeLoaded, setRouteLoaded] = useState(false);
@@ -662,7 +664,7 @@ export default function LiveTrackingScreen() {
 
   // Index of the route point nearest the pro — splits traversed vs remaining
   const progressIdx = useMemo(() => {
-    if (!routeCoords || routeCoords.length < 2) return 0;
+    if (!proCoord || !routeCoords || routeCoords.length < 2) return 0;
     let best = 0;
     let bestD = Infinity;
     for (let i = 0; i < routeCoords.length; i++) {
@@ -686,7 +688,10 @@ export default function LiveTrackingScreen() {
   const patientCoordRef = useRef(patientCoord);
   patientCoordRef.current = patientCoord;
   useEffect(() => {
-    const update = () => setDistanceKm(haversineKm(proCoordRef.current, patientCoordRef.current));
+    const update = () =>
+      setDistanceKm(
+        proCoordRef.current ? haversineKm(proCoordRef.current, patientCoordRef.current) : null,
+      );
     update();
     const iv = setInterval(update, 5000);
     return () => clearInterval(iv);
@@ -722,7 +727,13 @@ export default function LiveTrackingScreen() {
         }
         const b = await db.bookings.get(bookingId);
         let prof: Profile | null = null;
-        if (b.professional_id) prof = await db.profiles.get(b.professional_id).catch(() => null);
+        if (b.professional_id) {
+          prof = await db.profiles.get(b.professional_id).catch(() => null);
+          const pro = await db.pros.get(b.professional_id).catch(() => null);
+          if (!cancelled && pro) {
+            setProRating({ avg: Number(pro.rating_avg ?? 0), count: Number(pro.rating_count ?? 0) });
+          }
+        }
 
         // attempt to extract booking coordinates (RPC may have stored them as booking_lat/booking_lng or lat/lng)
         const tryExtractCoords = (obj: any): LatLng | null => {
@@ -856,16 +867,14 @@ export default function LiveTrackingScreen() {
     return () => { cancelled = true; if (iv) clearInterval(iv); };
   }, [isDemoBooking]);
 
-  // ── Real booking route fetch: when booking + a pro origin or live origin available
+  // ── Real booking: seed the map from the pro's last known REAL position only.
+  // No synthetic origin, no scripted glide — if the pro hasn't shared a real
+  // location yet, the screen stays in the "waiting" state until they do.
   useEffect(() => {
     let cancelled = false;
-    let iv: ReturnType<typeof setInterval> | undefined;
     if (isDemoBooking) return;
     if (!booking) return;
 
-    // Destination (patient) + pro origin come from PostGIS via get_track_coords.
-    // Fall back to a synthetic origin ~2.5 km away so the nurse always "comes to
-    // you" exactly like the demo — even before the pro publishes a live GPS.
     (async () => {
       let destC: LatLng | null = null;
       let proOrigin: LatLng | null = null;
@@ -876,7 +885,7 @@ export default function LiveTrackingScreen() {
       } catch {
         // location denied/unavailable — fall through to other sources
       }
-      // Pro origin = matched pro's coords from the public view (deployed).
+      // Pro origin = matched pro's last reported coords from the public view.
       if (booking.professional_id) {
         try {
           proOrigin = await geo.getProCoords(booking.professional_id);
@@ -897,12 +906,22 @@ export default function LiveTrackingScreen() {
         // RPC not deployed — fine, we already have real coords above
       }
       if (cancelled) return;
-      const dest: LatLng = destC ?? MAP_CENTER; // demo center fallback → tracking still runs
-      const synthetic: LatLng = { lat: dest.lat + 0.02, lng: dest.lng + 0.015 }; // ~2.5 km away
-      const origin: LatLng = liveProOrigin ?? proOrigin ?? synthetic;
 
-      // Road-following route (OSRM); straight line as a fallback so motion never stalls.
-      let coords: LatLng[];
+      if (destC) {
+        const dest: LatLng = destC;
+        setRouteCoords((prev) => prev ?? [dest]);
+        setRouteCenter((c) => c ?? dest);
+      }
+
+      // Real GPS is already streaming (handlePosition) — never overwrite it here.
+      if (!proOrigin || liveActiveRef.current) return;
+      const origin: LatLng = proOrigin;
+      setProCoord((prev) => prev ?? origin);
+
+      // Draw the real road path for context — the marker itself never moves
+      // along it on its own; only a live broadcast (handlePosition) moves it.
+      if (!destC) return;
+      const dest: LatLng = destC;
       try {
         const coordsStr = `${origin.lng},${origin.lat};${dest.lng},${dest.lat}`;
         const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
@@ -912,60 +931,36 @@ export default function LiveTrackingScreen() {
         clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`Routing error ${res.status}`);
         const body = await res.json();
-        coords =
+        const coords: LatLng[] =
           body.routes && body.routes[0]?.geometry?.coordinates
             ? body.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }))
             : [origin, dest];
-      } catch {
-        coords = [origin, dest];
-      }
-      if (cancelled || coords.length < 2) return;
-
-      setRouteCoords(coords);
-      const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
-      setRouteCenter({ lat: avg.lat / coords.length, lng: avg.lng / coords.length });
-      setRouteLoaded(true);
-
-      // Movement along the route — identical glide to the demo.
-      const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
-      const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
-      let current: LatLng = { ...coords[0] };
-      let targetIdx = 1;
-      const remainingMeters = (pos: LatLng, idx: number) => {
-        let rem = distMeters(pos, coords[idx]);
-        for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
-        return rem;
-      };
-      setEta(Math.max(0, Math.ceil(remainingMeters(current, 1) / speedMps / 60)));
-      setProCoord({ ...current });
-
-      const tickInterval = 120; // small, frequent steps → the marker glides
-      iv = setInterval(() => {
         if (cancelled) return;
-        if (liveActiveRef.current) return; // real GPS is streaming → don't script
-        if (targetIdx >= coords.length) {
-          setEta(0);
-          setProCoord({ ...coords[coords.length - 1] });
-          if (iv) clearInterval(iv);
-          return;
+        setRouteCoords(coords);
+        const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
+        setRouteCenter({ lat: avg.lat / coords.length, lng: avg.lng / coords.length });
+        setRouteLoaded(true);
+      } catch {
+        // straight line between two real endpoints is an honest fallback visual
+        if (!cancelled) {
+          setRouteCoords([origin, dest]);
+          setRouteLoaded(true);
         }
-        const target = coords[targetIdx];
-        const segDist = distMeters(current, target);
-        if (segDist < 1) { current = { ...target }; targetIdx += 1; setProCoord({ ...current }); return; }
-        const dt = tickInterval / 1000;
-        const move = Math.min(1, (speedMps * dt) / segDist);
-        current = { lat: current.lat + (target.lat - current.lat) * move, lng: current.lng + (target.lng - current.lng) * move };
-        setProCoord({ ...current });
-        const rem = remainingMeters(current, targetIdx);
-        setEta(Math.max(0, Math.ceil(rem / speedMps / 60)));
-        if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); if (iv) clearInterval(iv); }
-      }, tickInterval);
+      }
     })();
 
-    return () => { cancelled = true; if (iv) clearInterval(iv); };
+    return () => { cancelled = true; };
   }, [booking, isDemoBooking]);
 
-  // NOTE: ETA is now computed from demo motion (distance / speed). Remove the blind countdown.
+  // ETA is derived purely from real distance — it only changes when a real GPS
+  // update moves proCoord (via handlePosition) or the patient position resolves.
+  // No countdown, no scripted speed: if the pro isn't moving, the number doesn't move.
+  useEffect(() => {
+    if (isDemoBooking) return;
+    if (distanceKm == null) { setEta(null); return; }
+    const ASSUMED_SPEED_KMH = 30;
+    setEta(Math.max(0, Math.round((distanceKm / ASSUMED_SPEED_KMH) * 60)));
+  }, [distanceKm, isDemoBooking]);
 
   const [liveProOrigin, setLiveProOrigin] = useState<LatLng | null>(null);
   // Once the pro broadcasts real GPS, live positions win over the scripted glide.
@@ -988,6 +983,11 @@ export default function LiveTrackingScreen() {
   // Keep the patient's screen honest about where the mission actually is: the pro
   // advances `matched → en_route → in_progress → completed` on their side, and
   // without this subscription the patient only ever saw the status they arrived with.
+  // Cancellation gets a hard stop here too: the screen used to just keep sitting
+  // there showing tracking UI for a booking that no longer existed, with no
+  // indication anything had changed — a patient could tap all the way through
+  // to "end session" on a job that had already been cancelled out from under them.
+  const cancelledHandledRef = useRef(false);
   useEffect(() => {
     if (!bookingId || isDemoBooking) return;
     const channel = supabase
@@ -995,23 +995,41 @@ export default function LiveTrackingScreen() {
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${bookingId}` },
-        (payload) => setBooking(payload.new as Booking),
+        (payload) => {
+          const next = payload.new as Booking;
+          setBooking(next);
+          if (next.status === "cancelled" && !cancelledHandledRef.current) {
+            cancelledHandledRef.current = true;
+            Alert.alert(
+              t("reservation_cancelled_title"),
+              next.refund_mad
+                ? t("reservation_cancelled_refund_msg").replace("%d", String(next.refund_mad))
+                : t("reservation_cancelled_msg"),
+              [{ text: "OK", onPress: () => router.replace("/patient/bookings") }],
+            );
+          }
+        },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId, isDemoBooking, router, t]);
 
   // ── Derived values ────────────────────────────────────────────────────────
-  const arrived      = eta === 0;
+  // "Arrivé !" must come from a genuinely LIVE position, never from the static
+  // last-known point this screen seeds itself with — that point can be stale
+  // (last set whenever the pro toggled online, possibly far from now), and
+  // declaring arrival from it alone is exactly what showed "Arrivé !" before
+  // the pro had broadcast a single real GPS frame.
+  const arrived      = isDemoBooking ? eta === 0 : proLive && eta === 0;
   const proName      = proProfile?.full_name ?? trackProMeta.name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
   const proPhone     = proProfile?.phone     ?? null;
   const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
   const proSpecialty = booking?.specialty?.replaceAll("_", " ") ?? "Infirmier";
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;
-  const progress     = Math.max(8, 100 - eta * 8);
+  const progress     = eta != null ? Math.max(8, 100 - eta * 8) : 8;
 
   return (
     <View style={s.root}>
@@ -1026,9 +1044,9 @@ export default function LiveTrackingScreen() {
 
         {/* Real map (MapLibre) — patient + moving pro + road route */}
         <CareLinkMapView
-          center={proCoord}
+          center={proCoord ?? patientCoord}
           patient={routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER}
-          pro={{ ...proCoord, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }}
+          pro={proCoord ? { ...proCoord, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName } : undefined}
           route={routeCoords ?? undefined}
           progressIdx={progressIdx}
           fitCoords={routeCoords ?? undefined}
@@ -1064,8 +1082,10 @@ export default function LiveTrackingScreen() {
             <View style={[s.etaDot, { backgroundColor: arrived ? "#16A34A" : "#22D3EE" }]} />
             <Text style={s.etaText}>
               {arrived
-                ? "Arrivé !"
-                : `${distanceKm != null ? `${distanceKm.toFixed(1)} km · ` : ""}${eta} min`}
+                ? t("arrived_excl")
+                : eta != null
+                  ? `${distanceKm != null ? `${distanceKm.toFixed(1)} km · ` : ""}${eta} min`
+                  : t("waiting_pro_departure")}
             </Text>
           </View>
 
@@ -1093,7 +1113,7 @@ export default function LiveTrackingScreen() {
                   ? t("waiting_pro_departure")
                   : t("en_route_to_you")}
             </Text>
-            <Text style={s.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
+            <Text style={s.progressValue}>{arrived ? t("arrived_excl") : eta != null ? `${eta} min` : "—"}</Text>
           </View>
 
           {/* Progress bar */}
@@ -1119,12 +1139,18 @@ export default function LiveTrackingScreen() {
               <Text style={s.providerName} numberOfLines={1}>{proName}</Text>
               <Text style={s.providerSub} numberOfLines={1}>
                 {proSpecialty}
-                {booking?.address ? ` · ${booking.address.split(",")[0]}` : " · Pansement"}
+                {booking?.address ? ` · ${booking.address.split(",")[0]}` : ""}
               </Text>
               <View style={s.ratingRow}>
                 <Text style={s.ratingStar}>★</Text>
-                <Text style={s.ratingVal}>4.8</Text>
-                <Text style={s.ratingCount}>(127)</Text>
+                <Text style={s.ratingVal}>
+                  {isDemoBooking ? "4.8" : proRating?.avg ? proRating.avg.toFixed(1) : "—"}
+                </Text>
+                {!isDemoBooking && proRating ? (
+                  <Text style={s.ratingCount}>({proRating.count})</Text>
+                ) : isDemoBooking ? (
+                  <Text style={s.ratingCount}>(127)</Text>
+                ) : null}
               </View>
             </View>
 
@@ -1157,7 +1183,12 @@ export default function LiveTrackingScreen() {
               accessibilityRole="button"
               accessibilityLabel="Partager le suivi"
               onPress={() =>
-                void Share.share({ message: `Mon infirmier arrive dans ${eta} min — CareLinks` })
+                void Share.share({
+                  message:
+                    eta != null
+                      ? `Mon infirmier arrive dans ${eta} min — CareLinks`
+                      : `Suivi en direct de mon infirmier — CareLinks`,
+                })
               }
             >
               <Share2 size={18} color="#1F2937" strokeWidth={2} />

@@ -300,10 +300,16 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
   const { t } = useI18n();
   // Wire onNewDemand into the realtime subscription so professionals are notified
   // the moment a matching demand appears — even before they look at the feed.
+  // Newest first, full stop — the hook already returns them that way (DB query
+  // orders by created_at desc, realtime inserts prepend). Urgent/emergency get
+  // their own push notification + red/amber badge instead of jumping the
+  // queue — pinning them to the top meant a stale, never-expired emergency
+  // request could sit above brand-new normal ones indefinitely.
   const { bookings, loading } = useOpenBookingsBySpecialty(specialty, { onNewDemand });
   const [bidFor, setBidFor] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [proStatus, setProStatus] = useState<VerificationStatus | null>(null);
   const approved = proStatus === "approved";
@@ -341,6 +347,28 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
       toastError(t("offer_not_sent"));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Urgent/emergency: no bidding — first approved, online pro to tap this
+  // claims the job outright at the posted price (0034_urgent_auto_dispatch.sql
+  // does the race-safe compare-and-swap; a losing claim throws and the card
+  // disappears anyway once open_demands drops the row for everyone else).
+  const claimNow = async (bookingId: string) => {
+    if (!user?.id || claimingId) return;
+    if (!approved) {
+      setErrorMessage(t("must_verify_to_offer"));
+      return;
+    }
+    setErrorMessage(null);
+    setClaimingId(bookingId);
+    try {
+      await db.bookings.claimOpenDemand(bookingId);
+      toastSuccess(t("urgent_claimed"));
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t("urgent_claim_failed"));
+    } finally {
+      setClaimingId(null);
     }
   };
 
@@ -389,7 +417,10 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
       {verificationBanner}
       {bookings.map((booking) => {
         const urgent = booking.urgency === "urgent";
+        const emergency = booking.urgency === "emergency";
+        const isPriority = urgent || emergency;
         const isBidding = bidFor === booking.booking_id;
+        const isClaiming = claimingId === booking.booking_id;
         return (
           <View key={booking.booking_id} style={styles.card}>
             {/* Header */}
@@ -409,10 +440,10 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
               </View>
             </View>
 
-            {urgent ? (
-              <View style={styles.urgent}>
-                <Zap size={12} color="#E24B4A" fill="#E24B4A" />
-                <Text style={styles.urgentTxt}>{t("urgent")}</Text>
+            {isPriority ? (
+              <View style={[styles.urgent, emergency && styles.emergency]}>
+                <Zap size={12} color={emergency ? "#FFFFFF" : "#E24B4A"} fill={emergency ? "#FFFFFF" : "#E24B4A"} />
+                <Text style={[styles.urgentTxt, emergency && styles.emergencyTxt]}>{emergency ? t("urg_emergency") : t("urgent")}</Text>
               </View>
             ) : null}
 
@@ -440,8 +471,23 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
 
             </View>
 
-            {/* CTA / bid */}
-            {isBidding ? (
+            {/* CTA / bid — urgent & emergency skip bidding entirely: claim now, first come first served */}
+            {isPriority && !approved ? (
+              <View style={styles.lockedBtn}>
+                <Lock size={15} color={Colors.textMuted} />
+                <Text style={styles.lockedTxt}>{t("verification_required")}</Text>
+              </View>
+            ) : isPriority ? (
+              <TouchableOpacity
+                style={[styles.offerBtn, styles.claimBtn]}
+                activeOpacity={0.9}
+                disabled={isClaiming}
+                onPress={() => claimNow(booking.booking_id)}
+              >
+                {isClaiming ? <Loader2 size={17} color="#FFFFFF" /> : <Zap size={17} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2} />}
+                <Text style={styles.offerTxt}>{t("urgent_claim_now")}</Text>
+              </TouchableOpacity>
+            ) : isBidding ? (
               <View style={styles.bidWrap}>
                 <View style={styles.inputWrap}>
                   <TextInput
@@ -513,7 +559,10 @@ const styles = StyleSheet.create({
   priceUnit: { color: Colors.primary, fontSize: 9.5, fontWeight: "700", opacity: 0.7 },
 
   urgent: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", backgroundColor: "#FDECEC", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, marginTop: 12 },
+  emergency: { backgroundColor: "#E24B4A" },
   urgentTxt: { color: "#E24B4A", fontSize: 11, fontWeight: "800" },
+  emergencyTxt: { color: "#FFFFFF" },
+  claimBtn: { backgroundColor: "#E24B4A" },
 
   meta: { gap: 7, marginTop: 12, marginBottom: 14 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 7 },

@@ -60,6 +60,7 @@ export default function PaymentScreen() {
   const [isProgram, setIsProgram] = useState(false); // scheduled series/subscription → confirmation, not tracking
   const [proName, setProName] = useState("Professionnel");
   const [specialty, setSpecialty] = useState("nurse");
+  const [urgency, setUrgency] = useState<string>("normal");
   const [city, setCity] = useState("");
   const [service, setService] = useState("Soin à domicile");
   const [txId, setTxId] = useState("");
@@ -86,6 +87,7 @@ export default function PaymentScreen() {
         setPrestation(Math.round(Number(b.final_price_mad ?? b.budget_max_mad ?? b.budget_min_mad ?? 0)));
         setProId(b.professional_id);
         setSpecialty(b.specialty);
+        setUrgency(b.urgency ?? "normal");
         setIsProgram(!!b.series_id || b.plan_type === "subscription" || b.plan_type === "recurring");
         setCity((b.address ?? "").split(",").pop()?.trim() || (b.address ?? ""));
         if (b.professional_id) {
@@ -119,12 +121,18 @@ export default function PaymentScreen() {
   const goAfterPayment = useCallback(() => {
     if (!bookingId) return router.replace("/patient/bookings");
     if (specialty === "yoga_instructor") return router.replace("/patient/bookings");
+    // Urgent/emergency: the hold is placed before any pro has claimed the
+    // request, so there's nothing to track yet — wait for the first pro to
+    // accept (waiting screen redirects on to tracking once matched).
+    if (urgency !== "normal" && !proId) {
+      return router.replace(`/patient/waiting/${encodeURIComponent(bookingId)}`);
+    }
     router.replace(
       specialty === "psychologist" || isProgram
         ? `/patient/appointment/${encodeURIComponent(bookingId)}`
         : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`,
     );
-  }, [bookingId, specialty, isProgram, router]);
+  }, [bookingId, specialty, isProgram, urgency, proId, router]);
 
   // The receipt is confirmation, not a destination. Hold it just long enough to
   // be read, then continue on our own — leaving the patient parked on a screen
@@ -140,10 +148,20 @@ export default function PaymentScreen() {
     setSubmitting(true);
     try {
       if (!isDemo) {
+        // Re-read the booking right before charging: for urgent/emergency the
+        // hold is placed before any pro is matched, and checkout (card entry,
+        // 3-D Secure) takes long enough that a pro can claim the job in the
+        // meantime — using the stale `proId` from page-load would silently
+        // orphan this payment (it would never show up in the pro's earnings).
+        const currentProId = await db.bookings
+          .get(bookingId)
+          .then((b) => b.professional_id)
+          .catch(() => proId);
+        setProId(currentProId);
         await db.payments.create({
           booking_id: bookingId,
           patient_id: user.id,
-          professional_id: proId,
+          professional_id: currentProId,
           amount_mad: prestation,
           provider: "cmi",
         });
@@ -192,6 +210,12 @@ export default function PaymentScreen() {
             {/* ── Step 0: Résumé ── */}
             {step === 0 && (
               <>
+                {urgency !== "normal" && !proId ? (
+                  <View style={s.holdBanner}>
+                    <ShieldCheck size={16} color={NAVY} />
+                    <Text style={s.holdBannerTxt}>{t("urgent_hold_notice")}</Text>
+                  </View>
+                ) : null}
                 <View style={s.card}>
                   <View style={s.proRow}>
                     <View style={s.avatar}><User size={20} color={NAVY} /></View>
@@ -393,6 +417,8 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   body: { padding: 20, gap: 14, paddingBottom: 40 },
 
+  holdBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: CREAM, borderRadius: 14, padding: 13 },
+  holdBannerTxt: { flex: 1, color: NAVY, fontSize: 12.5, lineHeight: 17, fontWeight: "600" },
   card: { backgroundColor: "#FFF", borderRadius: 18, padding: 16, shadowColor: NAVY, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   cardLabel: { color: Colors.textMuted, fontSize: 12.5, fontWeight: "600", marginBottom: 10 },
   proRow: { flexDirection: "row", alignItems: "center", gap: 12 },

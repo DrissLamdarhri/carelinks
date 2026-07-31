@@ -65,11 +65,11 @@ export function useProDemandNotifications(): UseProDemandNotificationsResult {
       if (!user?.id) return;
 
       // 1. Immediate local push — visible while app is in foreground.
-      await scheduleLocalDemandNotification(demand.specialty);
+      await scheduleLocalDemandNotification(demand.specialty, demand.urgency);
 
       // 2. Persistent bell row — shows in NotificationBell even after the
       //    foreground alert is dismissed or the user reopens the app later.
-      await insertProDemandNotification(user.id, demand.booking_id, demand.specialty);
+      await insertProDemandNotification(user.id, demand.booking_id, demand.specialty, demand.urgency);
     },
     [user?.id]
   );

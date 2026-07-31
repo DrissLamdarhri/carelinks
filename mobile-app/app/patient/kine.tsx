@@ -77,9 +77,17 @@ export default function KineScreen() {
     if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
+      const realId = chosen && chosen.real ? chosen.id : null;
+      if (realId) {
+        const realPro = await db.pros.get(realId).catch(() => null);
+        if (!realPro?.is_available) {
+          toastError(t("no_pros_online_block"));
+          setSubmitting(false);
+          return;
+        }
+      }
       const [h, m] = ["10", "00"];
       const firstISO = new Date(`${dates[startDay].iso}T${h}:${m}:00`).toISOString();
-      const realId = chosen && chosen.real ? chosen.id : null;
       const rows = await db.bookings.createSeries(
         {
           patient_id: user.id, specialty: "physiotherapist", status: "matched",

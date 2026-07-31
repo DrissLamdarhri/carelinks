@@ -29,6 +29,7 @@ import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
+import { supabase } from "@/lib/supabase";
 import { showToast } from "@/lib/toast";
 import { haptics } from "@/lib/haptics";
 import { Colors } from "@/lib/colors";
@@ -127,6 +128,37 @@ export default function ProTrackingScreen() {
     return () => { cancelled = true; };
   }, [bookingId]);
 
+  // Stay honest about the booking's real status: this screen used to have no
+  // idea if the booking was cancelled by the patient (or by this same pro,
+  // navigating back into a stale copy of this screen) — "Terminer la
+  // mission" would then fire against a booking that no longer existed. The
+  // database itself now rejects that transition outright (0038), but the pro
+  // should never even see an active-looking screen for a dead booking.
+  const cancelledHandledRef = useRef(false);
+  useEffect(() => {
+    if (!bookingId) return;
+    const channel = supabase
+      .channel(`booking:protrack:${bookingId}:${Math.random().toString(36).slice(2)}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${bookingId}` },
+        (payload) => {
+          const next = payload.new as Booking;
+          setBooking(next);
+          if (next.status === "cancelled" && !cancelledHandledRef.current) {
+            cancelledHandledRef.current = true;
+            Alert.alert(t("reservation_cancelled_title"), t("reservation_cancelled_msg"), [
+              { text: "OK", onPress: () => router.back() },
+            ]);
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [bookingId, router, t]);
+
   // The nurse's live GPS is watched + broadcast to the patient by
   // <LiveTrackingChannel mode="broadcast"> below; onPosition updates our map.
   const onNursePosition = useCallback((p: { lat: number; lng: number }) => {
@@ -196,6 +228,15 @@ export default function ProTrackingScreen() {
   const advance = useCallback(
     async (status: BookingStatus, doneMsg: string) => {
       if (!bookingId || busy) return;
+      // Belt-and-suspenders: don't even try against local state we already
+      // know is terminal (the DB trigger would reject it anyway, but this
+      // skips a pointless round-trip and a confusing error toast for it).
+      if (booking?.status === "completed" || booking?.status === "cancelled") {
+        Alert.alert(t("reservation_cancelled_title"), t("reservation_cancelled_msg"), [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+        return;
+      }
       setBusy(true);
       try {
         const b = await db.bookings.setStatus(bookingId, status);
@@ -203,13 +244,16 @@ export default function ProTrackingScreen() {
         haptics.success();
         showToast(doneMsg);
         if (status === "completed") router.back();
-      } catch {
-        showToast(t("action_failed"));
+      } catch (error) {
+        // The booking may have just been cancelled by someone else between
+        // our last render and this tap — the DB trigger (0038) rejects the
+        // update and tells us exactly that.
+        showToast(error instanceof Error ? error.message : t("action_failed"));
       } finally {
         setBusy(false);
       }
     },
-    [bookingId, busy, router],
+    [bookingId, busy, booking?.status, router, t],
   );
 
   // RULE #4 — cancellation caused BY the nurse: the RPC refunds the client in full
