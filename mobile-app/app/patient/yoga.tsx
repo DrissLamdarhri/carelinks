@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { ArrowLeft, Calendar, Clock3, Flower2, Heart, Star, Users } from "lucide-react-native";
+import { ArrowLeft, Calendar, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -50,6 +50,8 @@ export default function YogaCatalogScreen() {
         spots: s.capacity - s.enrolledCount,
         rating: 4.8,
         img: s.imageUrl || null,
+        address: s.address || null,
+        city: s.city || null,
       }))
     : []; // Empty array, not fallback
 
@@ -264,6 +266,15 @@ export default function YogaCatalogScreen() {
                 <Text style={styles.instructorName}>{session.instructor}</Text>
               </View>
 
+              {session.address || session.city ? (
+                <View style={styles.addressRow}>
+                  <MapPin size={12} color={Colors.textMuted} />
+                  <Text style={styles.addressText} numberOfLines={1}>
+                    {[session.address, session.city].filter(Boolean).join(", ")}
+                  </Text>
+                </View>
+              ) : null}
+
               <View style={styles.metaRow}>
                 <View style={styles.metaItem}>
                   <Clock3 size={12} color={Colors.textMuted} />
@@ -398,6 +409,8 @@ const styles = StyleSheet.create({
   instructorRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 10 },
   instructorAvatar: { width: 20, height: 20, borderRadius: 10 },
   instructorName: { color: Colors.textMuted, fontSize: 12 },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
+  addressText: { flex: 1, color: Colors.textMuted, fontSize: 11.5 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   metaText: { color: Colors.textMuted, fontSize: 11 },

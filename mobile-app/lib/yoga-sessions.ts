@@ -14,6 +14,7 @@ export interface YogaSession {
   priceMad: number;
   enrolledCount: number;
   address?: string;
+  city?: string;
   isOnline?: boolean;
   meetingUrl?: string;
 }
@@ -37,29 +38,53 @@ export function useYogaSessions() {
         setLoading(true);
         setError(null);
 
-        // Fetch yoga sessions (without requiring instructor to exist)
-        const { data: sessionsData, error: sessionsError } = await supabase
-          .from('yoga_sessions')
-          .select(`
-            id,
-            title,
-            description,
-            instructor_name,
-            level,
-            image_url,
-            starts_at,
-            duration_min,
-            capacity,
-            price_mad,
-            address,
-            is_online,
-            meeting_url
-          `)
-          .gt('starts_at', new Date().toISOString()) // Only future sessions
-          .order('starts_at', { ascending: true })
-          .limit(50);
-
-        if (sessionsError) throw sessionsError;
+        // Fetch yoga sessions (without requiring instructor to exist).
+        // `city` was added by migration 0041 — until that migration is
+        // actually run, selecting it 42703s and would otherwise blank the
+        // whole catalog (the catch-all below sets sessions to []), so fall
+        // back to the column list without it rather than fail hard.
+        let sessionsData: any[] | null = null;
+        {
+          const withCity = await supabase
+            .from('yoga_sessions')
+            .select(`
+              id,
+              title,
+              description,
+              instructor_name,
+              level,
+              image_url,
+              starts_at,
+              duration_min,
+              capacity,
+              price_mad,
+              address,
+              city,
+              is_online,
+              meeting_url
+            `)
+            .gt('starts_at', new Date().toISOString()) // Only future sessions
+            .order('starts_at', { ascending: true })
+            .limit(50);
+          if (withCity.error?.code === '42703') {
+            const withoutCity = await supabase
+              .from('yoga_sessions')
+              .select(`
+                id, title, description, instructor_name, level, image_url,
+                starts_at, duration_min, capacity, price_mad, address,
+                is_online, meeting_url
+              `)
+              .gt('starts_at', new Date().toISOString())
+              .order('starts_at', { ascending: true })
+              .limit(50);
+            if (withoutCity.error) throw withoutCity.error;
+            sessionsData = withoutCity.data;
+          } else if (withCity.error) {
+            throw withCity.error;
+          } else {
+            sessionsData = withCity.data;
+          }
+        }
 
         if (!mounted) return;
 
@@ -105,6 +130,7 @@ export function useYogaSessions() {
             priceMad: s.price_mad,
             enrolledCount: enrollmentMap[s.id] ?? 0,
             address: s.address,
+            city: s.city,
             isOnline: s.is_online,
             meetingUrl: s.meeting_url,
           };

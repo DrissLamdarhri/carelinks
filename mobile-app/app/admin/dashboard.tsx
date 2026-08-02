@@ -126,6 +126,11 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.ctaText}>{t("view_metrics")}</Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={[styles.ctaBtn, styles.ctaWide]} onPress={() => router.push("/admin/yoga-sessions")}>
+                <Text style={styles.ctaText}>Séances de yoga</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}

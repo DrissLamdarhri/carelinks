@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +22,11 @@ import { DateStrip } from "@/components/DateStrip";
 import { MonthCalendarModal } from "@/components/MonthCalendarModal";
 import type { Booking } from "@/lib/db/types";
 import { CancellationDialog } from "@/components/CancellationDialog";
+import { YogaBookingDetails } from "@/components/YogaBookingDetails";
+import { cancelYogaBooking, getBookingDetails } from "@/lib/db/yoga";
+import { isRefundEligible } from "@/lib/yoga-cancellation";
+import { showToast } from "@/lib/toast";
+import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 const SCREEN_W = Dimensions.get("window").width;
 
@@ -62,6 +69,10 @@ export default function PatientBookingsScreen() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [yogaModalBookingId, setYogaModalBookingId] = useState<string | null>(null);
+  const [yogaModalDetails, setYogaModalDetails] = useState<YogaBookingDetailsT | null>(null);
+  const [yogaModalLoading, setYogaModalLoading] = useState(false);
+  const [yogaCancelBusy, setYogaCancelBusy] = useState(false);
 
   // Scoped to the visible week instead of a patient's entire booking history
   // — that used to be fetched and rendered in full on every visit, getting
@@ -124,7 +135,61 @@ export default function PatientBookingsScreen() {
     pagerRef.current?.scrollTo({ x: next === "upcoming" ? 0 : SCREEN_W, animated: true });
   };
 
+  const openYogaDetails = async (bookingId: string) => {
+    setYogaModalBookingId(bookingId);
+    setYogaModalLoading(true);
+    setYogaModalDetails(null);
+    try {
+      const d = await getBookingDetails(bookingId);
+      setYogaModalDetails(d);
+    } catch {
+      // leave null — the modal shows a fallback message
+    } finally {
+      setYogaModalLoading(false);
+    }
+  };
+
+  // Yoga has its own 24h refund rule, decided server-side by
+  // cancel_yoga_booking() (migration 0041) — never the generic cancel_booking
+  // RPC, which has no timing awareness at all. `item.scheduledAt` is the
+  // session's own start time (set at booking creation, see app/patient/yoga.tsx),
+  // so no extra lookup is needed to preview eligibility here.
+  const handleYogaCancel = (item: CardItem) => {
+    const eligible = item.scheduledAt ? isRefundEligible(item.scheduledAt) : true;
+    Alert.alert(
+      "Annuler cette réservation ?",
+      eligible
+        ? "Vous serez remboursé intégralement (annulation à plus de 24h de la séance)."
+        : "Aucun remboursement ne sera effectué (annulation à moins de 24h de la séance).",
+      [
+        { text: "Garder ma réservation", style: "cancel" },
+        {
+          text: "Annuler la réservation",
+          style: "destructive",
+          onPress: async () => {
+            if (yogaCancelBusy) return;
+            setYogaCancelBusy(true);
+            try {
+              const res = await cancelYogaBooking(item.id);
+              showToast(
+                res.eligible && res.refund_mad > 0
+                  ? `Réservation annulée — ${res.refund_mad} MAD remboursés.`
+                  : "Réservation annulée — aucun remboursement (moins de 24h avant le cours).",
+              );
+              void refresh();
+            } catch (e) {
+              Alert.alert("Erreur", e instanceof Error ? e.message : "Annulation impossible.");
+            } finally {
+              setYogaCancelBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderCard = (item: CardItem) => {
+    const isYoga = item.specialty === "yoga_instructor";
     const sm = metaFor(item.specialty);
     const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.open;
     const SIcon = sm.icon;
@@ -188,7 +253,11 @@ export default function PatientBookingsScreen() {
               {!item.isCompleted ? (
                 <TouchableOpacity
                   style={styles.secondaryBtn}
-                  onPress={() =>
+                  onPress={() => {
+                    if (isYoga) {
+                      handleYogaCancel(item);
+                      return;
+                    }
                     setCancelTarget({
                       id: item.id,
                       patient_id: user?.id ?? "demo-patient",
@@ -219,8 +288,8 @@ export default function PatientBookingsScreen() {
                       session_total: null,
                       meet_link: null,
                       zoom_link: null,
-                    })
-                  }
+                    });
+                  }}
                 >
                   <X size={13} color={Colors.danger} />
                   <Text style={styles.secondaryBtnText}>{t("cancel")}</Text>
@@ -229,16 +298,22 @@ export default function PatientBookingsScreen() {
 
               <TouchableOpacity
                 style={styles.primaryBtn}
-                onPress={() =>
+                onPress={() => {
+                  if (isYoga) {
+                    void openYogaDetails(item.id);
+                    return;
+                  }
                   router.push(
                     item.isCompleted
                       ? `/patient/request?service=${encodeURIComponent(item.specialtyLabel)}`
                       : `/patient/tracking?bookingId=${encodeURIComponent(item.id)}`
-                  )
-                }
+                  );
+                }}
               >
-                <Text style={styles.primaryBtnText}>{item.isCompleted ? t("book_again") : t("see_details")}</Text>
-                {!item.isCompleted ? <ChevronRight size={14} color="white" /> : null}
+                <Text style={styles.primaryBtnText}>
+                  {isYoga ? "Voir détails" : item.isCompleted ? t("book_again") : t("see_details")}
+                </Text>
+                {!item.isCompleted && !isYoga ? <ChevronRight size={14} color="white" /> : null}
               </TouchableOpacity>
             </View>
           </View>
@@ -348,11 +423,43 @@ export default function PatientBookingsScreen() {
         onClose={() => setCalendarOpen(false)}
         onSelect={selectDay}
       />
+
+      <Modal
+        transparent
+        visible={!!yogaModalBookingId}
+        animationType="fade"
+        onRequestClose={() => setYogaModalBookingId(null)}
+      >
+        <View style={styles.yogaModalBackdrop}>
+          <View style={styles.yogaModalCard}>
+            <View style={styles.yogaModalHeader}>
+              <Text style={styles.yogaModalTitle}>Détails de la réservation</Text>
+              <TouchableOpacity onPress={() => setYogaModalBookingId(null)} style={styles.yogaModalClose}>
+                <X size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {yogaModalLoading ? (
+                <ActivityIndicator color={Colors.primary} style={{ marginVertical: 30 }} />
+              ) : yogaModalDetails ? (
+                <YogaBookingDetails details={yogaModalDetails} />
+              ) : (
+                <Text style={styles.errorText}>Impossible de charger les détails.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  yogaModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  yogaModalCard: { backgroundColor: "#F7F9FC", borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "85%", padding: 18 },
+  yogaModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  yogaModalTitle: { fontSize: 16, fontWeight: "800", color: Colors.textPrimary },
+  yogaModalClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#EFEFEF", alignItems: "center", justifyContent: "center" },
   root: { flex: 1, backgroundColor: "#F7F9FC" },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 26 },
   title: {

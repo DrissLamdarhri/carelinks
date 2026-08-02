@@ -116,11 +116,15 @@ export default function PaymentScreen() {
   );
 
   // Where a paid booking goes next: psychologist/subscription → appointment
-  // confirmation (Meet/Zoom links); yoga → bookings (a class has no live map);
-  // everything else → the live tracking map.
+  // confirmation (Meet/Zoom links); yoga → its own recap screen (a class has
+  // no live map, but the patient should still see instructor/address/time
+  // right after paying, not just land back on the list); everything else →
+  // the live tracking map.
   const goAfterPayment = useCallback(() => {
     if (!bookingId) return router.replace("/patient/bookings");
-    if (specialty === "yoga_instructor") return router.replace("/patient/bookings");
+    if (specialty === "yoga_instructor") {
+      return router.replace(`/patient/yoga-confirmation/${encodeURIComponent(bookingId)}`);
+    }
     // Urgent/emergency: the hold is placed before any pro has claimed the
     // request, so there's nothing to track yet — wait for the first pro to
     // accept (waiting screen redirects on to tracking once matched).
