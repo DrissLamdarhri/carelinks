@@ -15,7 +15,10 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowUp,
   CheckCircle2,
@@ -38,6 +41,8 @@ import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 const MAP_CENTER: LatLng = { lat: 34.037, lng: -5.004 };
+const PAID_STATUSES = new Set(["authorized", "captured"]);
+const SHEET_PEEK = 108; // handle + title strip left visible when dragged down
 
 function haversineKm(a: LatLng, b: LatLng): number {
   const R = 6371;
@@ -85,6 +90,13 @@ export default function ProTrackingScreen() {
   const [navIdx, setNavIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Safety gate: the patient accepting a bid only sets the booking to
+  // `matched` — it does NOT mean money changed hands. `accept_bid` never
+  // touches `payments`; the patient still has to clear a separate pay screen,
+  // and can back out or kill the app before doing so. Until a real
+  // `authorized`/`captured` payment row exists for this booking, the nurse
+  // gets no map, no route, and no GPS broadcast — just a waiting state.
+  const [paymentReady, setPaymentReady] = useState(false);
 
   // ── Load booking + resolve the patient's destination coords ────────────────
   useEffect(() => {
@@ -95,16 +107,8 @@ export default function ProTrackingScreen() {
         const b = await db.bookings.get(bookingId);
         if (cancelled) return;
         setBooking(b);
-        // Opening this screen IS setting out — the GPS broadcast starts right
-        // below. Advance `matched → en_route` so the patient immediately sees
-        // movement and the booking never stalls in `matched` waiting on a tap
-        // nobody remembers to make (that stall is what froze 85 bookings).
-        if (b.status === "matched") {
-          db.bookings
-            .markEnRoute(b.id)
-            .then((up) => { if (!cancelled) setBooking(up); })
-            .catch(() => { /* non-blocking — the manual button still works */ });
-        }
+        const pays = await db.payments.listForBookings([b.id]).catch(() => []);
+        if (!cancelled) setPaymentReady(pays.some((p) => PAID_STATUSES.has(p.status)));
         if (b.patient_id) {
           const pf = await db.profiles.get(b.patient_id).catch(() => null);
           if (!cancelled) setPatient(pf);
@@ -127,6 +131,40 @@ export default function ProTrackingScreen() {
     })();
     return () => { cancelled = true; };
   }, [bookingId]);
+
+  // Keep paymentReady live: the patient may still be sitting on the payment
+  // screen when the nurse opens this one — unlock the map the instant a real
+  // authorization/capture lands, no reload needed.
+  useEffect(() => {
+    if (!bookingId || paymentReady) return;
+    const channel = supabase
+      .channel(`payments:protrack:${bookingId}:${Math.random().toString(36).slice(2)}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "payments", filter: `booking_id=eq.${bookingId}` },
+        (payload) => {
+          const row = payload.new as { status?: string } | null;
+          if (row?.status && PAID_STATUSES.has(row.status)) setPaymentReady(true);
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [bookingId, paymentReady]);
+
+  // Opening this screen IS setting out — the GPS broadcast starts the moment
+  // it renders. Advance `matched → en_route` so the patient immediately sees
+  // movement and the booking never stalls in `matched` waiting on a tap
+  // nobody remembers to make (that stall is what froze 85 bookings) — but
+  // only once payment is actually secured, matching the map gate above.
+  useEffect(() => {
+    if (!paymentReady || !booking || booking.status !== "matched") return;
+    db.bookings
+      .markEnRoute(booking.id)
+      .then(setBooking)
+      .catch(() => { /* non-blocking — the manual button still works */ });
+  }, [paymentReady, booking]);
 
   // Stay honest about the booking's real status: this screen used to have no
   // idea if the booking was cancelled by the patient (or by this same pro,
@@ -291,14 +329,64 @@ export default function ProTrackingScreen() {
   const curStep = navSteps.length ? navSteps[Math.min(navIdx, navSteps.length - 1)] : null;
   const stepDistKm = curStep && nurse ? haversineKm(nurse, curStep.loc) : null;
 
+  // Sheet drag: pull the handle down to see the full map, back up to restore
+  // the mission card. Measured on layout since its content height varies
+  // (address line, action row, status button, etc.) — not a fixed constant.
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const sheetTranslateY = useSharedValue(0);
+  const sheetDragStart = useSharedValue(0);
+  const sheetMaxTranslate = Math.max(0, sheetHeight - SHEET_PEEK);
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      sheetDragStart.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const next = sheetDragStart.value + e.translationY;
+      sheetTranslateY.value = Math.max(0, Math.min(sheetMaxTranslate, next));
+    })
+    .onEnd((e) => {
+      const shouldCollapse = sheetTranslateY.value > sheetMaxTranslate / 2 || e.velocityY > 800;
+      sheetTranslateY.value = withSpring(shouldCollapse ? sheetMaxTranslate : 0, {
+        damping: 22,
+        stiffness: 220,
+      });
+    });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
+  if (!loading && !paymentReady && status !== "completed" && status !== "cancelled") {
+    return (
+      <View style={s.waitRoot}>
+        <TouchableOpacity style={[s.iconBtn, s.waitBack]} onPress={() => router.back()} accessibilityLabel="Retour">
+          <ArrowLeft size={20} color="#1F2937" strokeWidth={2.4} />
+        </TouchableOpacity>
+        <View style={s.waitCard}>
+          <ActivityIndicator color={NAVY} size="large" />
+          <Text style={s.waitTitle}>{t("waiting_payment_title")}</Text>
+          <Text style={s.waitSub}>{t("waiting_payment_msg")}</Text>
+          <View style={s.waitPatientRow}>
+            <View style={s.avatar}><Text style={s.avatarTxt}>{patientName.slice(0, 1).toUpperCase()}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.name} numberOfLines={1}>{patientName}</Text>
+              <Text style={s.care} numberOfLines={1}>{(booking?.specialty ?? "").replaceAll("_", " ")}</Text>
+            </View>
+            <Text style={s.price}>{booking?.final_price_mad ?? booking?.budget_max_mad ?? "—"} MAD</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={s.root}>
-      {/* Broadcast the nurse's real GPS to the patient's live tracking. */}
-      {bookingId ? (
+      {/* Broadcast the nurse's real GPS to the patient's live tracking — only
+          once a real payment exists, per the gate above. */}
+      {bookingId && paymentReady ? (
         <LiveTrackingChannel bookingId={bookingId} mode="broadcast" onPosition={onNursePosition} />
       ) : null}
 
-      <View style={s.mapWrap}>
+      <View style={[s.mapWrap, StyleSheet.absoluteFillObject]}>
         {loading ? (
           <View style={s.center}><ActivityIndicator color={NAVY} /></View>
         ) : (
@@ -336,9 +424,16 @@ export default function ProTrackingScreen() {
         </View>
       </View>
 
-      {/* Bottom card */}
-      <View style={s.sheet}>
-        <View style={s.handle} />
+      {/* Bottom card — draggable: pull down to see the full map. */}
+      <Animated.View
+        style={[s.sheet, sheetAnimatedStyle]}
+        onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
+      >
+        <GestureDetector gesture={sheetPan}>
+          <View style={s.handleZone}>
+            <View style={s.handle} />
+          </View>
+        </GestureDetector>
         <Text style={s.title}>{t("en_route_to_patient")}</Text>
 
         <View style={s.row}>
@@ -395,7 +490,18 @@ export default function ProTrackingScreen() {
             <Text style={s.cancelJobTxt}>{t("cancel_job")}</Text>
           </TouchableOpacity>
         ) : null}
-      </View>
+
+        {bookingId ? (
+          <TouchableOpacity
+            style={s.reportLink}
+            onPress={() => router.push(`/pro/report/${bookingId}`)}
+            accessibilityRole="button"
+          >
+            <AlertTriangle size={14} color="#E24B4A" />
+            <Text style={s.reportLinkTxt}>{t("report_patient_link")}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </Animated.View>
     </View>
   );
 }
@@ -441,11 +547,13 @@ const s = StyleSheet.create({
   navSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 },
 
   sheet: {
+    position: "absolute", left: 0, right: 0, bottom: 0,
     backgroundColor: "#FFFFFF", borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    marginTop: -24, paddingHorizontal: 22, paddingTop: 10, paddingBottom: 30,
+    paddingHorizontal: 22, paddingTop: 4, paddingBottom: 30,
     shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 20, shadowOffset: { width: 0, height: -6 }, elevation: 12,
   },
-  handle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", marginTop: 10, marginBottom: 14 },
+  handleZone: { paddingTop: 10, paddingBottom: 8, alignItems: "center" },
+  handle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB" },
   title: { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#EDE5CC", alignItems: "center", justifyContent: "center" },
@@ -471,4 +579,19 @@ const s = StyleSheet.create({
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
   cancelJobTxt: { color: "#E24B4A", fontSize: 14, fontWeight: "700" },
+  reportLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 6 },
+  reportLinkTxt: { color: "#E24B4A", fontSize: 13, fontWeight: "600" },
+
+  waitRoot: { flex: 1, backgroundColor: "#F7F5EE", paddingHorizontal: 20 },
+  waitBack: { marginTop: 52, marginBottom: 10 },
+  waitCard: {
+    flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingBottom: 80,
+  },
+  waitTitle: { fontSize: 19, fontWeight: "800", color: "#111827", textAlign: "center", marginTop: 4 },
+  waitSub: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 20, paddingHorizontal: 12 },
+  waitPatientRow: {
+    flexDirection: "row", alignItems: "center", gap: 12, marginTop: 20, width: "100%",
+    backgroundColor: "#FFFFFF", borderRadius: 18, padding: 16,
+    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+  },
 });

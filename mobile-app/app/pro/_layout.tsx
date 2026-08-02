@@ -191,6 +191,7 @@ export default function ProLayout() {
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="tracking/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="report/[bookingId]" options={hiddenFullScreenOptions} />
     </Tabs>
   );
 }

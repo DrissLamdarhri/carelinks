@@ -204,7 +204,15 @@ export default function PatientHomeScreen() {
             <TouchableOpacity
               key={qs.id}
               style={[styles.quickBtn, { backgroundColor: qs.background }]}
-              onPress={() => router.push(qs.id === "q1" ? "/patient/urgent" : "/patient/request")}
+              onPress={() => {
+                if (qs.id === "q1") router.push("/patient/urgent");
+                // Pansement / Injection: jump straight into the nurse request
+                // form with that exact care type pre-selected, instead of
+                // dropping the patient on a blank "Type de soin" picker.
+                else if (qs.id === "q2") router.push("/patient/request?service=infirmier&care=pansement");
+                else if (qs.id === "q3") router.push("/patient/request?service=infirmier&care=injection");
+                else router.push("/patient/request");
+              }}
             >
               <Icon size={14} color={qs.color} />
               <Text style={[styles.quickText, { color: qs.color }]}>{qs.label}</Text>

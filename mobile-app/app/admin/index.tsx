@@ -6,15 +6,28 @@ import { Shield, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { showToast } from "@/lib/toast";
 
 export default function AdminLoginScreen() {
   const { t } = useI18n();
   const router = useRouter();
+  const { sendPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) { showToast(t("enter_email_first")); return; }
+    try {
+      await sendPasswordReset(email.trim());
+      showToast(t("reset_sent"));
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : t("action_failed"));
+    }
+  };
 
   const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !submitting;
 
@@ -86,7 +99,9 @@ export default function AdminLoginScreen() {
 
           <View style={styles.passwordHeader}>
             <Text style={styles.label}>{t("password")}</Text>
-            <Text style={styles.forgot}>{t("forgot_password")}</Text>
+            <TouchableOpacity onPress={handleForgotPassword}>
+              <Text style={styles.forgot}>{t("forgot_password")}</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.inputWrap}>
             <Lock size={18} color={Colors.textMuted} />

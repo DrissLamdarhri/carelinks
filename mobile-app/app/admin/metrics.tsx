@@ -63,9 +63,9 @@ export default function AdminMetricsScreen() {
           .eq("verification_status", "approved")
           .eq("is_available", true),
         supabase
-          .from("bookings")
+          .from("disputes")
           .select("*", { count: "exact", head: true })
-          .eq("dispute_open", true),
+          .in("status", ["open", "under_review"]),
         supabase
           .from("professionals")
           .select("*", { count: "exact", head: true })

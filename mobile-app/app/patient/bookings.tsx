@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Activity, Brain, Calendar, CalendarClock, ChevronRight, Flower2, MapPin, Star, Syringe, X } from "lucide-react-native";
+import { Activity, AlertTriangle, Brain, Calendar, CalendarClock, ChevronRight, Flower2, MapPin, Star, Syringe, X } from "lucide-react-native";
 import { Colors, Gradients, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -175,6 +175,16 @@ export default function PatientBookingsScreen() {
             </View>
 
             <View style={styles.actions}>
+              {item.isCompleted ? (
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => router.push(`/patient/report/${item.id}`)}
+                  accessibilityLabel="Signaler un problème"
+                >
+                  <AlertTriangle size={13} color={Colors.danger} />
+                  <Text style={styles.secondaryBtnText}>{t("report_problem_short")}</Text>
+                </TouchableOpacity>
+              ) : null}
               {!item.isCompleted ? (
                 <TouchableOpacity
                   style={styles.secondaryBtn}

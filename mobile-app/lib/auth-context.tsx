@@ -472,7 +472,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: getPasswordResetRedirectUrl(),
     });
-    if (error) throw error;
+    if (error) {
+      // A raw network/server failure (Supabase Auth 500s with an empty body
+      // when its "Reset Password" email template is broken) can surface as
+      // React Native's fetch Response dumped wholesale into `.message` — an
+      // unreadable JSON blob with headers/alt-svc/etc. Never show that; a
+      // real Supabase auth message (e.g. rate limiting) stays short and
+      // human, so only replace the long/JSON-shaped ones.
+      const raw = error.message ?? "";
+      const looksRaw = raw.length > 120 || raw.trim().startsWith("{");
+      throw new Error(
+        looksRaw
+          ? "Impossible d'envoyer l'e-mail de réinitialisation pour le moment. Merci de réessayer dans quelques minutes."
+          : raw || "Impossible d'envoyer l'e-mail de réinitialisation.",
+      );
+    }
   };
 
   const updatePassword = async (newPassword: string): Promise<void> => {

@@ -576,6 +576,84 @@ export const payments = {
   },
 };
 
+// ── Disputes / complaints ────────────────────────────────────────────────
+export type DisputeCategory =
+  | "late_arrival"
+  | "no_show"
+  | "safety_incident"
+  | "poor_conduct"
+  | "quality_issue"
+  | "price_dispute"
+  | "property_damage"
+  | "harassment"
+  | "identity_mismatch"
+  | "payment_issue"
+  | "other";
+export type DisputeStatus = "open" | "under_review" | "resolved_refund" | "resolved_warning" | "resolved_dismissed";
+export type Dispute = {
+  id: UUID;
+  booking_id: UUID | null;
+  reporter_id: UUID;
+  reporter_role: "patient" | "professional";
+  against_id: UUID | null;
+  category: DisputeCategory;
+  description: string;
+  evidence_paths: string[];
+  status: DisputeStatus;
+  resolution_note: string | null;
+  refund_amount_mad: number | null;
+  resolved_by: UUID | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const disputes = {
+  // Files the dispute server-side (file_dispute RPC derives reporter_role +
+  // against_id from the booking itself — never trust the client for that).
+  async file(
+    bookingId: UUID,
+    category: DisputeCategory,
+    description: string,
+    evidencePaths: string[] = [],
+  ): Promise<Dispute> {
+    const { data, error } = await supabase.rpc("file_dispute", {
+      p_booking_id: bookingId,
+      p_category: category,
+      p_description: description,
+      p_evidence_paths: evidencePaths,
+    });
+    if (error) throw error;
+    return data as Dispute;
+  },
+  async listForReporter(userId: UUID): Promise<Dispute[]> {
+    return unwrap(
+      await supabase.from("disputes").select("*").eq("reporter_id", userId).order("created_at", { ascending: false }),
+    );
+  },
+  // Admin queue — RLS only lets an actual admin see rows beyond their own.
+  async listAll(status?: DisputeStatus): Promise<Dispute[]> {
+    let q = supabase.from("disputes").select("*").order("created_at", { ascending: false });
+    if (status) q = q.eq("status", status);
+    return unwrap(await q);
+  },
+  async resolve(
+    disputeId: UUID,
+    status: Extract<DisputeStatus, "under_review" | "resolved_refund" | "resolved_warning" | "resolved_dismissed">,
+    resolutionNote: string,
+    refundAmountMad?: number | null,
+  ): Promise<Dispute> {
+    const { data, error } = await supabase.rpc("resolve_dispute", {
+      p_dispute_id: disputeId,
+      p_status: status,
+      p_resolution_note: resolutionNote,
+      p_refund_amount_mad: refundAmountMad ?? null,
+    });
+    if (error) throw error;
+    return data as Dispute;
+  },
+};
+
 export const payouts = {
   async listForPro(proId: UUID): Promise<Payout[]> {
     return unwrap(
@@ -602,4 +680,5 @@ export const db = {
   payments,
   payouts,
   payoutMethods,
+  disputes,
 };

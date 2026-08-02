@@ -515,11 +515,13 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import ReAnimated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { AlertTriangle, Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { showToast } from "@/lib/toast";
-import { DEFAULT_AVATAR } from "@/lib/colors";
+import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import type { Booking, Profile } from "@/lib/db/types";
 import {
   buildDemoBooking,
@@ -539,6 +541,15 @@ const SCREEN_W  = Dimensions.get("window").width;
 const SCREEN_H  = Dimensions.get("window").height;
 const MAP_H     = Math.round(SCREEN_H * 0.72); // ~72% = exactly the screenshot ratio
 const NAVY      = "#0D0870";
+
+// ── Draggable sheet: drag the handle down to see the full map, back up to
+// return to the mission card. Same default position as before (sheet top at
+// MAP_H); collapsing slides it toward the bottom edge, leaving a small peek
+// strip (handle + progress row) so it's obvious how to bring it back up.
+const SHEET_EXPANDED_TOP = MAP_H - 24; // -24 preserves the original slight overlap onto the map
+const SHEET_PEEK_HEIGHT = 132;
+const SHEET_COLLAPSED_TOP = SCREEN_H - SHEET_PEEK_HEIGHT;
+const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 
 // ── Demo path ─────────────────────────────────────────────────────────────────
 type LatLng = { lat: number; lng: number };
@@ -1031,6 +1042,31 @@ export default function LiveTrackingScreen() {
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;
   const progress     = eta != null ? Math.max(8, 100 - eta * 8) : 8;
 
+  // Sheet drag: 0 = expanded (default, sheet top at MAP_H), SHEET_MAX_TRANSLATE
+  // = collapsed (map fully visible). Dragged via the handle only, so it never
+  // fights the sheet's own ScrollView.
+  const sheetTranslateY = useSharedValue(0);
+  const sheetDragStart = useSharedValue(0);
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      sheetDragStart.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const next = sheetDragStart.value + e.translationY;
+      sheetTranslateY.value = Math.max(0, Math.min(SHEET_MAX_TRANSLATE, next));
+    })
+    .onEnd((e) => {
+      const shouldCollapse =
+        sheetTranslateY.value > SHEET_MAX_TRANSLATE / 2 || e.velocityY > 800;
+      sheetTranslateY.value = withSpring(shouldCollapse ? SHEET_MAX_TRANSLATE : 0, {
+        damping: 22,
+        stiffness: 220,
+      });
+    });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
   return (
     <View style={s.root}>
       {!isDemoBooking && bookingId ? (
@@ -1038,11 +1074,10 @@ export default function LiveTrackingScreen() {
       ) : null}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  MAP — 72% of screen height, green background                     */}
+      {/*  MAP — fills the whole screen; dragging the sheet down reveals it   */}
+      {/*  beyond the old fixed 72% strip.                                    */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <View style={[s.map, { height: MAP_H, backgroundColor: CREAM }]}>
-
-        {/* Real map (MapLibre) — patient + moving pro + road route */}
+      <View style={[s.mapFull, { backgroundColor: CREAM }]}>
         <CareLinkMapView
           center={proCoord ?? patientCoord}
           patient={routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER}
@@ -1054,7 +1089,12 @@ export default function LiveTrackingScreen() {
           nightAuto
           recenterKey={recenterKey}
         />
+      </View>
 
+      {/* Chrome overlay (close/ETA header, recenter FAB) — same footprint as
+          before; `box-none` lets taps on the empty parts fall through to the
+          map underneath. */}
+      <View style={[s.map, { height: MAP_H }]} pointerEvents="box-none">
         {/* Re-center FAB */}
         <TouchableOpacity
           style={s.recenterFab}
@@ -1095,14 +1135,16 @@ export default function LiveTrackingScreen() {
       </View>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  BOTTOM SHEET — white, rounded top corners, overlaps map by 20px  */}
+      {/*  BOTTOM SHEET — draggable: pull the handle down to see the full map */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <View style={s.sheet}>
+      <ReAnimated.View style={[s.sheet, sheetAnimatedStyle]}>
+        <GestureDetector gesture={sheetPan}>
+          <View style={s.handleZone}>
+            <View style={s.handle} />
+          </View>
+        </GestureDetector>
 
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-          {/* Drag handle */}
-          <View style={s.handle} />
 
           {/* Progress label + value */}
           <View style={s.progressRow}>
@@ -1217,6 +1259,17 @@ export default function LiveTrackingScreen() {
             </TouchableOpacity>
           )}
 
+          {!isDemoBooking && bookingId ? (
+            <TouchableOpacity
+              style={s.reportLink}
+              onPress={() => router.push(`/patient/report/${bookingId}`)}
+              accessibilityRole="button"
+            >
+              <AlertTriangle size={14} color={Colors.danger} />
+              <Text style={s.reportLinkTxt}>{t("report_problem_link")}</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {loading && (
             <View style={s.loadRow}>
               <ActivityIndicator size="small" color={NAVY} />
@@ -1227,7 +1280,7 @@ export default function LiveTrackingScreen() {
 
         </ScrollView>
 
-      </View>
+      </ReAnimated.View>
 
       {showConfetti ? <ConfettiBurst /> : null}
     </View>
@@ -1240,6 +1293,7 @@ const s = StyleSheet.create({
 
   // Map
   map: { position: "relative", overflow: "hidden", width: "100%" },
+  mapFull: { ...StyleSheet.absoluteFillObject },
   pinAbs: { position: "absolute" },
   recenterFab: {
     position: "absolute",
@@ -1289,11 +1343,13 @@ const s = StyleSheet.create({
 
   // Bottom sheet
   sheet: {
-    flex: 1,
+    position: "absolute",
+    left: 0, right: 0,
+    top: SHEET_EXPANDED_TOP,
+    height: SCREEN_H - SHEET_EXPANDED_TOP,
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -24,
     paddingHorizontal: 22,
     paddingTop: 0,
     paddingBottom: 32,
@@ -1303,12 +1359,12 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: -6 },
     elevation: 12,
   },
+  handleZone: { paddingTop: 12, paddingBottom: 6, alignItems: "center" },
   handle: {
     alignSelf: "center",
     width: 38, height: 4,
     borderRadius: 2,
     backgroundColor: "#E5E7EB",
-    marginTop: 12, marginBottom: 16,
   },
 
   // Progress
@@ -1385,6 +1441,11 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   completeTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  reportLink: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    marginTop: 14, paddingVertical: 6,
+  },
+  reportLinkTxt: { color: Colors.danger, fontSize: 13, fontWeight: "600" },
 
   loadRow:  { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
   loadTxt:  { color: "#9CA3AF", fontSize: 12 },

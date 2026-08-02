@@ -39,7 +39,7 @@ export default function AdminDashboardScreen() {
         countOf("professionals", (q) => q.eq("verification_status", "pending")),
         countOf("profiles", (q) => q.eq("is_suspended", true)),
         supabase.from("professionals").select("rating_avg").gt("rating_count", 0),
-        countOf("disputes", (q) => q.in("status", ["open", "pending"])).catch(() => 0),
+        countOf("disputes", (q) => q.in("status", ["open", "under_review"])).catch(() => 0),
       ]);
       const rated = (ratingRows.data ?? []).map((r: any) => Number(r.rating_avg)).filter((n) => n > 0);
       const avg = rated.length ? (rated.reduce((s, n) => s + n, 0) / rated.length).toFixed(1) : "—";
@@ -73,7 +73,7 @@ export default function AdminDashboardScreen() {
       ? { text: `${stats.pendingKyc} document(s) KYC en attente`, kind: "warn", onPress: () => router.push("/admin/kyc") }
       : { text: t("no_pending_kyc"), kind: "ok" },
     ...(stats.suspended > 0 ? [{ text: `${stats.suspended} compte(s) suspendu(s)`, kind: "warn" as const }] : []),
-    ...(stats.disputes > 0 ? [{ text: `${stats.disputes} litige(s) à traiter`, kind: "warn" as const }] : []),
+    ...(stats.disputes > 0 ? [{ text: `${stats.disputes} litige(s) à traiter`, kind: "warn" as const, onPress: () => router.push("/admin/disputes") }] : []),
   ];
 
   return (
@@ -118,9 +118,14 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.ctaText}>{t("bookings_lbl")}</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.ctaBtn, styles.ctaWide]} onPress={() => router.push("/admin/metrics")}>
-              <Text style={styles.ctaText}>{t("view_metrics")}</Text>
-            </TouchableOpacity>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/disputes")}>
+                <Text style={styles.ctaText}>Litiges{stats.disputes > 0 ? ` (${stats.disputes})` : ""}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/metrics")}>
+                <Text style={styles.ctaText}>{t("view_metrics")}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}

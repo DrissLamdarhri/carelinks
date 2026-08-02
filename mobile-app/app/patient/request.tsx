@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,8 @@ import {
   X,
 } from "lucide-react-native";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
@@ -49,6 +51,17 @@ import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
+
+// ── Draggable sheet: drag the handle down to see the full map, back up to
+// return to the form. Same default position as before (sheet top at 42% of
+// the screen); collapsing just slides it down toward the bottom edge,
+// leaving a small peek strip (handle + title) so it's obvious how to bring
+// it back up.
+const SCREEN_H = Dimensions.get("window").height;
+const SHEET_EXPANDED_TOP = SCREEN_H * 0.42;
+const SHEET_PEEK_HEIGHT = 132;
+const SHEET_COLLAPSED_TOP = SCREEN_H - SHEET_PEEK_HEIGHT;
+const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 
 // Demo mode is OFF in production. Set EXPO_PUBLIC_DEMO=true only for demo builds
 // (shows fallback photo-pros + a wide search radius so the map is never empty).
@@ -155,7 +168,7 @@ const times = [NOW_SLOT, "08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "
 export default function PatientRequestScreen() {
   const router = useRouter();
   const { t } = useI18n();
-  const params = useLocalSearchParams<{ service?: string }>();
+  const params = useLocalSearchParams<{ service?: string; care?: string }>();
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
@@ -184,6 +197,18 @@ export default function PatientRequestScreen() {
   }), [isKine]);
   
   const [careType, setCareType] = useState(0);
+  // Coming from the home screen's "Pansement" / "Injection" quick chips: jump
+  // straight to that care type instead of leaving the picker on its default.
+  const careParamAppliedRef = useRef(false);
+  useEffect(() => {
+    if (careParamAppliedRef.current || !params.care || careTypes.length === 0) return;
+    const wanted = params.care.toLowerCase();
+    const idx = careTypes.findIndex((c) => c.toLowerCase().includes(wanted));
+    if (idx >= 0) {
+      setCareType(idx);
+      careParamAppliedRef.current = true;
+    }
+  }, [params.care, careTypes]);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
@@ -422,9 +447,36 @@ export default function PatientRequestScreen() {
       .join(" ");
   }, [price, SPARK_W]);
 
+  // Sheet drag: 0 = expanded (default), SHEET_MAX_TRANSLATE = collapsed (map
+  // fully visible). Dragged via the handle only, so it never fights the
+  // form's own ScrollView or its buttons/inputs.
+  const sheetTranslateY = useSharedValue(0);
+  const sheetDragStart = useSharedValue(0);
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      sheetDragStart.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const next = sheetDragStart.value + e.translationY;
+      sheetTranslateY.value = Math.max(0, Math.min(SHEET_MAX_TRANSLATE, next));
+    })
+    .onEnd((e) => {
+      const shouldCollapse =
+        sheetTranslateY.value > SHEET_MAX_TRANSLATE / 2 || e.velocityY > 800;
+      sheetTranslateY.value = withSpring(shouldCollapse ? SHEET_MAX_TRANSLATE : 0, {
+        damping: 22,
+        stiffness: 220,
+      });
+    });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
   return (
     <View style={styles.root}>
-      <View style={styles.mapZone}>
+      {/* Map fills the whole screen now — dragging the sheet down reveals it,
+          not just the old fixed 42% strip. */}
+      <View style={styles.mapFull}>
         {HAS_NATIVE_MAPS ? (
           <CareLinkMapView
             center={coords ?? DEFAULT_CENTER}
@@ -456,7 +508,12 @@ export default function PatientRequestScreen() {
             }}
           />
         )}
+      </View>
 
+      {/* Chrome overlay (search bar, buttons, pro card) — same footprint as
+          before; `box-none` lets taps on the empty parts fall through to the
+          map underneath. */}
+      <View style={styles.mapChrome} pointerEvents="box-none">
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
@@ -561,15 +618,22 @@ export default function PatientRequestScreen() {
         ) : null}
       </View>
 
-      <ScrollView
-        style={styles.sheet}
-        contentContainerStyle={styles.sheetContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets
-      >
-        <View style={styles.grabber} />
+      <Animated.View style={[styles.sheet, sheetAnimatedStyle]}>
+        {/* Drag handle — always visible/reachable regardless of scroll
+            position, so the sheet can be pulled down to the map at any time. */}
+        <GestureDetector gesture={sheetPan}>
+          <View style={styles.grabberZone}>
+            <View style={styles.grabber} />
+          </View>
+        </GestureDetector>
 
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+        >
         {/* ── Title row ── */}
         <Text style={styles.sheetTitle}>{t("your_request")}</Text>
         {isKine && (
@@ -852,14 +916,16 @@ export default function PatientRequestScreen() {
             ? "Les kinésithérapeutes de votre zone verront votre offre et pourront répondre."
             : "Les professionnels de votre zone verront votre offre et pourront répondre."}
         </Text>
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  mapZone: { height: "42%", paddingTop: 6 },
+  mapFull: { ...StyleSheet.absoluteFillObject },
+  mapChrome: { height: "42%", paddingTop: 6 },
   fitAllBtn: {
     position: "absolute",
     right: 14,
@@ -1031,13 +1097,23 @@ const styles = StyleSheet.create({
 
   // Sheet
   sheet: {
-    flex: 1,
-    marginTop: -16,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: SHEET_EXPANDED_TOP,
+    height: SCREEN_H - SHEET_EXPANDED_TOP,
     backgroundColor: "white",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 14,
   },
-  sheetContent: { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 8 },
+  sheetScroll: { flex: 1 },
+  grabberZone: { paddingTop: 10, paddingBottom: 8, alignItems: "center" },
+  sheetContent: { paddingHorizontal: 20, paddingBottom: 24 },
   grabber: {
     alignSelf: "center",
     width: 42,
