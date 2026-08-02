@@ -135,8 +135,11 @@ export default function ProHomeScreen() {
       ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
       : mockProProfile.name;
   const avatar = profile?.avatar || DEFAULT_AVATAR;
+  // Includes en_route: a pro actively driving to a patient who accidentally
+  // backs out of the tracking screen must still have a way back in — without
+  // this, "en_route" missions had no resume path at all.
   const activeMission =
-    appointments.find((b) => b.status === "matched" || b.status === "in_progress") ?? null;
+    appointments.find((b) => b.status === "matched" || b.status === "en_route" || b.status === "in_progress") ?? null;
 
   // ── Real stats ──────────────────────────────────────────────────────────────
   const now = new Date();
@@ -294,7 +297,11 @@ export default function ProHomeScreen() {
               <View style={styles.missionBadge}>
                 <Navigation size={12} color="#FFFFFF" strokeWidth={2.6} />
                 <Text style={styles.missionBadgeTxt}>
-                  {activeMission.status === "in_progress" ? "Mission en cours" : "Mission acceptée"}
+                  {activeMission.status === "in_progress"
+                    ? "Mission en cours"
+                    : activeMission.status === "en_route"
+                    ? "En route vers le patient"
+                    : "Mission acceptée"}
                 </Text>
               </View>
               <View style={styles.missionGo}>

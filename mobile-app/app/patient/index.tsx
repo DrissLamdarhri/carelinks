@@ -357,17 +357,13 @@ export default function PatientHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
           <TouchableOpacity
-            onPress={() => {
-              // Only open the live map when the pro is actually moving/working —
-              // opening tracking for a future 'matched' booking would show a
-              // frozen, meaningless "live" session. Otherwise go to the booking.
-              const live = nextBooking.status === "en_route" || nextBooking.status === "in_progress";
-              router.push(
-                live
-                  ? `/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`
-                  : "/patient/bookings",
-              );
-            }}
+            onPress={() =>
+              // Straight back into tracking for any active status — including
+              // "matched", which now shows a real waiting-for-departure state
+              // rather than a blank screen. This is the patient's way back in
+              // if they close or accidentally leave the map mid-mission.
+              router.push(`/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`)
+            }
             activeOpacity={0.9}
           >
             <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>

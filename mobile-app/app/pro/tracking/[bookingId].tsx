@@ -324,6 +324,7 @@ export default function ProTrackingScreen() {
   const distanceKm = nurse && dest ? haversineKm(nurse, dest) : null;
   const etaMin = distanceKm != null ? Math.max(1, Math.round((distanceKm / 30) * 60)) : null;
   const status = booking?.status;
+  const farFromPatient = distanceKm != null && distanceKm > 0.2;
 
   const fit = nurse && dest ? [nurse, dest] : undefined;
   const curStep = navSteps.length ? navSteps[Math.min(navIdx, navSteps.length - 1)] : null;
@@ -474,7 +475,22 @@ export default function ProTrackingScreen() {
             <Text style={s.statusTxt}>{t("im_leaving")}</Text>
           </TouchableOpacity>
         ) : status === "en_route" ? (
-          <TouchableOpacity style={s.statusBtn} disabled={busy} onPress={() => advance("in_progress", t("mission_started"))}>
+          <TouchableOpacity
+            style={[s.statusBtn, farFromPatient && s.statusBtnFar]}
+            disabled={busy}
+            onPress={() => {
+              // Same ~200m courtesy check the automatic effect above already
+              // uses at 80m — a professional confirmation shouldn't be
+              // tappable from across town. If we simply have no live GPS
+              // (nurse === null), trust the manual tap instead of blocking a
+              // mission that has to move forward somehow.
+              if (farFromPatient) {
+                showToast(t("too_far_to_arrive"));
+                return;
+              }
+              advance("in_progress", t("mission_started"));
+            }}
+          >
             <Text style={s.statusTxt}>{t("i_arrived")}</Text>
           </TouchableOpacity>
         ) : status === "in_progress" ? (
@@ -576,6 +592,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
   statusDone: { backgroundColor: NAVY },
+  statusBtnFar: { backgroundColor: "#9CA3AF" },
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
   cancelJobTxt: { color: "#E24B4A", fontSize: 14, fontWeight: "700" },

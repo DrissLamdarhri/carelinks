@@ -413,7 +413,12 @@ export default function PatientRequestScreen() {
       }
 
       toastSuccess(t("request_sent_searching"));
-      router.push(`/patient/waiting/${booking.id}`);
+      // replace, not push: a real booking now exists — the empty request
+      // form must leave the back-stack here, matching every later step in
+      // this chain (waiting → offers → payment → tracking all already use
+      // replace). Otherwise the back button/gesture could walk a patient who
+      // already paid straight back into a blank "new request" screen.
+      router.replace(`/patient/waiting/${booking.id}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "La demande n'a pas pu être créée.");
       toastError(t("request_create_failed"));
