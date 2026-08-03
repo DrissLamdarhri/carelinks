@@ -20,16 +20,27 @@ function formatSessionDateTime(startsAtISO: string, durationMin: number): string
   return `${capitalized} · ${fmtHour(start)} - ${fmtHour(end)}`;
 }
 
+// `bookings.status` only ever becomes 'matched' via confirm_yoga_payment(),
+// after the enrollment + payment were both created in the same transaction
+// — nothing else in the system sets it. It's trusted here as the primary
+// signal, not `payment.status`: if the payment row lookup ever comes back
+// empty or stale for any reason, a booking that's genuinely 'matched' must
+// never be shown as "waiting for payment" — that's a worse, more confusing
+// failure mode than a badge that's merely slow to reflect a refund.
 function bookingStatusBadge(d: YogaBookingDetailsT): { label: string; color: string; bg: string } {
   if (d.booking_status === "cancelled") return { label: "Annulée", color: "#E24B4A", bg: "#FDE8E8" };
   if (d.booking_status === "completed") return { label: "Terminée", color: "#16A34A", bg: "#DCFCE7" };
-  const paid = d.payment?.status === "authorized" || d.payment?.status === "captured";
+  const paid = d.booking_status === "matched" || d.payment?.status === "authorized" || d.payment?.status === "captured";
   if (paid) return { label: "Confirmée", color: "#16A34A", bg: "#DCFCE7" };
   return { label: "En attente de paiement", color: "#D97706", bg: "#FFF7E6" };
 }
 
 function paymentStatusBadge(d: YogaBookingDetailsT): { label: string; color: string } | null {
-  if (!d.payment || !d.payment.status) return null;
+  if (!d.payment || !d.payment.status) {
+    // No payment row found, but the booking itself is proof one succeeded —
+    // same reasoning as bookingStatusBadge above.
+    return d.booking_status === "matched" ? { label: "Payé", color: "#16A34A" } : null;
+  }
   if (d.payment.status === "refunded") return { label: "Remboursé", color: "#2563EB" };
   if (d.payment.status === "authorized" || d.payment.status === "captured") {
     return d.booking_status === "cancelled"
