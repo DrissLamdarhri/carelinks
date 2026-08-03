@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import { confirmDialog } from "../../lib/admin-dialog";
 import { toast } from "sonner";
 import {
   Check, X, Eye, Clock, AlertCircle, CheckCircle2, XCircle,
@@ -415,7 +416,7 @@ export function ProfessionalsManager() {
   };
 
   const deletePro = async (proId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce professionnel ?")) return;
+    if (!(await confirmDialog({ title: "Supprimer ce professionnel ?", destructive: true, confirmText: "Supprimer" }))) return;
     try {
       await supabase.from("professionals").delete().eq("id", proId);
       setProfessionals((prev) => prev.filter((p) => p.id !== proId));

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
+import { showAppAlert } from "@/lib/app-alert";
 import type { ProDocument, Professional, Profile } from "@/lib/db/types";
 
 type QueueItem = {
@@ -75,7 +75,7 @@ export default function KycModerationQueueScreen() {
       setItems(queue);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_kyc_queue");
-      Alert.alert("Erreur", message);
+      showAppAlert("Erreur", message);
     } finally {
       setLoading(false);
     }
@@ -176,7 +176,7 @@ export default function KycModerationQueueScreen() {
         prev.filter(item => item.professional.id !== professionalId)
       );
 
-      Alert.alert(
+      showAppAlert(
         t("update_title"),
         decision === "approved"
           ? t("doc_approved_msg")
@@ -186,7 +186,7 @@ export default function KycModerationQueueScreen() {
       // Rollback to previous state on error
       setItems(previousItems);
       const message = error instanceof Error ? error.message : t("action_failed");
-      Alert.alert("Erreur", message);
+      showAppAlert("Erreur", message);
     } finally {
       setActingOn(null);
     }
@@ -202,7 +202,7 @@ export default function KycModerationQueueScreen() {
       await Linking.openURL(data.signedUrl);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("preview_failed");
-      Alert.alert("Erreur", message);
+      showAppAlert("Erreur", message);
     }
   };
 

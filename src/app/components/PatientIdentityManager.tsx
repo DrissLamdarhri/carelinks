@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { promptDialog } from "../../lib/admin-dialog";
 import { toast } from "sonner";
 import { BadgeCheck, Check, Eye, RefreshCw, ShieldQuestion, X } from "lucide-react";
 
@@ -107,7 +108,12 @@ export function PatientIdentityManager() {
   const decide = async (id: string, status: "approved" | "rejected") => {
     let reason: string | null = null;
     if (status === "rejected") {
-      reason = window.prompt("Motif du rejet (visible par le patient) :", "Document illisible. Merci d'envoyer une photo plus nette.");
+      reason = await promptDialog({
+        title: "Motif du rejet",
+        description: "Visible par le patient.",
+        defaultValue: "Document illisible. Merci d'envoyer une photo plus nette.",
+        confirmText: "Rejeter",
+      });
       if (reason === null) return; // cancelled
     }
     setBusyId(id);

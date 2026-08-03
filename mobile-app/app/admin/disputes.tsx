@@ -8,7 +8,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   ScrollView,
   StyleSheet,
@@ -23,6 +22,7 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { db, type Dispute, type DisputeStatus } from "@/lib/db/dal";
+import { showAppAlert } from "@/lib/app-alert";
 import type { Profile } from "@/lib/db/types";
 
 const STATUS_META: Record<DisputeStatus, { label: string; color: string; bg: string }> = {
@@ -71,7 +71,7 @@ export default function AdminDisputesScreen() {
         setProfiles(new Map((data ?? []).map((p: Profile) => [p.id, p])));
       }
     } catch (e) {
-      Alert.alert("Erreur", e instanceof Error ? e.message : "Impossible de charger les litiges.");
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Impossible de charger les litiges.");
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function AdminDisputesScreen() {
       if (error) throw error;
       if (data?.signedUrl) await Linking.openURL(data.signedUrl);
     } catch (e) {
-      Alert.alert("Erreur", e instanceof Error ? e.message : "Aperçu impossible.");
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Aperçu impossible.");
     }
   };
 
@@ -109,13 +109,13 @@ export default function AdminDisputesScreen() {
     if (actingOn) return;
     const note = (notes[d.id] ?? "").trim();
     if (status !== "under_review" && !note) {
-      Alert.alert("Note requise", "Ajoutez une courte note expliquant la décision avant de résoudre ce litige.");
+      showAppAlert("Note requise", "Ajoutez une courte note expliquant la décision avant de résoudre ce litige.");
       return;
     }
     const refundStr = refunds[d.id];
     const refund = status === "resolved_refund" && refundStr ? Number(refundStr) : null;
     if (status === "resolved_refund" && refundStr && Number.isNaN(refund)) {
-      Alert.alert("Montant invalide", "Le montant du remboursement doit être un nombre.");
+      showAppAlert("Montant invalide", "Le montant du remboursement doit être un nombre.");
       return;
     }
     setActingOn(d.id);
@@ -123,7 +123,7 @@ export default function AdminDisputesScreen() {
       await db.disputes.resolve(d.id, status, note || "Pris en charge.", refund);
       setExpanded(null);
     } catch (e) {
-      Alert.alert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
     } finally {
       setActingOn(null);
     }

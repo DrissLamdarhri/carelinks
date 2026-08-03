@@ -51,16 +51,12 @@ export async function getUpcomingCatalog(): Promise<YogaCatalogEntry[]> {
   const rows = (sessions ?? []) as YogaSession[];
   if (rows.length === 0) return [];
 
-  const ids = rows.map((s) => s.id);
-  const [{ data: enrollments }, instructorIds] = await Promise.all([
-    supabase.from("yoga_enrollments").select("session_id").in("session_id", ids),
-    Promise.resolve(Array.from(new Set(rows.map((s) => s.instructor_id).filter((v): v is string => !!v)))),
-  ]);
-  const countBySession = new Map<string, number>();
-  for (const e of enrollments ?? []) {
-    countBySession.set(e.session_id, (countBySession.get(e.session_id) ?? 0) + 1);
-  }
-
+  // enrolled_count is read straight off yoga_sessions (migration 0048) —
+  // NOT counted from yoga_enrollments client-side. That table's RLS only
+  // lets a patient see their own row, so counting it here would silently
+  // undercount everyone else's enrollments, and Realtime would never even
+  // deliver other patients' change events (RLS-filtered before delivery).
+  const instructorIds = Array.from(new Set(rows.map((s) => s.instructor_id).filter((v): v is string => !!v)));
   const instructorMap = new Map<string, { full_name: string; avatar_url: string | null }>();
   if (instructorIds.length) {
     const { data: pros } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", instructorIds);
@@ -69,7 +65,7 @@ export async function getUpcomingCatalog(): Promise<YogaCatalogEntry[]> {
 
   return rows.map((s) => {
     const linked = s.instructor_id ? instructorMap.get(s.instructor_id) : null;
-    const enrolledCount = countBySession.get(s.id) ?? 0;
+    const enrolledCount = s.enrolled_count ?? 0;
     return {
       ...s,
       instructorDisplayName: linked?.full_name ?? s.instructor_name ?? "Instructeur",
@@ -80,9 +76,12 @@ export async function getUpcomingCatalog(): Promise<YogaCatalogEntry[]> {
   });
 }
 
-/** Realtime-aware catalog — reloads whenever a class or an enrollment count
- *  changes, so a newly published session or a seat freed by a cancellation
- *  appears immediately for a patient sitting on the catalog screen. */
+/** Realtime-aware catalog — reloads whenever a class is published/edited or
+ *  its seat count changes. Only subscribed to yoga_sessions: that table is
+ *  publicly readable, so its UPDATE events (including enrolled_count ticking
+ *  up/down) reach every subscribed patient regardless of who triggered the
+ *  change — unlike yoga_enrollments, whose RLS would silently drop another
+ *  patient's enrollment event before it ever reached this subscription. */
 export function useYogaCatalog() {
   const [sessions, setSessions] = useState<YogaCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +108,6 @@ export function useYogaCatalog() {
     const channel = supabase
       .channel("yoga:catalog")
       .on("postgres_changes", { event: "*", schema: "public", table: "yoga_sessions" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => void load())
       .subscribe();
 
     return () => {
@@ -304,13 +302,16 @@ export type NewYogaSession = {
   price_mad: number;
   level?: string;
   image_url?: string | null;
+  /** Picked on the map — a yoga class is a real place, same as a nurse home
+   *  visit, so it gets the same precise-location handling (migration 0049). */
+  coords?: { lat: number; lng: number } | null;
 };
 
 export async function createYogaSession(input: NewYogaSession): Promise<YogaSession> {
   // instructor_name is a denormalized snapshot (the column the live catalog
   // still falls back to for legacy rows) — keep it in sync at creation time.
   const { data: instructor } = await supabase.from("profiles").select("full_name").eq("id", input.instructor_id).maybeSingle();
-  return unwrap(
+  const session = unwrap<YogaSession>(
     await supabase
       .from("yoga_sessions")
       .insert({
@@ -331,6 +332,15 @@ export async function createYogaSession(input: NewYogaSession): Promise<YogaSess
       .select("*")
       .single(),
   );
+  if (input.coords) {
+    const { error } = await supabase.rpc("set_yoga_session_location", {
+      p_session_id: session.id,
+      p_lat: input.coords.lat,
+      p_lng: input.coords.lng,
+    });
+    if (error) console.warn("[createYogaSession] set_yoga_session_location failed:", error.message);
+  }
+  return session;
 }
 
 export async function listAdminSessions(): Promise<YogaCatalogEntry[]> {
@@ -341,17 +351,12 @@ export async function listAdminSessions(): Promise<YogaCatalogEntry[]> {
     .limit(100);
   if (error) throwSupabaseError(error);
   const rows = (sessions ?? []) as YogaSession[];
-  if (rows.length === 0) return [];
-  const ids = rows.map((s) => s.id);
-  const { data: enrollments } = await supabase.from("yoga_enrollments").select("session_id").in("session_id", ids);
-  const countBySession = new Map<string, number>();
-  for (const e of enrollments ?? []) countBySession.set(e.session_id, (countBySession.get(e.session_id) ?? 0) + 1);
   return rows.map((s) => ({
     ...s,
     instructorDisplayName: s.instructor_name ?? "Instructeur",
     instructorAvatarUrl: null,
-    enrolledCount: countBySession.get(s.id) ?? 0,
-    spotsLeft: Math.max(0, s.capacity - (countBySession.get(s.id) ?? 0)),
+    enrolledCount: s.enrolled_count ?? 0,
+    spotsLeft: Math.max(0, s.capacity - (s.enrolled_count ?? 0)),
   }));
 }
 

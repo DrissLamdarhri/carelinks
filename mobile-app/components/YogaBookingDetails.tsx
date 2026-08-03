@@ -4,9 +4,12 @@
  * Shared by the post-payment confirmation screen and the booking detail view
  * in "Mes RDV" (app/patient/bookings.tsx).
  */
+import { useEffect, useState } from "react";
 import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { CalendarDays, MapPin, Navigation } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { geo } from "@/lib/db/geo";
+import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 const NAVY = Colors.primary;
@@ -67,7 +70,24 @@ export function YogaBookingDetails({
   const fullAddress = [session?.address, session?.city].filter(Boolean).join(", ");
   const isUnpaid = details.booking_status === "open" && !payment;
 
+  // A class is a real place, same as a nurse home visit — show it on a map,
+  // not just as text, when the admin picked a precise location for it
+  // (migration 0049). Falls back to text-only if none was ever set.
+  const [coords, setCoords] = useState<LatLng | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!session?.id) { setCoords(null); return; }
+    void geo.getYogaSessionCoords(session.id)
+      .then((c) => { if (!cancelled) setCoords(c); })
+      .catch(() => { if (!cancelled) setCoords(null); });
+    return () => { cancelled = true; };
+  }, [session?.id]);
+
   const openItinerary = () => {
+    if (coords) {
+      void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`);
+      return;
+    }
     if (!fullAddress) return;
     const encoded = encodeURIComponent(fullAddress);
     void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encoded}`);
@@ -103,6 +123,11 @@ export function YogaBookingDetails({
 
       {fullAddress ? (
         <View style={s.addressCard}>
+          {coords ? (
+            <View style={s.mapPreview} pointerEvents="none">
+              <CareLinkMapView center={coords} destination={coords} radiusKm={0} />
+            </View>
+          ) : null}
           <View style={s.row}>
             <MapPin size={16} color={NAVY} />
             <Text style={[s.rowText, { flex: 1 }]}>{fullAddress}</Text>
@@ -155,6 +180,7 @@ const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   rowText: { fontSize: 13.5, color: Colors.textPrimary },
   addressCard: { backgroundColor: Colors.input, borderRadius: 14, padding: 12, marginTop: 2, marginBottom: 4 },
+  mapPreview: { height: 120, borderRadius: 10, overflow: "hidden", marginBottom: 10 },
   itineraryBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     height: 38, borderRadius: 10, backgroundColor: NAVY, marginTop: 8,

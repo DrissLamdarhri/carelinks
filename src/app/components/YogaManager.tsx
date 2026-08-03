@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { confirmDialog, promptDialog } from "../../lib/admin-dialog";
+import { YogaLocationPicker, type LatLng } from "./YogaLocationPicker";
 import { toast } from "sonner";
 import {
-  Ban, Calendar, CheckCircle2, ChevronDown, ChevronUp, Clock, Flower2, Plus, RefreshCw, Trash2, Upload, Users, X,
+  Ban, Calendar, CheckCircle2, ChevronDown, ChevronUp, Clock, Flower2, MapPin, Plus, RefreshCw, Trash2, Upload, Users, X,
 } from "lucide-react";
 
 // Full yoga management for admins: create a class, see every class with its real
@@ -24,11 +26,26 @@ type Session = {
   enrolled: number;
   status: "scheduled" | "completed" | "cancelled";
   cancel_reason: string | null;
+  address: string | null;
+  city: string | null;
 };
 type Enrollee = { patient_id: string; name: string; enrolled_at: string };
+type Instructor = { id: string; full_name: string };
 
 const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
-const emptyForm = { title: "", instructor: "", date: "", time: "10:00", level: "Tous niveaux", capacity: 10, price: 120, imageUrl: "" };
+const emptyForm = {
+  title: "",
+  instructorId: "",
+  address: "",
+  city: "",
+  date: "",
+  time: "10:00",
+  endTime: "11:00",
+  level: "Tous niveaux",
+  capacity: 10,
+  price: 120,
+  imageUrl: "",
+};
 
 const STATUS_BADGE = {
   scheduled: { bg: "#DCFCE7", fg: "#15803D", label: "Publiée" },
@@ -46,14 +63,19 @@ export function YogaManager() {
   const [enrollees, setEnrollees] = useState<Record<string, Enrollee[]>>({});
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
+  const [coords, setCoords] = useState<LatLng | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      // NB: the deployed table uses `instructor_name` (text), not instructor_id.
+      // instructor_id + address/city were added by migration 0041 — read them
+      // now instead of only the freeform instructor_name/description that
+      // predates it (this file's own creation form never even set them
+      // before, which is exactly the gap being fixed here).
       const { data: rows, error } = await supabase
         .from("yoga_sessions")
-        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_name, status, cancel_reason")
+        .select("id, title, description, level, starts_at, duration_min, capacity, price_mad, image_url, instructor_name, instructor_id, address, city, status, cancel_reason")
         .order("starts_at", { ascending: false });
       if (error) throw error;
 
@@ -82,6 +104,8 @@ export function YogaManager() {
           enrolled: counts.get(s.id) ?? 0,
           status: (s.status ?? "scheduled") as Session["status"],
           cancel_reason: s.cancel_reason ?? null,
+          address: s.address ?? null,
+          city: s.city ?? null,
         })),
       );
     } catch (e: any) {
@@ -91,8 +115,21 @@ export function YogaManager() {
     }
   };
 
+  // Real approved yoga instructors — the creation form used to accept ANY
+  // free-text name with no link to an actual professional account, which
+  // meant instructor_id was never set and that instructor could never be
+  // paid out for the class (payments.professional_id stayed null).
+  const loadInstructors = async () => {
+    const { data: pros } = await supabase.from("professionals").select("id").eq("specialty", "yoga_instructor");
+    const ids = (pros ?? []).map((p: any) => p.id);
+    if (!ids.length) { setInstructors([]); return; }
+    const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+    setInstructors((profs ?? []).map((p: any) => ({ id: p.id, full_name: p.full_name || "Instructeur" })));
+  };
+
   useEffect(() => {
     void load();
+    void loadInstructors();
     const sub = supabase
       .channel("yoga_admin_mgr")
       .on("postgres_changes", { event: "*", schema: "public", table: "yoga_sessions" }, () => void load())
@@ -106,28 +143,55 @@ export function YogaManager() {
 
   const createSession = async () => {
     if (!form.title.trim()) return toast.error("Le titre est obligatoire");
+    if (!form.instructorId) return toast.error("L'instructeur est obligatoire");
+    if (!form.address.trim() || !form.city.trim()) return toast.error("Adresse et ville sont obligatoires");
     if (!form.date) return toast.error("La date est obligatoire");
     const starts = new Date(`${form.date}T${form.time || "10:00"}:00`);
-    if (isNaN(starts.getTime())) return toast.error("Date/heure invalide");
+    const ends = new Date(`${form.date}T${form.endTime || "11:00"}:00`);
+    if (isNaN(starts.getTime()) || isNaN(ends.getTime())) return toast.error("Date/heure invalide");
+    const durationMin = Math.round((ends.getTime() - starts.getTime()) / 60000);
+    if (durationMin <= 0) return toast.error("L'heure de fin doit être après l'heure de début");
     if (!(form.price > 0)) return toast.error("Le prix doit être supérieur à 0");
     if (!(form.capacity > 0)) return toast.error("La capacité doit être supérieure à 0");
 
     setSaving(true);
     try {
-      const { error } = await supabase.from("yoga_sessions").insert({
-        instructor_name: form.instructor.trim() || null,
-        title: form.title.trim(),
-        level: form.level,
-        image_url: form.imageUrl.trim() || null,
-        starts_at: starts.toISOString(),
-        duration_min: 60,
-        capacity: form.capacity,
-        price_mad: form.price,
-        description: null,
-      });
+      const instructorName = instructors.find((i) => i.id === form.instructorId)?.full_name ?? null;
+      const { data: session, error } = await supabase
+        .from("yoga_sessions")
+        .insert({
+          instructor_id: form.instructorId,
+          instructor_name: instructorName,
+          title: form.title.trim(),
+          address: form.address.trim(),
+          city: form.city.trim(),
+          level: form.level,
+          image_url: form.imageUrl.trim() || null,
+          starts_at: starts.toISOString(),
+          duration_min: durationMin,
+          capacity: form.capacity,
+          price_mad: form.price,
+          description: null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // A studio is a real place — save the precise point the same way the
+      // mobile admin does (migration 0049), so the patient's map preview and
+      // itinerary button are exact instead of guessing from text.
+      if (coords && session?.id) {
+        const { error: locErr } = await supabase.rpc("set_yoga_session_location", {
+          p_session_id: session.id,
+          p_lat: coords.lat,
+          p_lng: coords.lng,
+        });
+        if (locErr) console.warn("set_yoga_session_location failed:", locErr.message);
+      }
+
       toast.success("Séance créée et publiée");
       setForm({ ...emptyForm });
+      setCoords(null);
       setShowForm(false);
       void load();
     } catch (e: any) {
@@ -162,7 +226,11 @@ export function YogaManager() {
   // Marking the class done flips its bookings to 'completed', which is what
   // releases the escrow to the instructor. Without it the money stays frozen.
   const completeSession = async (id: string, title: string) => {
-    if (!confirm(`Marquer « ${title} » comme terminée ?\n\nLes paiements bloqués seront libérés.`)) return;
+    if (!(await confirmDialog({
+      title: `Marquer « ${title} » comme terminée ?`,
+      description: "Les paiements bloqués seront libérés.",
+      confirmText: "Terminer",
+    }))) return;
     setBusyId(id);
     try {
       const { data, error } = await supabase.rpc("complete_yoga_session", { p_session_id: id });
@@ -177,7 +245,12 @@ export function YogaManager() {
   };
 
   const cancelSession = async (id: string, title: string) => {
-    const reason = window.prompt(`Annuler « ${title} » ?\n\nTous les inscrits seront remboursés. Motif :`, "Séance annulée par le studio.");
+    const reason = await promptDialog({
+      title: `Annuler « ${title} » ?`,
+      description: "Tous les inscrits seront remboursés. Motif :",
+      defaultValue: "Séance annulée par le studio.",
+      confirmText: "Annuler la séance",
+    });
     if (reason === null) return;
     setBusyId(id);
     try {
@@ -193,7 +266,12 @@ export function YogaManager() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Supprimer cette séance ? Les inscriptions liées seront retirées.")) return;
+    if (!(await confirmDialog({
+      title: "Supprimer cette séance ?",
+      description: "Les inscriptions liées seront retirées.",
+      destructive: true,
+      confirmText: "Supprimer",
+    }))) return;
     try {
       const { error } = await supabase.from("yoga_sessions").delete().eq("id", id);
       if (error) throw error;
@@ -270,9 +348,22 @@ export function YogaManager() {
         <div className="rounded-2xl bg-white p-5 mb-5" style={{ border: "1px solid #EFEFF2" }}>
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
             <Field label="Titre de la séance *"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="ex: Hatha Flow Matinal" style={inputStyle} /></Field>
-            <Field label="Instructeur"><input value={form.instructor} onChange={(e) => setForm({ ...form, instructor: e.target.value })} placeholder="Nom de l'instructeur" style={inputStyle} /></Field>
+            <Field label="Instructeur *">
+              <select value={form.instructorId} onChange={(e) => setForm({ ...form, instructorId: e.target.value })} style={inputStyle}>
+                <option value="">Choisir un instructeur</option>
+                {instructors.map((i) => (
+                  <option key={i.id} value={i.id}>{i.full_name}</option>
+                ))}
+              </select>
+              {instructors.length === 0 ? (
+                <p className="text-xs mt-1" style={{ color: "#B0B0B0" }}>Aucun instructeur de yoga approuvé pour le moment.</p>
+              ) : null}
+            </Field>
+            <Field label="Adresse du centre *"><input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="ex: Studio CareLink, Agdal" style={inputStyle} /></Field>
+            <Field label="Ville *"><input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="ex: Fès" style={inputStyle} /></Field>
             <Field label="Date *"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle} /></Field>
-            <Field label="Heure"><input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} style={inputStyle} /></Field>
+            <Field label="Heure de début"><input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} style={inputStyle} /></Field>
+            <Field label="Heure de fin"><input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} style={inputStyle} /></Field>
             <Field label="Capacité"><input type="number" min={1} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} style={inputStyle} /></Field>
             <Field label="Prix (MAD)"><input type="number" min={1} value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} style={inputStyle} /></Field>
             <Field label="Photo de la séance">
@@ -309,8 +400,11 @@ export function YogaManager() {
               ))}
             </div>
           </div>
+          <div className="mt-3">
+            <YogaLocationPicker coords={coords} onChange={setCoords} />
+          </div>
           <div className="flex justify-end gap-2 mt-4">
-            <button onClick={() => { setShowForm(false); setForm({ ...emptyForm }); }} className="rounded-xl px-4 py-2.5 text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Annuler</button>
+            <button onClick={() => { setShowForm(false); setForm({ ...emptyForm }); setCoords(null); }} className="rounded-xl px-4 py-2.5 text-sm" style={{ background: "#F3F3F5", color: "#888780", fontWeight: 600 }}>Annuler</button>
             <button onClick={createSession} disabled={saving} className="rounded-xl px-5 py-2.5 text-sm text-white" style={{ background: "#0D0870", fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? "Création…" : "Créer la séance"}</button>
           </div>
         </div>
@@ -342,7 +436,14 @@ export function YogaManager() {
                   </span>
                 </div>
                 <p className="text-sm mb-1" style={{ fontWeight: 700, color: "#1A1A1A" }}>{s.title}</p>
-                <p className="text-xs mb-3" style={{ color: "#888780" }}>{s.instructor} · {s.level}</p>
+                <p className="text-xs mb-1" style={{ color: "#888780" }}>{s.instructor} · {s.level}</p>
+                {s.address || s.city ? (
+                  <p className="text-xs mb-3 flex items-center gap-1" style={{ color: "#888780" }}>
+                    <MapPin size={11} /> {[s.address, s.city].filter(Boolean).join(", ")}
+                  </p>
+                ) : (
+                  <div className="mb-3" />
+                )}
                 <div className="flex flex-wrap items-center gap-3 text-xs mb-3" style={{ color: "#888780" }}>
                   <span className="flex items-center gap-1"><Calendar size={12} /> {fmt(s.starts_at)}</span>
                   <span className="flex items-center gap-1"><Clock size={12} /> {s.duration_min} min</span>

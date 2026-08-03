@@ -9,6 +9,8 @@ import { PayoutsManager } from "./PayoutsManager";
 import { PaymentsManager } from "./PaymentsManager";
 import { PatientIdentityManager } from "./PatientIdentityManager";
 import { YogaManager } from "./YogaManager";
+import { AdminDialogHost } from "./AdminDialogHost";
+import { confirmDialog } from "../../lib/admin-dialog";
 import { useAuth } from "../../lib/auth-context";
 import { toast } from "sonner";
 import {
@@ -829,7 +831,7 @@ export function AdminPanel() {
     }
   };
   const deleteService = async (id: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce service ?")) return;
+    if (!(await confirmDialog({ title: "Supprimer ce service ?", destructive: true, confirmText: "Supprimer" }))) return;
     try {
       await deleteAdminService(id);
       setServices((prev) => prev.filter((s) => s.id !== id));
@@ -987,7 +989,7 @@ export function AdminPanel() {
   };
 
   const deleteServiceType = async (id: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce type de soin ?")) return;
+    if (!(await confirmDialog({ title: "Supprimer ce type de soin ?", destructive: true, confirmText: "Supprimer" }))) return;
     try {
       const { error } = await supabase
         .from("service_types")
@@ -1047,7 +1049,7 @@ export function AdminPanel() {
   };
 
   const deleteUser = async (userId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce patient ?")) return;
+    if (!(await confirmDialog({ title: "Supprimer ce patient ?", destructive: true, confirmText: "Supprimer" }))) return;
     try {
       await supabase.from("profiles").delete().eq("id", userId);
       setLiveUsers((prev) => prev.filter((u) => u.id !== userId));
@@ -1058,7 +1060,7 @@ export function AdminPanel() {
   };
 
   const deletePro = async (proId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce professionnel ?")) return;
+    if (!(await confirmDialog({ title: "Supprimer ce professionnel ?", destructive: true, confirmText: "Supprimer" }))) return;
     try {
       await supabase.from("professionals").delete().eq("id", proId);
       setLiveAllPros((prev) => prev.filter((p) => p.id !== proId));
@@ -2421,6 +2423,10 @@ export function AdminPanel() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Styled replacement for every confirm()/window.prompt() across the
+          admin panel (this file, YogaManager, ProfessionalsManager,
+          PatientIdentityManager) — one host, mounted once. */}
+      <AdminDialogHost />
     </div>
   );
 }

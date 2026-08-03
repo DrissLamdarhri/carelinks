@@ -67,6 +67,22 @@ export const geo = {
     if (error) throw error;
   },
 
+  async setYogaSessionLocation(sessionId: string, lat: number, lng: number) {
+    const { error } = await supabase.rpc("set_yoga_session_location", {
+      p_session_id: sessionId,
+      p_lat: lat,
+      p_lng: lng,
+    });
+    if (error) throw error;
+  },
+
+  async getYogaSessionCoords(sessionId: string): Promise<{ lat: number; lng: number } | null> {
+    const { data, error } = await supabase.rpc("get_yoga_session_coords", { p_session_id: sessionId });
+    if (error) throw error;
+    const row: any = Array.isArray(data) ? data[0] : data;
+    return row?.lat != null && row?.lng != null ? { lat: row.lat, lng: row.lng } : null;
+  },
+
   /**
    * Live-tracking coords for a matched booking: the patient destination and the
    * matched pro's current origin, both as plain lat/lng (from PostGIS). Either

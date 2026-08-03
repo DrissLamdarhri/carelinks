@@ -17,6 +17,13 @@ export interface YogaSession {
   starts_at: string;
   duration_min: number;
   capacity: number;
+  /** Denormalized, trigger-maintained (migration 0048) — read this instead of
+   *  counting yoga_enrollments rows client-side: that table's RLS only lets a
+   *  patient see their OWN row, so a live COUNT() would silently miss other
+   *  patients' enrollments and, worse, Realtime would never even deliver
+   *  their change events (RLS-filtered). This column is on yoga_sessions,
+   *  which is publicly readable, so it syncs live for everyone. */
+  enrolled_count: number;
   price_mad: number;
   address: string | null;
   city: string | null;

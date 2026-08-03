@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
+import { showAppAlert } from "@/lib/app-alert";
 
 type MetricsState = {
   gmv: number;
@@ -90,14 +90,14 @@ export default function AdminMetricsScreen() {
       });
 
       if (paymentsRes.error) {
-        Alert.alert(
+        showAppAlert(
           "Info",
           t("payments_unavailable")
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_metrics");
-      Alert.alert("Erreur", message);
+      showAppAlert("Erreur", message);
     }
   }, []);
 

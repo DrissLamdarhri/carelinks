@@ -17,10 +17,12 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { Calendar, CheckCircle2, ChevronDown, Plus, Users, X } from "lucide-react-native";
+import { Calendar, CheckCircle2, ChevronDown, MapPin, Navigation, Plus, Users, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 import { showAppAlert } from "@/lib/app-alert";
+import { geo } from "@/lib/db/geo";
+import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import {
   cancelYogaSession,
   completeYogaSession,
@@ -31,6 +33,7 @@ import {
 import type { YogaCatalogEntry } from "@/types/yoga";
 
 const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
+const DEFAULT_MAP_CENTER: LatLng = { lat: 34.037, lng: -5.004 }; // Fès
 
 function toIsoFromParts(dateStr: string, timeStr: string): string | null {
   // dateStr "JJ/MM/AAAA", timeStr "HH:MM"
@@ -64,6 +67,8 @@ export default function AdminYogaSessionsScreen() {
   const [capacity, setCapacity] = useState("");
   const [price, setPrice] = useState("");
   const [level, setLevel] = useState(LEVELS[0]);
+  const [coords, setCoords] = useState<LatLng | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +106,30 @@ export default function AdminYogaSessionsScreen() {
     setCapacity("");
     setPrice("");
     setLevel(LEVELS[0]);
+    setCoords(null);
+  };
+
+  const locateOnMap = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const current = await geo.getCurrentPosition();
+      setCoords(current);
+      const label = await geo.reverseGeocodeAddress(current.lat, current.lng);
+      if (label) {
+        const parts = label.split(",").map((p) => p.trim());
+        if (parts.length > 1) {
+          setAddress(parts.slice(0, -1).join(", "));
+          setCity(parts[parts.length - 1]);
+        } else {
+          setAddress(label);
+        }
+      }
+    } catch (e) {
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Position GPS indisponible.");
+    } finally {
+      setLocating(false);
+    }
   };
 
   const submit = async () => {
@@ -143,6 +172,7 @@ export default function AdminYogaSessionsScreen() {
         capacity: capacityNum,
         price_mad: priceNum,
         level,
+        coords,
       });
       showAppAlert("Séance créée", "La séance est maintenant visible dans le catalogue patient.");
       resetForm();
@@ -261,6 +291,36 @@ export default function AdminYogaSessionsScreen() {
           <Text style={s.label}>Ville</Text>
           <TextInput style={s.input} value={city} onChangeText={setCity} placeholder="Ex: Fès" placeholderTextColor={Colors.textSubtle} />
 
+          <View style={s.mapLabelRow}>
+            <Text style={[s.label, { marginTop: 0 }]}>Localiser sur la carte (optionnel)</Text>
+            <TouchableOpacity style={s.locateBtn} onPress={locateOnMap} disabled={locating}>
+              {locating ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : (
+                <Navigation size={13} color={Colors.primary} />
+              )}
+              <Text style={s.locateBtnTxt}>Ma position</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={s.mapPicker}>
+            <CareLinkMapView
+              center={coords ?? DEFAULT_MAP_CENTER}
+              destination={coords ?? undefined}
+              onMapPress={(c) => setCoords(c)}
+              radiusKm={0}
+            />
+          </View>
+          {coords ? (
+            <View style={s.coordsRow}>
+              <MapPin size={12} color={Colors.textMuted} />
+              <Text style={s.coordsTxt}>
+                {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)} — touchez la carte pour ajuster
+              </Text>
+            </View>
+          ) : (
+            <Text style={s.coordsHint}>Touchez la carte pour placer le point exact du studio.</Text>
+          )}
+
           <Text style={s.label}>Date (JJ/MM/AAAA)</Text>
           <TextInput style={s.input} value={dateStr} onChangeText={setDateStr} placeholder="12/08/2026" placeholderTextColor={Colors.textSubtle} keyboardType="numbers-and-punctuation" />
 
@@ -366,6 +426,13 @@ const s = StyleSheet.create({
   pickerItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   pickerItemTxt: { fontSize: 14, color: Colors.textPrimary },
   emptyPickerTxt: { padding: 14, fontSize: 12, color: Colors.textMuted },
+  mapLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, marginBottom: 6 },
+  locateBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 8, backgroundColor: Colors.input },
+  locateBtnTxt: { fontSize: 11.5, fontWeight: "700", color: Colors.primary },
+  mapPicker: { height: 180, borderRadius: 14, overflow: "hidden" },
+  coordsRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  coordsTxt: { fontSize: 11, color: Colors.textMuted, flex: 1 },
+  coordsHint: { fontSize: 11, color: Colors.textSubtle, marginTop: 8 },
   submitBtn: { height: 50, borderRadius: 14, backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center", marginTop: 20 },
   submitTxt: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: Colors.textPrimary, marginBottom: 12 },
