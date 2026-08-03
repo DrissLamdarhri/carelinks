@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -14,6 +13,7 @@ import { AlertTriangle, CheckCircle2, Circle } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
+import { showAppAlert } from "@/lib/app-alert";
 
 // i18n keys for the reasons (resolved with t()).
 const cancellationReasons = [
@@ -65,11 +65,11 @@ export function CancellationDialog({
     setSubmitting(true);
     try {
       await db.bookings.cancelBooking(bookingId, reason);
-      Alert.alert(t("cancel_confirmed"), t("booking_cancelled_msg"));
+      showAppAlert(t("cancel_confirmed"), t("booking_cancelled_msg"));
       await onCancelled();
       onClose();
     } catch (error) {
-      Alert.alert(t("error"), error instanceof Error ? error.message : t("cannot_cancel"));
+      showAppAlert(t("error"), error instanceof Error ? error.message : t("cannot_cancel"));
     } finally {
       setSubmitting(false);
     }

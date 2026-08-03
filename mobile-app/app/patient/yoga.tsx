@@ -1,22 +1,21 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { ArrowLeft, Calendar, CheckCircle2, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
+import { ArrowLeft, Calendar, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useYogaCatalog, createYogaReservation, findExistingYogaReservation } from "@/lib/db/yoga";
+import { showAppAlert } from "@/lib/app-alert";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
@@ -28,7 +27,6 @@ export default function YogaCatalogScreen() {
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Tous");
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
-  const [alreadyEnrolledOpen, setAlreadyEnrolledOpen] = useState(false);
 
   const sessions = yogaSessions.map((s) => ({
     id: s.id,
@@ -63,12 +61,12 @@ export default function YogaCatalogScreen() {
 
   const handleReserveYoga = async (session: typeof sessions[0]) => {
     if (!user?.id) {
-      Alert.alert("Erreur", t("please_login_book"));
+      showAppAlert("Erreur", t("please_login_book"));
       return;
     }
 
     if (session.spots <= 0) {
-      Alert.alert(t("session_full"), t("session_full_msg"));
+      showAppAlert(t("session_full"), t("session_full_msg"));
       return;
     }
 
@@ -83,7 +81,10 @@ export default function YogaCatalogScreen() {
       const existing = await findExistingYogaReservation(session.id, user.id);
       if (existing?.kind === "enrolled") {
         setLoadingSessionId(null);
-        setAlreadyEnrolledOpen(true);
+        showAppAlert(t("already_enrolled"), t("already_enrolled_msg"), [
+          { text: t("close"), style: "cancel" },
+          { text: t("see_my_bookings"), onPress: () => router.push("/patient/bookings") },
+        ]);
         return;
       }
       if (existing?.kind === "pending") {
@@ -122,7 +123,7 @@ export default function YogaCatalogScreen() {
       router.replace(`/patient/payment/${encodeURIComponent(booking.id)}`);
     } catch (err) {
       console.error("[YogaCatalog] Erreur lors de la réservation:", err);
-      Alert.alert(t("error"), t("cannot_create_booking"));
+      showAppAlert(t("error"), t("cannot_create_booking"));
       setLoadingSessionId(null);
     }
   };
@@ -271,58 +272,11 @@ export default function YogaCatalogScreen() {
           </ScrollView>
         )}
       </View>
-
-      <Modal
-        transparent
-        visible={alreadyEnrolledOpen}
-        animationType="fade"
-        onRequestClose={() => setAlreadyEnrolledOpen(false)}
-      >
-        <View style={styles.noticeBackdrop}>
-          <View style={styles.noticeCard}>
-            <View style={styles.noticeIconWrap}>
-              <CheckCircle2 size={28} color="#16A34A" />
-            </View>
-            <Text style={styles.noticeTitle}>{t("already_enrolled")}</Text>
-            <Text style={styles.noticeSub}>{t("already_enrolled_msg")}</Text>
-            <TouchableOpacity
-              style={styles.noticePrimaryBtn}
-              onPress={() => {
-                setAlreadyEnrolledOpen(false);
-                router.push("/patient/bookings");
-              }}
-            >
-              <Text style={styles.noticePrimaryTxt}>{t("see_my_bookings")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.noticeSecondaryBtn} onPress={() => setAlreadyEnrolledOpen(false)}>
-              <Text style={styles.noticeSecondaryTxt}>{t("close")}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  noticeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 24 },
-  noticeCard: {
-    width: "100%", maxWidth: 360, backgroundColor: "#FFFFFF", borderRadius: 24,
-    padding: 24, alignItems: "center",
-  },
-  noticeIconWrap: {
-    width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7",
-    alignItems: "center", justifyContent: "center", marginBottom: 14,
-  },
-  noticeTitle: { fontSize: 17, fontWeight: "800", color: Colors.textPrimary, textAlign: "center" },
-  noticeSub: { fontSize: 13, color: Colors.textMuted, textAlign: "center", marginTop: 6, lineHeight: 19 },
-  noticePrimaryBtn: {
-    height: 50, width: "100%", borderRadius: 14, backgroundColor: Colors.primary,
-    alignItems: "center", justifyContent: "center", marginTop: 20,
-  },
-  noticePrimaryTxt: { color: "#FFFFFF", fontSize: 14.5, fontWeight: "700" },
-  noticeSecondaryBtn: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 4 },
-  noticeSecondaryTxt: { color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" },
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   header: {
     backgroundColor: "white",

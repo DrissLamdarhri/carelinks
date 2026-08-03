@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,6 +19,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { showAppAlert } from "@/lib/app-alert";
 import { confirmYogaPayment } from "@/lib/db/yoga";
 
 const NAVY = "#0D0870";
@@ -66,11 +66,14 @@ export default function PaymentScreen() {
   const [service, setService] = useState("Soin à domicile");
   const [txId, setTxId] = useState("");
 
-  const [cardNum, setCardNum] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [exp, setExp] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [otp, setOtp] = useState("");
+  // Pre-filled with valid mock values — this is a simulated CMI checkout (no
+  // real card is ever charged), so there's no reason to make testers retype
+  // the same 16 digits on every single test run. Still fully editable.
+  const [cardNum, setCardNum] = useState("4242424242424242");
+  const [cardName, setCardName] = useState("TEST CARELINK");
+  const [exp, setExp] = useState("1229");
+  const [cvv, setCvv] = useState("123");
+  const [otp, setOtp] = useState("1234");
 
   useEffect(() => {
     let active = true;
@@ -98,7 +101,7 @@ export default function PaymentScreen() {
           } catch { /* keep default */ }
         }
       } catch (error) {
-        Alert.alert(t("error"), error instanceof Error ? error.message : t("reservation_not_found"));
+        showAppAlert(t("error"), error instanceof Error ? error.message : t("reservation_not_found"));
       } finally {
         if (active) setLoading(false);
       }
@@ -167,7 +170,7 @@ export default function PaymentScreen() {
             // send the patient back to pick another session.
             await db.bookings.cancelBooking(bookingId, "session_full").catch(() => {});
             setSubmitting(false);
-            Alert.alert(
+            showAppAlert(
               t("session_full"),
               "Cette séance vient d'être complétée par un autre patient. Vous n'avez pas été débité.",
               [{ text: "OK", onPress: () => router.replace("/patient/yoga") }],

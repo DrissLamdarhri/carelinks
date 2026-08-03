@@ -9,7 +9,6 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import { useFocusEffect } from "expo-router";
 import { Calendar, CheckCircle2, ChevronDown, Plus, Users, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
+import { showAppAlert } from "@/lib/app-alert";
 import {
   cancelYogaSession,
   completeYogaSession,
@@ -72,7 +72,7 @@ export default function AdminYogaSessionsScreen() {
       setSessions(s);
       setInstructors(i);
     } catch (e) {
-      Alert.alert("Erreur", e instanceof Error ? e.message : "Impossible de charger les séances.");
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Impossible de charger les séances.");
     } finally {
       setLoading(false);
     }
@@ -106,28 +106,28 @@ export default function AdminYogaSessionsScreen() {
   const submit = async () => {
     if (submitting) return;
     if (!title.trim() || !instructorId || !address.trim() || !city.trim()) {
-      Alert.alert("Champs manquants", "Titre, instructeur, adresse et ville sont obligatoires.");
+      showAppAlert("Champs manquants", "Titre, instructeur, adresse et ville sont obligatoires.");
       return;
     }
     const capacityNum = Number(capacity);
     const priceNum = Number(price);
     if (!Number.isFinite(capacityNum) || capacityNum <= 0) {
-      Alert.alert("Capacité invalide", "La capacité doit être un nombre supérieur à 0.");
+      showAppAlert("Capacité invalide", "La capacité doit être un nombre supérieur à 0.");
       return;
     }
     if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      Alert.alert("Prix invalide", "Le prix doit être un nombre supérieur à 0.");
+      showAppAlert("Prix invalide", "Le prix doit être un nombre supérieur à 0.");
       return;
     }
     const startIso = toIsoFromParts(dateStr, startTime);
     const endIso = toIsoFromParts(dateStr, endTime);
     if (!startIso || !endIso) {
-      Alert.alert("Date/heure invalide", "Utilisez les formats JJ/MM/AAAA et HH:MM.");
+      showAppAlert("Date/heure invalide", "Utilisez les formats JJ/MM/AAAA et HH:MM.");
       return;
     }
     const durationMin = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
     if (durationMin <= 0) {
-      Alert.alert("Heures invalides", "L'heure de fin doit être après l'heure de début.");
+      showAppAlert("Heures invalides", "L'heure de fin doit être après l'heure de début.");
       return;
     }
 
@@ -144,19 +144,19 @@ export default function AdminYogaSessionsScreen() {
         price_mad: priceNum,
         level,
       });
-      Alert.alert("Séance créée", "La séance est maintenant visible dans le catalogue patient.");
+      showAppAlert("Séance créée", "La séance est maintenant visible dans le catalogue patient.");
       resetForm();
       setFormOpen(false);
       void load();
     } catch (e) {
-      Alert.alert("Erreur", e instanceof Error ? e.message : "Création impossible.");
+      showAppAlert("Erreur", e instanceof Error ? e.message : "Création impossible.");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleComplete = (session: YogaCatalogEntry) => {
-    Alert.alert("Terminer la séance ?", `"${session.title}" sera marquée terminée et les réservations liées seront clôturées (paiement libéré).`, [
+    showAppAlert("Terminer la séance ?", `"${session.title}" sera marquée terminée et les réservations liées seront clôturées (paiement libéré).`, [
       { text: "Annuler", style: "cancel" },
       {
         text: "Terminer",
@@ -165,7 +165,7 @@ export default function AdminYogaSessionsScreen() {
           try {
             await completeYogaSession(session.id);
           } catch (e) {
-            Alert.alert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+            showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
           } finally {
             setActingOn(null);
           }
@@ -175,7 +175,7 @@ export default function AdminYogaSessionsScreen() {
   };
 
   const handleCancelClass = (session: YogaCatalogEntry) => {
-    Alert.alert(
+    showAppAlert(
       "Annuler toute la séance ?",
       `Tous les élèves inscrits à "${session.title}" seront notifiés et leurs réservations annulées.`,
       [
@@ -188,7 +188,7 @@ export default function AdminYogaSessionsScreen() {
             try {
               await cancelYogaSession(session.id, "Annulée par l'administration");
             } catch (e) {
-              Alert.alert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+              showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
             } finally {
               setActingOn(null);
             }

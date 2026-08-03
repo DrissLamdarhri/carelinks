@@ -28,6 +28,7 @@ import { LocaleGate } from "@/components/LocaleGate";
 import { useAuth } from "@/lib/auth-context";
 import { YogaReminderModalHost } from "@/components/YogaReminderModal";
 import { showYogaReminderPopup } from "@/lib/yoga-reminder-popup";
+import { AppAlertHost } from "@/components/AppAlertHost";
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
@@ -129,6 +130,8 @@ export default function RootLayout() {
           <ToastHost />
           {/* "Your class starts soon" popup, opened from a reminder push tap */}
           <YogaReminderModalHost />
+          {/* Styled replacement for Alert.alert — every confirm/info popup */}
+          <AppAlertHost />
         </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>

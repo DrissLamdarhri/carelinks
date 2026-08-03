@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Modal,
   ScrollView,
@@ -26,6 +25,7 @@ import { YogaBookingDetails } from "@/components/YogaBookingDetails";
 import { cancelYogaBooking, getBookingDetails } from "@/lib/db/yoga";
 import { isRefundEligible } from "@/lib/yoga-cancellation";
 import { showToast } from "@/lib/toast";
+import { showAppAlert } from "@/lib/app-alert";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 const SCREEN_W = Dimensions.get("window").width;
@@ -156,7 +156,7 @@ export default function PatientBookingsScreen() {
   // so no extra lookup is needed to preview eligibility here.
   const handleYogaCancel = (item: CardItem) => {
     const eligible = item.scheduledAt ? isRefundEligible(item.scheduledAt) : true;
-    Alert.alert(
+    showAppAlert(
       "Annuler cette réservation ?",
       eligible
         ? "Vous serez remboursé intégralement (annulation à plus de 24h de la séance)."
@@ -178,7 +178,7 @@ export default function PatientBookingsScreen() {
               );
               void refresh();
             } catch (e) {
-              Alert.alert("Erreur", e instanceof Error ? e.message : "Annulation impossible.");
+              showAppAlert("Erreur", e instanceof Error ? e.message : "Annulation impossible.");
             } finally {
               setYogaCancelBusy(false);
             }

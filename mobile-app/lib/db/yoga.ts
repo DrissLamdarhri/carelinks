@@ -23,8 +23,17 @@ import type {
 
 type UUID = string;
 
+// Supabase's PostgrestError is a plain object, NOT `instanceof Error` — every
+// catch site in this app does `error instanceof Error ? error.message : ...`,
+// so throwing the raw object silently swaps a specific server-side reason
+// (e.g. "Séance complète.") for a generic fallback toast. Wrapping here once
+// means every caller of this module gets the real message for free.
+function throwSupabaseError(error: { message?: string } | null): never {
+  throw new Error(error?.message ?? "Une erreur est survenue.");
+}
+
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
-  if (error) throw error;
+  if (error) throwSupabaseError(error as { message?: string });
   if (data === null) throw new Error("Empty result");
   return data;
 }
@@ -38,7 +47,7 @@ export async function getUpcomingCatalog(): Promise<YogaCatalogEntry[]> {
     .gt("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
     .limit(50);
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
   const rows = (sessions ?? []) as YogaSession[];
   if (rows.length === 0) return [];
 
@@ -185,7 +194,7 @@ export async function cancelYogaBooking(
   bookingId: UUID,
 ): Promise<{ eligible: boolean; refund_mad: number; had_payment: boolean }> {
   const { data, error } = await supabase.rpc("cancel_yoga_booking", { p_booking_id: bookingId });
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
   return data as { eligible: boolean; refund_mad: number; had_payment: boolean };
 }
 
@@ -230,13 +239,31 @@ export async function findExistingYogaReservation(
   sessionId: UUID,
   patientId: UUID,
 ): Promise<{ kind: "enrolled" } | { kind: "pending"; bookingId: UUID } | null> {
+  // An enrollment row only counts as a real, blocking reservation if the
+  // booking behind it is still alive — a booking cancelled through a path
+  // that predates cancel_yoga_booking() (see migration 0045) can leave a
+  // stale enrollment row behind. Without this check, a patient with one of
+  // those leftover rows could never re-book the same class even though they
+  // have no active reservation at all.
   const { data: enrollment } = await supabase
     .from("yoga_enrollments")
-    .select("session_id")
+    .select("session_id, booking_id")
     .eq("session_id", sessionId)
     .eq("patient_id", patientId)
     .maybeSingle();
-  if (enrollment) return { kind: "enrolled" };
+  if (enrollment) {
+    if (!enrollment.booking_id) return { kind: "enrolled" };
+    const { data: linkedBooking } = await supabase
+      .from("bookings")
+      .select("status")
+      .eq("id", enrollment.booking_id)
+      .maybeSingle();
+    if (!linkedBooking || linkedBooking.status !== "cancelled") {
+      return { kind: "enrolled" };
+    }
+    // Stale/orphaned row — the server will clean it up on the next payment
+    // attempt (confirm_yoga_payment self-heals); don't block here.
+  }
 
   const { data: pending } = await supabase
     .from("bookings")
@@ -261,7 +288,7 @@ export async function confirmYogaPayment(
     p_amount_mad: Math.round(amountMad),
     p_provider: provider,
   });
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
 }
 
 // ── Admin: create / list / manage classes ───────────────────────────────────
@@ -312,7 +339,7 @@ export async function listAdminSessions(): Promise<YogaCatalogEntry[]> {
     .select("*")
     .order("starts_at", { ascending: false })
     .limit(100);
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
   const rows = (sessions ?? []) as YogaSession[];
   if (rows.length === 0) return [];
   const ids = rows.map((s) => s.id);
@@ -330,20 +357,20 @@ export async function listAdminSessions(): Promise<YogaCatalogEntry[]> {
 
 export async function completeYogaSession(sessionId: UUID): Promise<void> {
   const { error } = await supabase.rpc("complete_yoga_session", { p_session_id: sessionId });
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
 }
 
 export async function cancelYogaSession(sessionId: UUID, reason?: string): Promise<void> {
   const { error } = await supabase.rpc("cancel_yoga_session", { p_session_id: sessionId, p_reason: reason ?? null });
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
 }
 
 export async function listYogaInstructors(): Promise<{ id: UUID; full_name: string }[]> {
   const { data: pros, error } = await supabase.from("professionals").select("id").eq("specialty", "yoga_instructor");
-  if (error) throw error;
+  if (error) throwSupabaseError(error);
   const ids = (pros ?? []).map((p) => p.id);
   if (!ids.length) return [];
   const { data: profs, error: profErr } = await supabase.from("profiles").select("id, full_name").in("id", ids);
-  if (profErr) throw profErr;
+  if (profErr) throwSupabaseError(profErr);
   return (profs ?? []) as { id: UUID; full_name: string }[];
 }
