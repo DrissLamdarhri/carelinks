@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,13 +12,11 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { ArrowLeft, Calendar, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
+import { ArrowLeft, Calendar, CheckCircle2, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
-import { notifyAdminNewBooking } from "@/lib/admin/booking-notifications";
-import { useYogaSessions } from "@/lib/yoga-sessions";
+import { useYogaCatalog, createYogaReservation, findExistingYogaReservation } from "@/lib/db/yoga";
 
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
 
@@ -25,35 +24,33 @@ export default function YogaCatalogScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
-  const { sessions: yogaSessions, loading, error } = useYogaSessions();
+  const { sessions: yogaSessions, loading, error } = useYogaCatalog();
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Tous");
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+  const [alreadyEnrolledOpen, setAlreadyEnrolledOpen] = useState(false);
 
-  // Only use database sessions - don't fall back to mock data
-  // (Mock data has invalid IDs for enrollment)
-  const sessions = yogaSessions.length > 0 
-    ? yogaSessions.map((s) => ({
-        id: s.id, // Keep UUID from database
-        name: s.title,
-        level: s.level || "Tous niveaux",
-        instructor: s.instructor,
-        duration: `${s.durationMin} min`,
-        price: s.priceMad,
-        date: new Date(s.startsAt).toLocaleDateString("fr-FR", { 
-          day: "2-digit", 
-          month: "short", 
-          hour: "2-digit", 
-          minute: "2-digit" 
-        }),
-        startsAtISO: s.startsAt,
-        spots: s.capacity - s.enrolledCount,
-        rating: 4.8,
-        img: s.imageUrl || null,
-        address: s.address || null,
-        city: s.city || null,
-      }))
-    : []; // Empty array, not fallback
+  const sessions = yogaSessions.map((s) => ({
+    id: s.id,
+    name: s.title,
+    level: s.level || "Tous niveaux",
+    instructor: s.instructorDisplayName,
+    instructorId: s.instructor_id,
+    duration: `${s.duration_min} min`,
+    price: s.price_mad,
+    date: new Date(s.starts_at).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    startsAtISO: s.starts_at,
+    spots: s.spotsLeft,
+    rating: 4.8,
+    img: s.image_url || null,
+    address: s.address || null,
+    city: s.city || null,
+  }));
 
   const filteredSessions = useMemo(() => {
     if (activeFilter === "Tous") return sessions;
@@ -77,92 +74,52 @@ export default function YogaCatalogScreen() {
 
     setLoadingSessionId(session.id);
     try {
-      // Check if already enrolled
-      const { data: existing } = await supabase
-        .from("yoga_enrollments")
-        .select("*")
-        .eq("session_id", session.id)
-        .eq("patient_id", user.id)
-        .single();
-
-      if (existing) {
-        Alert.alert(t("already_enrolled"), t("already_enrolled_msg"));
+      // A seat is only ever taken by a REAL, paid reservation (see
+      // confirmYogaPayment) — never by tapping "Réserver". So "already
+      // reserved" now means one of two things: already enrolled (paid), or
+      // already sitting on an unpaid, still-open reservation for this exact
+      // class — in that case, resume that checkout instead of creating a
+      // second, duplicate booking.
+      const existing = await findExistingYogaReservation(session.id, user.id);
+      if (existing?.kind === "enrolled") {
         setLoadingSessionId(null);
+        setAlreadyEnrolledOpen(true);
+        return;
+      }
+      if (existing?.kind === "pending") {
+        setLoadingSessionId(null);
+        router.replace(`/patient/payment/${encodeURIComponent(existing.bookingId)}`);
         return;
       }
 
-      // 1. Create yoga enrollment (tracks the yoga session enrollment)
-      const { data: enrollment, error: enrollmentError } = await supabase
-        .from("yoga_enrollments")
-        .insert([
-          {
-            session_id: session.id,
-            patient_id: user.id,
-          },
-        ])
-        .select()
-        .single();
+      // Only a booking is created here — status 'open', same starting point
+      // as every other specialty. No seat is consumed and nothing is
+      // "confirmed" yet; that only happens once payment actually succeeds.
+      const booking = await createYogaReservation({
+        patientId: user.id,
+        session: {
+          id: session.id,
+          title: session.name,
+          instructorId: session.instructorId,
+          instructorName: session.instructor,
+          address: session.address,
+          city: session.city,
+          startsAtISO: session.startsAtISO || new Date().toISOString(),
+          priceMad: session.price,
+        },
+      });
 
-      if (enrollmentError) {
-        throw new Error(`Erreur lors de l'inscription: ${enrollmentError.message}`);
-      }
-
-      // 2. Create booking for admin tracking
-      const { data: booking, error: bookingError } = await supabase
-        .from("bookings")
-        .insert([
-          {
-            patient_id: user.id,
-            professional_id: null, // No professional for yoga
-            specialty: "yoga_instructor",
-            status: "matched",
-            urgency: "normal",
-            scheduled_at: session.startsAtISO || new Date().toISOString(),
-            address: t("yoga_class"),
-            notes: `Réservation yoga: ${session.name} - Instructeur: ${session.instructor}`,
-            budget_min_mad: session.price,
-            budget_max_mad: session.price,
-            final_price_mad: session.price,
-          },
-        ])
-        .select()
-        .single();
-
-      if (bookingError) {
-        // Even if booking fails, enrollment succeeded
-        console.warn("Booking creation failed but enrollment succeeded:", bookingError);
-      }
-
-      // Link the enrollment to the booking that carries its payment. Without
-      // this the admin's "Terminer & payer" cannot find the escrow to release,
-      // and the money would stay frozen (migration 0031).
-      if (booking?.id && enrollment?.id) {
-        const { error: linkError } = await supabase
-          .from("yoga_enrollments")
-          .update({ booking_id: booking.id })
-          .eq("id", enrollment.id);
-        if (linkError) console.warn("Could not link enrollment to booking:", linkError.message);
-      }
-
-      if (booking) {
-        // Notifier l'admin automatiquement
-        await notifyAdminNewBooking(booking);
-      }
+      // Admin visibility of the new booking is handled entirely in Postgres
+      // (log_booking_to_admin trigger on bookings INSERT, admin panel reads
+      // it with realtime) — no separate client-side call needed.
 
       setLoadingSessionId(null);
-
-      // Escrow, like every other service: hold the class price up-front on the
-      // booking we just created. The payment screen routes yoga back to bookings
-      // on success (no live tracking for a class).
-      if (booking?.id) {
-        router.replace(`/patient/payment/${encodeURIComponent(booking.id)}`);
-      } else {
-        // Enrollment saved but the booking row failed — no price to hold, so
-        // just confirm and send them to their bookings.
-        Alert.alert(t("enrollment_confirmed"), t("enrollment_confirmed_msg"), [
-          { text: t("see_my_bookings"), onPress: () => router.push("/patient/bookings") },
-        ]);
-      }
+      // replace, not push: this booking now exists and the patient is
+      // committed to a checkout — same reasoning as every other step in the
+      // accept→pay chain elsewhere in the app (waiting → offers → payment →
+      // tracking all use replace), so the empty catalog screen doesn't sit
+      // in the back-stack behind an in-progress payment.
+      router.replace(`/patient/payment/${encodeURIComponent(booking.id)}`);
     } catch (err) {
       console.error("[YogaCatalog] Erreur lors de la réservation:", err);
       Alert.alert(t("error"), t("cannot_create_booking"));
@@ -314,11 +271,58 @@ export default function YogaCatalogScreen() {
           </ScrollView>
         )}
       </View>
+
+      <Modal
+        transparent
+        visible={alreadyEnrolledOpen}
+        animationType="fade"
+        onRequestClose={() => setAlreadyEnrolledOpen(false)}
+      >
+        <View style={styles.noticeBackdrop}>
+          <View style={styles.noticeCard}>
+            <View style={styles.noticeIconWrap}>
+              <CheckCircle2 size={28} color="#16A34A" />
+            </View>
+            <Text style={styles.noticeTitle}>{t("already_enrolled")}</Text>
+            <Text style={styles.noticeSub}>{t("already_enrolled_msg")}</Text>
+            <TouchableOpacity
+              style={styles.noticePrimaryBtn}
+              onPress={() => {
+                setAlreadyEnrolledOpen(false);
+                router.push("/patient/bookings");
+              }}
+            >
+              <Text style={styles.noticePrimaryTxt}>{t("see_my_bookings")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.noticeSecondaryBtn} onPress={() => setAlreadyEnrolledOpen(false)}>
+              <Text style={styles.noticeSecondaryTxt}>{t("close")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  noticeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 24 },
+  noticeCard: {
+    width: "100%", maxWidth: 360, backgroundColor: "#FFFFFF", borderRadius: 24,
+    padding: 24, alignItems: "center",
+  },
+  noticeIconWrap: {
+    width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7",
+    alignItems: "center", justifyContent: "center", marginBottom: 14,
+  },
+  noticeTitle: { fontSize: 17, fontWeight: "800", color: Colors.textPrimary, textAlign: "center" },
+  noticeSub: { fontSize: 13, color: Colors.textMuted, textAlign: "center", marginTop: 6, lineHeight: 19 },
+  noticePrimaryBtn: {
+    height: 50, width: "100%", borderRadius: 14, backgroundColor: Colors.primary,
+    alignItems: "center", justifyContent: "center", marginTop: 20,
+  },
+  noticePrimaryTxt: { color: "#FFFFFF", fontSize: 14.5, fontWeight: "700" },
+  noticeSecondaryBtn: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  noticeSecondaryTxt: { color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" },
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
   header: {
     backgroundColor: "white",

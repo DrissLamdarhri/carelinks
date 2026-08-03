@@ -40,11 +40,21 @@ function paymentStatusBadge(d: YogaBookingDetailsT): { label: string; color: str
   return { label: "En attente", color: "#D97706" };
 }
 
-export function YogaBookingDetails({ details }: { details: YogaBookingDetailsT }) {
+export function YogaBookingDetails({
+  details,
+  onResumePayment,
+}: {
+  details: YogaBookingDetailsT;
+  /** Shown only for an unpaid, still-open reservation — lets the patient
+   *  deliberately finish or walk away, instead of the seat/status ever being
+   *  treated as reserved/paid just because a booking row exists. */
+  onResumePayment?: () => void;
+}) {
   const { session, instructor, payment } = details;
   const statusBadge = bookingStatusBadge(details);
   const payBadge = paymentStatusBadge(details);
   const fullAddress = [session?.address, session?.city].filter(Boolean).join(", ");
+  const isUnpaid = details.booking_status === "open" && !payment;
 
   const openItinerary = () => {
     if (!fullAddress) return;
@@ -112,6 +122,12 @@ export function YogaBookingDetails({ details }: { details: YogaBookingDetailsT }
       {details.booking_status === "cancelled" && details.cancel_reason ? (
         <Text style={s.cancelNote}>{details.cancel_reason}</Text>
       ) : null}
+
+      {isUnpaid && onResumePayment ? (
+        <TouchableOpacity style={s.resumeBtn} onPress={onResumePayment}>
+          <Text style={s.resumeTxt}>Terminer le paiement</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -140,4 +156,6 @@ const s = StyleSheet.create({
   payBadge: { paddingHorizontal: 10, height: 26, borderRadius: 13, backgroundColor: Colors.input, justifyContent: "center" },
   payBadgeTxt: { fontSize: 12, fontWeight: "700" },
   cancelNote: { fontSize: 12, color: Colors.textMuted, marginTop: 12, fontStyle: "italic" },
+  resumeBtn: { height: 50, borderRadius: 14, backgroundColor: NAVY, alignItems: "center", justifyContent: "center", marginTop: 16 },
+  resumeTxt: { color: "#FFFFFF", fontSize: 14.5, fontWeight: "700" },
 });

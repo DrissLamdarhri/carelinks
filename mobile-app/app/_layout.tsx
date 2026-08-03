@@ -26,6 +26,8 @@ import { addNotificationTapListener, configureNotifications } from "@/lib/push-n
 import { ToastHost } from "@/components/ToastHost";
 import { LocaleGate } from "@/components/LocaleGate";
 import { useAuth } from "@/lib/auth-context";
+import { YogaReminderModalHost } from "@/components/YogaReminderModal";
+import { showYogaReminderPopup } from "@/lib/yoga-reminder-popup";
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
@@ -61,6 +63,14 @@ function PushTapHandler() {
     const sub = addNotificationTapListener((data) => {
       const bookingId = typeof data?.booking_id === "string" ? data.booking_id : null;
       if (!bookingId) return;
+      // The yoga class reminder (migration 0042) has no pro en route to
+      // track — a live map is the wrong destination for it. Show the recap
+      // popup instead of navigating into a tracking screen that doesn't
+      // apply.
+      if (data?.type === "yoga_class_reminder") {
+        showYogaReminderPopup(bookingId);
+        return;
+      }
       const base = role === "pro" ? "/pro/tracking" : "/patient/tracking";
       router.push(`${base}/${bookingId}`);
     });
@@ -117,6 +127,8 @@ export default function RootLayout() {
           <PushTapHandler />
           {/* Branded toast notifications (overlays everything) */}
           <ToastHost />
+          {/* "Your class starts soon" popup, opened from a reminder push tap */}
+          <YogaReminderModalHost />
         </SafeAreaProvider>
       </I18nProvider>
     </AuthProvider>

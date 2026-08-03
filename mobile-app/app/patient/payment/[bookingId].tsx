@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { confirmYogaPayment } from "@/lib/db/yoga";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
@@ -151,7 +152,31 @@ export default function PaymentScreen() {
     if (!bookingId || !user?.id || submitting) return;
     setSubmitting(true);
     try {
-      if (!isDemo) {
+      if (!isDemo && specialty === "yoga_instructor") {
+        // Paying IS what reserves the seat (migration 0043) — the enrollment,
+        // the payment row, and the booking's matched status are all created
+        // together, atomically, only here. If the class filled up while this
+        // patient was checking out, this raises before anything is charged.
+        try {
+          await confirmYogaPayment(bookingId, prestation, "cmi");
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : "";
+          if (msg.includes("complète") || msg.includes("complet")) {
+            // Nobody was charged. Clean up the now-pointless reservation
+            // immediately rather than leaving it for the 45-min sweep, and
+            // send the patient back to pick another session.
+            await db.bookings.cancelBooking(bookingId, "session_full").catch(() => {});
+            setSubmitting(false);
+            Alert.alert(
+              t("session_full"),
+              "Cette séance vient d'être complétée par un autre patient. Vous n'avez pas été débité.",
+              [{ text: "OK", onPress: () => router.replace("/patient/yoga") }],
+            );
+            return;
+          }
+          throw error;
+        }
+      } else if (!isDemo) {
         // Re-read the booking right before charging: for urgent/emergency the
         // hold is placed before any pro is matched, and checkout (card entry,
         // 3-D Secure) takes long enough that a pro can claim the job in the

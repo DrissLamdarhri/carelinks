@@ -147,6 +147,9 @@ export interface Booking {
   session_total: number | null;
   meet_link: string | null;
   zoom_link: string | null;
+  // Yoga classes (0043) — which session this reservation is for, set at
+  // creation time, before payment/enrollment exist.
+  yoga_session_id: UUID | null;
 }
 
 export interface Bid {

@@ -288,6 +288,7 @@ export default function PatientBookingsScreen() {
                       session_total: null,
                       meet_link: null,
                       zoom_link: null,
+                      yoga_session_id: null,
                     });
                   }}
                 >
@@ -442,7 +443,14 @@ export default function PatientBookingsScreen() {
               {yogaModalLoading ? (
                 <ActivityIndicator color={Colors.primary} style={{ marginVertical: 30 }} />
               ) : yogaModalDetails ? (
-                <YogaBookingDetails details={yogaModalDetails} />
+                <YogaBookingDetails
+                  details={yogaModalDetails}
+                  onResumePayment={() => {
+                    const id = yogaModalDetails.booking_id;
+                    setYogaModalBookingId(null);
+                    router.push(`/patient/payment/${encodeURIComponent(id)}`);
+                  }}
+                />
               ) : (
                 <Text style={styles.errorText}>Impossible de charger les détails.</Text>
               )}

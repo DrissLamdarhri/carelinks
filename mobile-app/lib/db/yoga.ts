@@ -12,6 +12,7 @@
  * fragile. This matches how the rest of `lib/db/dal.ts` already composes
  * reads (e.g. the pro tracking screen fetches booking + profile separately).
  */
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type {
   YogaBookingDetails,
@@ -70,12 +71,53 @@ export async function getUpcomingCatalog(): Promise<YogaCatalogEntry[]> {
   });
 }
 
+/** Realtime-aware catalog — reloads whenever a class or an enrollment count
+ *  changes, so a newly published session or a seat freed by a cancellation
+ *  appears immediately for a patient sitting on the catalog screen. */
+export function useYogaCatalog() {
+  const [sessions, setSessions] = useState<YogaCatalogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        setError(null);
+        const rows = await getUpcomingCatalog();
+        if (mounted) setSessions(rows);
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err : new Error("Failed to load sessions"));
+          setSessions([]);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+
+    const channel = supabase
+      .channel("yoga:catalog")
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_sessions" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "yoga_enrollments" }, () => void load())
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  return { sessions, loading, error };
+}
+
 // ── Booking detail (post-payment confirmation + "Mes RDV" detail) ──────────
 export async function getBookingDetails(bookingId: UUID): Promise<YogaBookingDetails> {
   const [bookingRes, enrollmentRes, paymentRes] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, status, final_price_mad, cancel_reason, cancelled_at")
+      .select("id, status, final_price_mad, cancel_reason, cancelled_at, yoga_session_id")
       .eq("id", bookingId)
       .single(),
     supabase.from("yoga_enrollments").select("session_id").eq("booking_id", bookingId).maybeSingle(),
@@ -92,7 +134,11 @@ export async function getBookingDetails(bookingId: UUID): Promise<YogaBookingDet
 
   let session: YogaBookingDetails["session"] = null;
   let instructor: YogaBookingDetails["instructor"] = null;
-  const sessionId = enrollmentRes.data?.session_id;
+  // Prefer the enrollment's link (authoritative once payment has gone
+  // through) but fall back to the booking's own yoga_session_id — set at
+  // reservation time, before any enrollment/payment exists — so a still-
+  // unpaid reservation still shows which class it's for.
+  const sessionId = enrollmentRes.data?.session_id ?? booking.yoga_session_id;
   if (sessionId) {
     const { data: s } = await supabase
       .from("yoga_sessions")
@@ -141,6 +187,81 @@ export async function cancelYogaBooking(
   const { data, error } = await supabase.rpc("cancel_yoga_booking", { p_booking_id: bookingId });
   if (error) throw error;
   return data as { eligible: boolean; refund_mad: number; had_payment: boolean };
+}
+
+// ── Reservation (pre-payment) ────────────────────────────────────────────────
+// Creates ONLY the booking — status 'open', same as every other specialty
+// before it's confirmed. Does NOT touch yoga_enrollments: that row (which is
+// what actually consumes a capacity seat, via the race-safe trigger from
+// 0031) is only created by confirmYogaPayment() below, after payment
+// succeeds. Reserving a seat for a reservation nobody paid for is the exact
+// bug this was built to fix.
+export async function createYogaReservation(input: {
+  patientId: UUID;
+  session: { id: UUID; title: string; instructorId: UUID | null; instructorName: string; address: string | null; city: string | null; startsAtISO: string; priceMad: number };
+}): Promise<{ id: UUID }> {
+  const fullAddress = [input.session.address, input.session.city].filter(Boolean).join(", ") || null;
+  return unwrap(
+    await supabase
+      .from("bookings")
+      .insert({
+        patient_id: input.patientId,
+        professional_id: input.session.instructorId,
+        specialty: "yoga_instructor",
+        status: "open",
+        urgency: "normal",
+        yoga_session_id: input.session.id,
+        scheduled_at: input.session.startsAtISO,
+        address: fullAddress,
+        notes: `Réservation yoga: ${input.session.title} — Instructeur: ${input.session.instructorName}`,
+        budget_min_mad: input.session.priceMad,
+        budget_max_mad: input.session.priceMad,
+        final_price_mad: input.session.priceMad,
+      })
+      .select("id")
+      .single(),
+  );
+}
+
+/** Duplicate-tap / duplicate-reservation guard: is this patient already
+ *  enrolled (paid) or already sitting on an unpaid, still-open reservation
+ *  for this exact class? */
+export async function findExistingYogaReservation(
+  sessionId: UUID,
+  patientId: UUID,
+): Promise<{ kind: "enrolled" } | { kind: "pending"; bookingId: UUID } | null> {
+  const { data: enrollment } = await supabase
+    .from("yoga_enrollments")
+    .select("session_id")
+    .eq("session_id", sessionId)
+    .eq("patient_id", patientId)
+    .maybeSingle();
+  if (enrollment) return { kind: "enrolled" };
+
+  const { data: pending } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("yoga_session_id", sessionId)
+    .eq("patient_id", patientId)
+    .eq("status", "open")
+    .maybeSingle();
+  if (pending) return { kind: "pending", bookingId: pending.id };
+
+  return null;
+}
+
+// ── Pay → reserve, atomically (see migration 0043) ──────────────────────────
+export async function confirmYogaPayment(
+  bookingId: UUID,
+  amountMad: number,
+  provider: "cmi" | "stripe" | "cash" = "cmi",
+): Promise<void> {
+  const { error } = await supabase.rpc("confirm_yoga_payment", {
+    p_booking_id: bookingId,
+    p_amount_mad: Math.round(amountMad),
+    p_provider: provider,
+  });
+  if (error) throw error;
 }
 
 // ── Admin: create / list / manage classes ───────────────────────────────────
