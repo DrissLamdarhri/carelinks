@@ -22,13 +22,41 @@
  * channel is how you get positions arriving out of order.
  */
 import * as Location from "expo-location";
-import * as TaskManager from "expo-task-manager";
+import type * as TaskManagerTypes from "expo-task-manager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { tracking, proStreamTopic } from "@/lib/db/tracking";
 
 export const LIVE_LOCATION_TASK = "carelink-live-location";
+
+/**
+ * expo-task-manager is loaded DEFENSIVELY, and this is not paranoia.
+ *
+ * `expo-task-manager/build/ExpoTaskManager.js` is literally
+ *     export default requireNativeModule('ExpoTaskManager');
+ * which throws AT IMPORT TIME when the native module is missing from the
+ * binary. This module is imported by app/_layout.tsx, so a static import means
+ * a JS bundle running against any build that predates the dependency — an
+ * out-of-date dev client, a stale internal distribution, an OTA update that
+ * outran its native release — does not merely lose background tracking. The
+ * root layout fails to evaluate and THE ENTIRE APP CANNOT START.
+ *
+ * An optional capability must never be able to brick launch. If the module is
+ * absent we degrade to the foreground-only watch below and the rest of the app
+ * is untouched.
+ */
+let TaskManager: typeof TaskManagerTypes | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  TaskManager = require("expo-task-manager") as typeof TaskManagerTypes;
+} catch {
+  TaskManager = null;
+}
+
+/** False when the native task module is unavailable — background tracking is
+ *  impossible and callers silently fall back to a foreground watch. */
+export const hasBackgroundLocationSupport = TaskManager != null;
 
 /** Survives process death: a headless task relaunch has no React state. */
 const SESSION_KEY = "carelink.live-location.session";
@@ -204,7 +232,7 @@ async function publish(locations: Location.LocationObject[]) {
 // ── The task itself ─────────────────────────────────────────────────────────
 // Defined at module scope: the OS can relaunch the app headless straight into
 // this task, so registration must not depend on any component having mounted.
-TaskManager.defineTask(LIVE_LOCATION_TASK, async ({ data, error }) => {
+TaskManager?.defineTask(LIVE_LOCATION_TASK, async ({ data, error }) => {
   if (error) return;
   const locations = (data as { locations?: Location.LocationObject[] } | undefined)?.locations;
   if (!locations?.length) return;
@@ -232,6 +260,13 @@ export async function startLiveLocation(bookingId: string): Promise<StartResult>
   lastPersisted = null;
   seq = 0;
   channelFor(bookingId); // open the socket now, not on the first fix
+
+  // No native task module (build predates the dependency) — go straight to the
+  // foreground watch. Degraded, but the trip still tracks while the app is open.
+  if (!TaskManager) {
+    const started = await startFallbackWatch();
+    return started ? { ok: true, background: false } : { ok: false, reason: "failed" };
+  }
 
   // Background permission is requested but NOT required: on Android the
   // foreground service keeps updates flowing without it, and on iOS the pro
@@ -302,7 +337,7 @@ export async function stopLiveLocation(): Promise<void> {
   stopFallbackWatch();
   await AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
   try {
-    if (await TaskManager.isTaskRegisteredAsync(LIVE_LOCATION_TASK)) {
+    if (TaskManager && (await TaskManager.isTaskRegisteredAsync(LIVE_LOCATION_TASK))) {
       await Location.stopLocationUpdatesAsync(LIVE_LOCATION_TASK);
     }
   } catch {
@@ -321,7 +356,7 @@ export async function reconcileLiveLocationOnStartup(): Promise<void> {
   if (!raw) {
     // No session, but the OS may still hold a registered task from a killed run.
     try {
-      if (await TaskManager.isTaskRegisteredAsync(LIVE_LOCATION_TASK)) {
+      if (TaskManager && (await TaskManager.isTaskRegisteredAsync(LIVE_LOCATION_TASK))) {
         await Location.stopLocationUpdatesAsync(LIVE_LOCATION_TASK);
       }
     } catch {
