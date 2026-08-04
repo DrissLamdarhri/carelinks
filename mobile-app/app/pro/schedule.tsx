@@ -19,6 +19,7 @@ import { addDays, dateKey, effectiveDate, friendlyDayLabel, intlLocale, isSameDa
 import { DateStrip } from "@/components/DateStrip";
 import { MonthCalendarModal } from "@/components/MonthCalendarModal";
 import { careLabel } from "@/lib/care-label";
+import { isTerminal, statusLabelKey } from "@/lib/booking-lifecycle";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -51,14 +52,13 @@ export default function ProScheduleScreen() {
     () => bookings.filter((b) => isSameDay(effectiveDate(b), selectedDate)),
     [bookings, selectedDate],
   );
-  const upcoming = useMemo(
-    () => dayBookings.filter((b) => b.status === "matched" || b.status === "in_progress"),
-    [dayBookings],
-  );
-  const done = useMemo(
-    () => dayBookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
-    [dayBookings],
-  );
+  // Split on "is anything still going to happen to this?", not on a hand-listed
+  // set of statuses. The old version listed `matched | in_progress` as upcoming
+  // and `completed | cancelled` as done, which (a) made `en_route` bookings
+  // vanish from BOTH tabs — a nurse actually on her way had no row at all — and
+  // (b) filed bookings the server had already written off as still to come.
+  const upcoming = useMemo(() => dayBookings.filter((b) => !isTerminal(b)), [dayBookings]);
+  const done = useMemo(() => dayBookings.filter((b) => isTerminal(b)), [dayBookings]);
 
   const selectDay = (d: Date) => {
     setSelectedDate(d);
@@ -76,8 +76,9 @@ export default function ProScheduleScreen() {
 
   const renderCard = (b: Booking) => {
     const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
-    const done_ = b.status === "completed";
+    const done_ = b.status === "completed" || (isTerminal(b) && b.status !== "cancelled");
     const cancelled = b.status === "cancelled";
+    const label = t(statusLabelKey(b));
     return (
       <TouchableOpacity key={b.id} activeOpacity={0.9} onPress={() => router.push(`/pro/tracking/${b.id}`)} style={s.card}>
         <View style={s.dateTile}>
@@ -89,7 +90,7 @@ export default function ProScheduleScreen() {
             <Text style={s.patient}>{t("patient")}</Text>
             <View style={[s.pill, done_ ? s.pillDone : cancelled ? s.pillCancel : b.status === "in_progress" ? s.pillLive : s.pillSoon]}>
               <Text style={[s.pillTxt, done_ ? s.pillTxtDone : cancelled ? s.pillTxtCancel : b.status === "in_progress" ? s.pillTxtLive : s.pillTxtSoon]}>
-                {done_ ? t("status_completed") : cancelled ? t("status_cancelled") : b.status === "in_progress" ? t("status_in_progress") : t("tab_upcoming")}
+                {label}
               </Text>
             </View>
           </View>

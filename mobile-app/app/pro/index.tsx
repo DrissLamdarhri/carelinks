@@ -43,6 +43,7 @@ import { db } from "@/lib/db/dal";
 import { geo, formatAddress } from "@/lib/db/geo";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import { careLabel } from "@/lib/care-label";
+import { findActiveMission, isTerminal, statusLabelKey } from "@/lib/booking-lifecycle";
 import type { Booking, ProSpecialty } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -146,8 +147,9 @@ export default function ProHomeScreen() {
   // Includes en_route: a pro actively driving to a patient who accidentally
   // backs out of the tracking screen must still have a way back in — without
   // this, "en_route" missions had no resume path at all.
-  const activeMission =
-    appointments.find((b) => b.status === "matched" || b.status === "en_route" || b.status === "in_progress") ?? null;
+  // See lib/booking-lifecycle.ts: a booking the server has already given up on
+  // is not a mission, whatever its row still says.
+  const activeMission = findActiveMission(appointments);
 
   // ── Keeping the mission card honest ────────────────────────────────────────
   // `appointments` was only ever refetched on focus, behind a 20s TTL. Finish a
@@ -546,7 +548,12 @@ export default function ProHomeScreen() {
           <View style={{ gap: 10 }}>
             {appointments.map((b) => {
               const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
-              const done = b.status === "completed";
+              // "Terminé" vs "À venir" used to be decided by `status ===
+              // "completed"` alone, so a CANCELLED booking was labelled "À
+              // venir" and kept a live "Naviguer vers le patient" button
+              // pointing at a job that no longer exists.
+              const done = isTerminal(b);
+              const label = t(statusLabelKey(b));
               return (
                 <TouchableOpacity
                   key={b.id}
@@ -572,7 +579,7 @@ export default function ProHomeScreen() {
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={[styles.pill, done ? styles.pillDone : styles.pillLive]}>
-                        {done ? "Terminé" : b.status === "in_progress" ? "En cours" : "À venir"}
+                        {label}
                       </Text>
                       <Text style={styles.jobPrice}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
                     </View>
