@@ -43,10 +43,20 @@ const GREEN = "#16A34A";
 const AMBER = "#F59E0B";
 const WHITE = "#FFFFFF";
 
-/** Diameter of the avatar disc. */
-const AVATAR = 46;
+/**
+ * Diameter of the avatar disc.
+ *
+ * Deliberately small. The first version used 46px in a 96px box, and on a phone
+ * that marker DOMINATED the map: it covered several streets, so every metre of
+ * movement read as exaggerated and the eye tracked the badge instead of the
+ * road. Uber, Bolt and Google Maps all keep the moving marker compact for
+ * exactly this reason — the road is the subject, the marker is an annotation on
+ * it. A smaller marker glued tightly to the route looks more real than a large
+ * one with better maths behind it.
+ */
+const AVATAR = 30;
 /** Full marker box — leaves room for the halo and the orbiting heading arrow. */
-const BOX = 96;
+const BOX = 62;
 
 export type TrackingStatus = "live" | "arrived" | "stale";
 
@@ -114,7 +124,7 @@ export const TrackingMarker = memo(function TrackingMarker({
   }, [pulsing, ringA, ringB]);
 
   const ringStyle = (v: Animated.Value) => ({
-    opacity: v.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 0.28, 0] }),
+    opacity: v.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 0.22, 0] }),
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }],
   });
 
@@ -134,7 +144,7 @@ export const TrackingMarker = memo(function TrackingMarker({
       {showHeading ? (
         <View style={[styles.orbit, { transform: [{ rotate: `${bearing}deg` }] }]}>
           <View style={[styles.heading, { backgroundColor: accent }]}>
-            <Navigation size={13} color={WHITE} fill={WHITE} strokeWidth={0} />
+            <Navigation size={10} color={WHITE} fill={WHITE} strokeWidth={0} />
           </View>
         </View>
       ) : null}
@@ -153,9 +163,9 @@ export const TrackingMarker = memo(function TrackingMarker({
           invisible to a red/green colour-deficient viewer. */}
       <View style={[styles.badge, { backgroundColor: accent }]}>
         {status === "arrived" ? (
-          <Check size={11} color={WHITE} strokeWidth={3.5} />
+          <Check size={8} color={WHITE} strokeWidth={4} />
         ) : status === "stale" ? (
-          <Pause size={9} color={WHITE} fill={WHITE} strokeWidth={0} />
+          <Pause size={7} color={WHITE} fill={WHITE} strokeWidth={0} />
         ) : (
           <View style={styles.liveDot} />
         )}
@@ -171,7 +181,9 @@ const styles = StyleSheet.create({
     width: BOX,
     height: BOX,
     borderRadius: BOX / 2,
-    borderWidth: 2,
+    // Hairline. The halo is a hint that this is live, not a feature competing
+    // with the street it sits on.
+    borderWidth: 1.5,
   },
   orbit: {
     position: "absolute",
@@ -180,21 +192,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heading: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: WHITE,
     // Nudge so the arrow sits just outside the avatar ring.
-    marginTop: (BOX - AVATAR) / 2 - 24,
+    marginTop: (BOX - AVATAR) / 2 - 17,
   },
   avatarRing: {
-    width: AVATAR + 6,
-    height: AVATAR + 6,
-    borderRadius: (AVATAR + 6) / 2,
-    borderWidth: 3,
+    width: AVATAR + 5,
+    height: AVATAR + 5,
+    borderRadius: (AVATAR + 5) / 2,
+    borderWidth: 2.5,
     borderColor: WHITE,
     backgroundColor: WHITE,
     alignItems: "center",
@@ -207,19 +219,19 @@ const styles = StyleSheet.create({
   },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: NAVY },
   initialsWrap: { alignItems: "center", justifyContent: "center" },
-  initials: { color: WHITE, fontSize: 16, fontWeight: "700", letterSpacing: 0.5 },
+  initials: { color: WHITE, fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
   badge: {
     position: "absolute",
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    borderWidth: 1.5,
     borderColor: WHITE,
     alignItems: "center",
     justifyContent: "center",
     // Bottom-right of the avatar disc, inside the marker box.
-    right: (BOX - AVATAR) / 2 - 8,
-    bottom: (BOX - AVATAR) / 2 - 4,
+    right: (BOX - AVATAR) / 2 - 5,
+    bottom: (BOX - AVATAR) / 2 - 2,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: WHITE },
+  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: WHITE },
 });

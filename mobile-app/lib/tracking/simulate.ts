@@ -63,6 +63,15 @@ export type SimulateOptions = {
   intervalMs?: number;
   /** Positional noise to add, in metres. Real urban GPS is 5-15m. */
   jitterM?: number;
+  /**
+   * Slow down through bends, the way a vehicle actually does.
+   *
+   * Constant speed through a corner is one of the strongest "this is fake"
+   * cues: real traffic decelerates into a turn and accelerates out. Without it
+   * the marker sweeps corners at motorway pace and the eye rejects it even when
+   * the geometry is perfect.
+   */
+  corneringSlowdown?: boolean;
   /** Simulate a signal outage between these offsets (ms from start). */
   outage?: [number, number];
   onProgress?: (fraction: number) => void;
@@ -75,7 +84,8 @@ export type SimulateOptions = {
  */
 export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const {
-    bookingId, path, speedMps = 14, intervalMs = 1500, jitterM = 8, outage, onProgress, onDone,
+    bookingId, path, speedMps = 14, intervalMs = 1500, jitterM = 8, outage,
+    corneringSlowdown = true, onProgress, onDone,
   } = opts;
 
   const route = new Route(path);
@@ -88,6 +98,7 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   void channel.subscribe();
 
   let offsetM = 0;
+  let currentSpeed = speedMps;
   let seq = 0;
   let elapsed = 0;
   let stopped = false;
@@ -95,7 +106,21 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const timer = setInterval(() => {
     if (stopped) return;
     elapsed += intervalMs;
-    offsetM += speedMps * (intervalMs / 1000);
+
+    // Local curvature: how much the road bends over the next ~40m. A sharp
+    // bend drops the speed toward 35%, a straight leaves it untouched.
+    let factor = 1;
+    if (corneringSlowdown) {
+      const b0 = route.smoothBearingAt(offsetM, 15);
+      const b1 = route.smoothBearingAt(Math.min(route.length, offsetM + 40), 15);
+      if (b0 != null && b1 != null) {
+        const bend = Math.abs((((b1 - b0) % 360) + 540) % 360 - 180);
+        factor = Math.max(0.35, 1 - bend / 90);
+      }
+    }
+    // Ease toward the target rather than stepping — a vehicle has mass.
+    currentSpeed += (speedMps * factor - currentSpeed) * 0.35;
+    offsetM += currentSpeed * (intervalMs / 1000);
 
     if (offsetM >= route.length) {
       stop();
@@ -117,7 +142,7 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
       lng: at.point.lng + (Math.random() - 0.5) * 2 * jitterDeg,
       at: new Date().toISOString(),
       heading: at.bearing,
-      speed: speedMps,
+      speed: currentSpeed,
       accuracy: 6 + Math.random() * 6,
       seq: ++seq,
     };

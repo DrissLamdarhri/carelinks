@@ -330,7 +330,7 @@ export default function ProTrackingScreen() {
   const simRef = useRef<SimulationHandle | null>(null);
   const [simulating, setSimulating] = useState(false);
   useEffect(() => () => simRef.current?.stop(), []);
-  const toggleSimulation = useCallback(() => {
+  const toggleSimulation = useCallback(async () => {
     if (simRef.current) {
       simRef.current.stop();
       simRef.current = null;
@@ -338,34 +338,58 @@ export default function ProTrackingScreen() {
       return;
     }
     if (!bookingId) return;
-    // Indoors the pro and the patient are the same place, so the real route is
-    // (correctly) cleared and there is nothing to drive along. Fall back to a
-    // synthetic loop around the current position — the point of the simulator
-    // is to exercise MOTION, and without this it is unusable in exactly the
-    // situation it was built for.
-    const origin = nurse ?? dest;
-    const path = route && route.length >= 2 ? route : origin ? syntheticLoop(origin) : null;
-    if (!path) {
+
+    // Drive a REAL APPROACH TO THE PATIENT, not a loop.
+    //
+    // The first version drove a synthetic circle around the current position.
+    // But the patient's screen draws OSRM(marker -> patient's home), so the
+    // route on screen was "how to get home from here" while the marker drove a
+    // circle. They diverged permanently: the marker appeared to leave the
+    // route, map-matching correctly refused to engage (it is off-road), motion
+    // fell back to free-space splining and looked like sliding, and heading
+    // came from noisy fix geometry instead of the street. Three of the four
+    // reported symptoms, all from feeding the pipeline a path that was not the
+    // route.
+    //
+    // Starting ~1.6km away and following the real road in means the drawn route
+    // and the driven path are the same geometry, so map-matching engages and
+    // the marker is glued to the street exactly as in production.
+    const target = dest ?? nurse;
+    if (!target) {
       showToast("Position inconnue — impossible de simuler");
       return;
     }
     setSimulating(true);
+    // A fixed bearing keeps runs comparable between attempts.
+    const startM = 1600;
+    const brg = 40 * (Math.PI / 180);
+    const start = {
+      lat: target.lat + (startM * Math.cos(brg)) / 111_320,
+      lng: target.lng + (startM * Math.sin(brg)) / (111_320 * Math.cos((target.lat * Math.PI) / 180)),
+    };
+
+    const { coords, fromRouter } = await fetchRoute(start, target);
+    // A straight line is not a road; map-matching would rightly distrust it and
+    // the run would tell us nothing about the real experience.
+    const path = fromRouter && coords.length >= 2 ? coords : syntheticLoop(target, 500);
+    if (!fromRouter) showToast("Routage indisponible — boucle synthétique");
+
     simRef.current = simulateTrip({
       bookingId,
       path,
-      speedMps: 12,
+      speedMps: 11,
       intervalMs: 1500,
-      jitterM: 8,
-      // A 10s dropout partway, so dead reckoning and the staleness banner get
-      // exercised in the same run rather than needing a separate tunnel.
-      outage: [25_000, 35_000],
+      jitterM: 6,
+      // A 10s dropout partway, so dead reckoning and the staleness banner are
+      // exercised in the same run rather than needing a separate tunnel test.
+      outage: [30_000, 40_000],
       onDone: () => {
         simRef.current = null;
         setSimulating(false);
         showToast("Simulation terminée");
       },
     });
-  }, [bookingId, route, nurse, dest]);
+  }, [bookingId, nurse, dest]);
 
   // Advance the turn instruction as the nurse reaches each maneuver point.
   useEffect(() => {
@@ -632,7 +656,7 @@ export default function ProTrackingScreen() {
         {__DEV__ && status === "en_route" ? (
           <TouchableOpacity
             style={[s.statusBtn, simulating ? s.statusBtnFar : s.simBtn]}
-            onPress={toggleSimulation}
+            onPress={() => void toggleSimulation()}
           >
             <Text style={s.statusTxt}>
               {simulating ? "Arrêter la simulation" : "Simuler un trajet (dev)"}
