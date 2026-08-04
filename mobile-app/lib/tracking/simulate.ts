@@ -28,6 +28,31 @@ import { Route, type LatLng } from "./route";
 
 export type SimulationHandle = { stop(): void };
 
+/**
+ * A plausible drivable loop around a point, for when there is no real route to
+ * follow — which is the normal case while testing indoors, because the pro and
+ * the patient are the same place and the route is (correctly) cleared.
+ *
+ * Deliberately not a circle: a constant-curvature path would flatter the
+ * interpolation. This wanders, with straights and corners of varying
+ * sharpness, so turns actually get exercised.
+ */
+export function syntheticLoop(center: LatLng, radiusM = 400, points = 64): LatLng[] {
+  const out: LatLng[] = [];
+  const latPerM = 1 / 111_320;
+  const lngPerM = 1 / (111_320 * Math.cos((center.lat * Math.PI) / 180));
+  for (let i = 0; i <= points; i++) {
+    const t = (i / points) * Math.PI * 2;
+    // Two harmonics make the radius breathe, producing straights and bends.
+    const r = radiusM * (0.72 + 0.28 * Math.sin(t * 2) + 0.08 * Math.cos(t * 3));
+    out.push({
+      lat: center.lat + r * Math.cos(t) * latPerM,
+      lng: center.lng + r * Math.sin(t) * lngPerM,
+    });
+  }
+  return out;
+}
+
 export type SimulateOptions = {
   bookingId: string;
   /** The road to drive. Use the route already drawn on screen. */

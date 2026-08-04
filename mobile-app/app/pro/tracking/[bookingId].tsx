@@ -41,7 +41,7 @@ import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
 import { useForegroundPosition } from "@/lib/hooks/useForegroundPosition";
 import { fetchRoute } from "@/lib/routing";
 import { TrackingStore } from "@/lib/tracking/store";
-import { simulateTrip, type SimulationHandle } from "@/lib/tracking/simulate";
+import { simulateTrip, syntheticLoop, type SimulationHandle } from "@/lib/tracking/simulate";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -337,14 +337,22 @@ export default function ProTrackingScreen() {
       setSimulating(false);
       return;
     }
-    if (!bookingId || !route || route.length < 2) {
-      showToast("Aucun trajet à simuler");
+    if (!bookingId) return;
+    // Indoors the pro and the patient are the same place, so the real route is
+    // (correctly) cleared and there is nothing to drive along. Fall back to a
+    // synthetic loop around the current position — the point of the simulator
+    // is to exercise MOTION, and without this it is unusable in exactly the
+    // situation it was built for.
+    const origin = nurse ?? dest;
+    const path = route && route.length >= 2 ? route : origin ? syntheticLoop(origin) : null;
+    if (!path) {
+      showToast("Position inconnue — impossible de simuler");
       return;
     }
     setSimulating(true);
     simRef.current = simulateTrip({
       bookingId,
-      path: route,
+      path,
       speedMps: 12,
       intervalMs: 1500,
       jitterM: 8,
@@ -357,7 +365,7 @@ export default function ProTrackingScreen() {
         showToast("Simulation terminée");
       },
     });
-  }, [bookingId, route]);
+  }, [bookingId, route, nurse, dest]);
 
   // Advance the turn instruction as the nurse reaches each maneuver point.
   useEffect(() => {
@@ -615,6 +623,12 @@ export default function ProTrackingScreen() {
         ) : null}
 
         {/* RULE #4 — nurse-initiated cancellation (penalty applies) */}
+        {__DEV__ && status === "matched" ? (
+          <Text style={s.simHint}>
+            Simulation dev : disponible après « {t("im_leaving")} »
+          </Text>
+        ) : null}
+
         {__DEV__ && status === "en_route" ? (
           <TouchableOpacity
             style={[s.statusBtn, simulating ? s.statusBtnFar : s.simBtn]}
@@ -719,6 +733,7 @@ const s = StyleSheet.create({
   statusDone: { backgroundColor: NAVY },
   statusBtnFar: { backgroundColor: "#9CA3AF" },
   simBtn: { backgroundColor: "#7C3AED" },
+  simHint: { fontSize: 11, color: "#9CA3AF", textAlign: "center", marginTop: 8 },
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
   cancelJobTxt: { color: "#E24B4A", fontSize: 14, fontWeight: "700" },
