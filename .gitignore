@@ -88,3 +88,6 @@ coverage/
 # Build artifacts
 *.apk
 *.aab
+
+# Motion replay harness output
+.motion-replay/
