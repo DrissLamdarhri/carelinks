@@ -24,6 +24,7 @@
  */
 import { supabase } from "@/lib/supabase";
 import { proStreamTopic } from "@/lib/db/tracking";
+import { fetchRoute } from "@/lib/routing";
 import { Route, type LatLng } from "./route";
 
 export type SimulationHandle = { stop(): void };
@@ -76,6 +77,20 @@ export type SimulateOptions = {
   outage?: [number, number];
   onProgress?: (fraction: number) => void;
   onDone?: () => void;
+  /**
+   * Take a WRONG TURN at this offset (ms), driving a genuinely different road
+   * to the same destination.
+   *
+   * The normal simulation follows the planned route perfectly, so the entire
+   * deviation path — snapping disengaging, the eased correction back to real
+   * GPS, the re-route, the new road replacing the old — never executes and
+   * therefore has never been observed. This makes it observable without
+   * actually driving down the wrong street.
+   */
+  wrongTurnAtMs?: number;
+  /** Required with `wrongTurnAtMs`: where the detour must still end up. */
+  destination?: LatLng;
+  onWrongTurn?: () => void;
 };
 
 /**
@@ -85,10 +100,11 @@ export type SimulateOptions = {
 export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const {
     bookingId, path, speedMps = 14, intervalMs = 1500, jitterM = 8, outage,
-    corneringSlowdown = true, onProgress, onDone,
+    corneringSlowdown = true, wrongTurnAtMs, destination, onProgress, onDone, onWrongTurn,
   } = opts;
 
-  const route = new Route(path);
+  let route = new Route(path);
+  let divergd = false;
   if (!route.usable) {
     onDone?.();
     return { stop: () => {} };
@@ -132,6 +148,31 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
     // A dropout publishes nothing at all — which is what a tunnel looks like
     // from the receiving end, and exercises dead reckoning and the staleness UI.
     if (outage && elapsed >= outage[0] && elapsed <= outage[1]) return;
+
+    // ── The wrong turn ────────────────────────────────────────────────────
+    // Fetch a real road to the same destination via a waypoint set ~300m to the
+    // side, then drive THAT. A straight-line detour would be trivially rejected
+    // by map-matching and would prove nothing; taking an actual different
+    // street is the situation the deviation logic exists for.
+    if (!divergd && wrongTurnAtMs != null && destination && elapsed >= wrongTurnAtMs) {
+      divergd = true;
+      const here = route.positionAt(offsetM);
+      if (here) {
+        const side = (here.bearing + 90) * (Math.PI / 180);
+        const via = {
+          lat: here.point.lat + (300 * Math.cos(side)) / 111_320,
+          lng:
+            here.point.lng +
+            (300 * Math.sin(side)) / (111_320 * Math.cos((here.point.lat * Math.PI) / 180)),
+        };
+        void fetchRoute(here.point, destination, { via }).then(({ coords, fromRouter }) => {
+          if (stopped || !fromRouter || coords.length < 2) return;
+          route = new Route(coords);
+          offsetM = 0;
+          onWrongTurn?.();
+        });
+      }
+    }
 
     const at = route.positionAt(offsetM);
     if (!at) return;

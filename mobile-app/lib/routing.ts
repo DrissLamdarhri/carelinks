@@ -51,7 +51,16 @@ export type RouteResult = {
 export async function fetchRoute(
   origin: LatLng,
   destination: LatLng,
-  opts: { steps?: boolean; signal?: AbortSignal } = {},
+  opts: {
+    steps?: boolean;
+    signal?: AbortSignal;
+    /**
+     * Intermediate waypoint. Used to force a route down a DIFFERENT street than
+     * the direct one — which is how the simulator produces a realistic wrong
+     * turn on real roads rather than an invented straight-line detour.
+     */
+    via?: LatLng;
+  } = {},
 ): Promise<RouteResult> {
   const fallback: RouteResult = {
     coords: [origin, destination],
@@ -61,7 +70,10 @@ export async function fetchRoute(
     fromRouter: false,
   };
 
-  const pair = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+  const waypoints = opts.via
+    ? [origin, opts.via, destination]
+    : [origin, destination];
+  const pair = waypoints.map((p) => `${p.lng},${p.lat}`).join(";");
   const query = `overview=full&geometries=geojson${opts.steps ? "&steps=true" : ""}`;
   const url = `${BASE_URL}/route/v1/driving/${pair}?${query}`;
 

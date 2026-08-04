@@ -330,7 +330,7 @@ export default function ProTrackingScreen() {
   const simRef = useRef<SimulationHandle | null>(null);
   const [simulating, setSimulating] = useState(false);
   useEffect(() => () => simRef.current?.stop(), []);
-  const toggleSimulation = useCallback(async () => {
+  const toggleSimulation = useCallback(async (wrongTurn = false) => {
     if (simRef.current) {
       simRef.current.stop();
       simRef.current = null;
@@ -380,9 +380,16 @@ export default function ProTrackingScreen() {
       speedMps: 11,
       intervalMs: 1500,
       jitterM: 6,
+      // Scenario B: leave the planned road partway and drive a genuinely
+      // different one to the same destination, so the whole deviation path is
+      // observable — snapping disengaging, the eased correction back to real
+      // GPS, the re-route, and the new road replacing the old.
+      wrongTurnAtMs: wrongTurn ? 35_000 : undefined,
+      destination: wrongTurn ? target : undefined,
+      onWrongTurn: () => showToast("Mauvais virage — déviation en cours"),
       // A 10s dropout partway, so dead reckoning and the staleness banner are
       // exercised in the same run rather than needing a separate tunnel test.
-      outage: [30_000, 40_000],
+      outage: wrongTurn ? undefined : [30_000, 40_000],
       onDone: () => {
         simRef.current = null;
         setSimulating(false);
@@ -654,14 +661,29 @@ export default function ProTrackingScreen() {
         ) : null}
 
         {__DEV__ && status === "en_route" ? (
-          <TouchableOpacity
-            style={[s.statusBtn, simulating ? s.statusBtnFar : s.simBtn]}
-            onPress={() => void toggleSimulation()}
-          >
-            <Text style={s.statusTxt}>
-              {simulating ? "Arrêter la simulation" : "Simuler un trajet (dev)"}
-            </Text>
-          </TouchableOpacity>
+          simulating ? (
+            <TouchableOpacity
+              style={[s.statusBtn, s.statusBtnFar]}
+              onPress={() => void toggleSimulation()}
+            >
+              <Text style={s.statusTxt}>Arrêter la simulation</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={s.simRow}>
+              <TouchableOpacity
+                style={[s.statusBtn, s.simBtn, s.simHalf]}
+                onPress={() => void toggleSimulation(false)}
+              >
+                <Text style={s.simTxt}>Trajet normal (dev)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.statusBtn, s.simBtnAlt, s.simHalf]}
+                onPress={() => void toggleSimulation(true)}
+              >
+                <Text style={s.simTxt}>Mauvais virage (dev)</Text>
+              </TouchableOpacity>
+            </View>
+          )
         ) : null}
 
         {status !== "completed" && status !== "cancelled" ? (
@@ -757,6 +779,10 @@ const s = StyleSheet.create({
   statusDone: { backgroundColor: NAVY },
   statusBtnFar: { backgroundColor: "#9CA3AF" },
   simBtn: { backgroundColor: "#7C3AED" },
+  simBtnAlt: { backgroundColor: "#B45309" },
+  simRow: { flexDirection: "row", gap: 8 },
+  simHalf: { flex: 1, paddingHorizontal: 4 },
+  simTxt: { color: "#FFFFFF", fontWeight: "700", fontSize: 12, textAlign: "center" },
   simHint: { fontSize: 11, color: "#9CA3AF", textAlign: "center", marginTop: 8 },
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
