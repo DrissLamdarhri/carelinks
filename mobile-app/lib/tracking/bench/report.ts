@@ -12,6 +12,13 @@
  */
 import type { BenchResult, BenchSuite } from "./types";
 
+/**
+ * Minimum average FPS the no-map control must reach for a suite to mean
+ * anything. Well below 60 so a slow low-end phone in a dev build still
+ * qualifies; high enough to catch the harness measuring itself.
+ */
+export const CONTROL_MIN_FPS = 30;
+
 function pad(s: string, width: number): string {
   return s.length >= width ? s : s + " ".repeat(width - s.length);
 }
@@ -93,6 +100,39 @@ export function formatSuite(suite: BenchSuite): string {
       out.push("!! renderer on emulator numbers.");
     }
   }
+  // ── Validity gate ─────────────────────────────────────────────────────────
+  // The control draws three lines of text. If IT cannot hold a sane frame rate,
+  // the bottleneck is the harness, the device or the build — not any candidate —
+  // and every comparison below is noise. This check exists because the first
+  // real run came back with the control at 12.8 FPS: the runner was reporting
+  // progress every frame, and the screen's setState was re-rendering the mounted
+  // candidate sixty times a second. The instrument was measuring itself.
+  const controls = suite.results.filter((r) => r.candidateId === "control");
+  const worstControl = controls.length
+    ? Math.min(...controls.map((r) => r.frames.fpsAverage))
+    : null;
+  if (worstControl !== null && worstControl < CONTROL_MIN_FPS) {
+    out.push("");
+    out.push("!! ".repeat(26));
+    out.push(`!! RUN INVALID — control floor is ${worstControl.toFixed(1)} FPS (expected >= ${CONTROL_MIN_FPS}).`);
+    out.push("!! The control renders text and no map, so this is the harness, the");
+    out.push("!! device or the build being the bottleneck — not the renderers.");
+    out.push("!! Do NOT choose a renderer from the numbers below.");
+    out.push("!! ".repeat(26));
+  } else if (controls.length === 0) {
+    out.push("");
+    out.push("!! No control candidate in this run. Without the no-map baseline there");
+    out.push("!! is no way to tell a slow renderer from a slow device. Re-run with it.");
+  }
+
+  // Mixing devices invalidates a comparison just as thoroughly as a slow control.
+  const models = new Set(suite.results.map((r) => `${r.environment.brand}/${r.environment.model}`));
+  if (models.size > 1) {
+    out.push("");
+    out.push(`!! MIXED DEVICES in one suite: ${[...models].join(", ")}`);
+    out.push("!! Candidates must be compared on ONE device. Results are not comparable.");
+  }
+
   out.push("═".repeat(80));
 
   const candidates = new Map<string, string>();

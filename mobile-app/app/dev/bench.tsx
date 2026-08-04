@@ -9,7 +9,7 @@
  *
  * See docs/tracking-benchmark.md for how to run, collect and interpret.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -159,7 +159,7 @@ function Bench() {
 
       <View style={s.stage}>
         {active ? (
-          <active.candidate.Component ref={handleRef} store={active.store} center={CENTER} />
+          <Stage entry={active.candidate} store={active.store} handleRef={handleRef} />
         ) : (
           <View style={s.idle}>
             <Text style={s.idleText}>{running ? "switching…" : "idle"}</Text>
@@ -229,6 +229,28 @@ function Bench() {
     </SafeAreaView>
   );
 }
+
+/**
+ * The mounted candidate, isolated from the benchmark screen's own state.
+ *
+ * Without this memo, every progress tick re-rendered Bench and cascaded into
+ * the candidate — the harness measuring its own progress bar. Throttling
+ * progress fixed the frequency; this fixes the coupling, so ANY future state
+ * added to this screen (a timer, a log line, a cancel button) cannot silently
+ * corrupt a run. Its props are all stable for the lifetime of one run, so it
+ * re-renders only when the candidate itself pulls from the store.
+ */
+const Stage = memo(function Stage({
+  entry,
+  store,
+  handleRef,
+}: {
+  entry: CandidateEntry;
+  store: TrackingStore;
+  handleRef: React.RefObject<BenchRendererHandle | null>;
+}) {
+  return <entry.Component ref={handleRef} store={store} center={CENTER} />;
+});
 
 function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (

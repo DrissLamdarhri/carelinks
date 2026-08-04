@@ -236,5 +236,43 @@ function ok(cond: boolean, msg: string): void {
   ok(missing === 0, "a candidate requires an asset that does not exist — Metro will fail to bundle");
 }
 
+// ── 13. The validity gate catches a compromised run ────────────────────────
+// REGRESSION: the first real run reported the control at 12.8 FPS because the
+// runner fired onProgress every frame and the screen's setState re-rendered the
+// mounted candidate 60x/sec. The harness was measuring itself, and nothing in
+// the report said so. A benchmark that cannot detect its own invalidity is a
+// machine for producing confident wrong answers.
+{
+  const mk = (id: string, fps: number, model = "SM-A065F"): BenchResult =>
+    ({
+      candidateId: id, candidateLabel: id, approach: "x",
+      scenarioId: "s", scenarioLabel: "S", startedAt: "",
+      frames: { frames: 100, durationMs: 1000, fpsAverage: fps, p50Ms: 16, p95Ms: 18, p99Ms: 20, worstMs: 30, over16_7: 0, over33_4: 0, droppedEstimate: 0 },
+      stalls: { samples: 0, worstMs: 0, over100: 0, meanMs: 0 },
+      memory: { startBytes: null, endBytes: null, peakBytes: null, available: false },
+      store: { accepted: 0, rejectedStaleSeq: 0, rejectedInaccurate: 0, rejectedTeleport: 0, emitted: 0, suppressed: 0, ticks: 0 },
+      markerUpdates: 0, cameraUpdates: 0,
+      environment: { os: "android", osVersion: 34, brand: "samsung", model, emulatorHint: false, hermes: true, dev: true },
+    }) as BenchResult;
+
+  const bad = formatSuite({ ranAt: "", results: [mk("control", 12.8), mk("view-annotation", 11)] });
+  const good = formatSuite({ ranAt: "", results: [mk("control", 58), mk("view-annotation", 55)] });
+  const noControl = formatSuite({ ranAt: "", results: [mk("view-annotation", 55)] });
+  const mixed = formatSuite({
+    ranAt: "", results: [mk("control", 58), mk("control", 58, "SM-A405FN")],
+  });
+
+  console.log(
+    `13. validity gate: slow-control flagged=${bad.includes("RUN INVALID")}, ` +
+      `healthy clean=${!good.includes("RUN INVALID")}, ` +
+      `no-control flagged=${noControl.includes("No control candidate")}, ` +
+      `mixed-device flagged=${mixed.includes("MIXED DEVICES")}`,
+  );
+  ok(bad.includes("RUN INVALID"), "a 12.8 FPS control was NOT flagged as invalid");
+  ok(!good.includes("RUN INVALID"), "a healthy run was wrongly flagged invalid");
+  ok(noControl.includes("No control candidate"), "a run without a control was not flagged");
+  ok(mixed.includes("MIXED DEVICES"), "results from two different phones were not flagged");
+}
+
 console.log(failures === 0 ? "\nALL BENCH-FRAMEWORK CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

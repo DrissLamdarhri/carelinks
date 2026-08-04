@@ -29,10 +29,27 @@ import type {
 const WARMUP_MS = 1500;
 
 export type RunHooks = {
-  /** Progress 0..1, for the benchmark UI. */
+  /**
+   * Progress 0..1 for the benchmark UI, throttled internally — see
+   * PROGRESS_INTERVAL_MS. Callers must NOT assume it fires per frame.
+   */
   onProgress?: (fraction: number) => void;
   onPhase?: (phase: "warmup" | "measuring" | "done") => void;
 };
+
+/**
+ * How often progress may be reported.
+ *
+ * This was originally called on EVERY animation frame. The benchmark screen
+ * turned that into a setState, which re-rendered the screen — and the mounted
+ * candidate with it — sixty times a second. The measured control (a component
+ * that draws three lines of text) came back at 12.8 FPS on a real phone: the
+ * harness was measuring its own progress bar.
+ *
+ * The instrument must cost orders of magnitude less than what it measures.
+ * Four updates a second is plenty for a human watching a progress percentage.
+ */
+const PROGRESS_INTERVAL_MS = 250;
 
 function applyCamera(camera: BenchCamera, cmd: CameraCommand): void {
   switch (cmd.kind) {
@@ -93,6 +110,7 @@ export async function runScenario(
   // setTimeouts, so a stuttering device cannot quietly compress the session.
   let nextFixIdx = 0;
   let nextCameraIdx = 0;
+  let lastProgressAt = 0;
   const camera = [...scenario.camera].sort((a, b) => a.atMs - b.atMs);
   const totalMs = WARMUP_MS + scenario.trace.durationMs;
 
@@ -135,7 +153,11 @@ export async function runScenario(
         if (frames.sampleCount % 30 === 0) memory.sample();
       }
 
-      hooks.onProgress?.(Math.min(1, elapsed / totalMs));
+      // Throttled: reporting per frame is what invalidated the first run.
+      if (hooks.onProgress && now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
+        lastProgressAt = now;
+        hooks.onProgress(Math.min(1, elapsed / totalMs));
+      }
 
       if (elapsed >= totalMs) {
         frames.stop(now);
