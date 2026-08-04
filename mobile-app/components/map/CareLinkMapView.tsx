@@ -73,6 +73,16 @@ export type CareLinkMapViewProps = {
   fitAllKey?: number;
   /** Navigation mode — camera continuously follows `center` (tight zoom + pitch). */
   follow?: boolean;
+  /**
+   * Live tracking (native only). When provided, the professional's marker and
+   * the camera are driven by the animated store instead of by props: the marker
+   * subscribes on its own leaf and the screen no longer re-renders per frame.
+   * `pro` should still be passed as the RAW position — it is what splits the
+   * route into traversed and remaining, which does not need frame precision.
+   */
+  trackingStore?: import("@/lib/tracking/store").TrackingStore | null;
+  /** Booking-level arrival; outranks anything inferred from the position. */
+  trackingArrived?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 

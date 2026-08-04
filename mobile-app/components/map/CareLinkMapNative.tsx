@@ -22,6 +22,8 @@ import {
   ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
 import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
+import { LiveProMarker } from "./LiveProMarker";
+import { TrackingCamera, type TrackingCameraHandle } from "./TrackingCamera";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
 import type { ProPinData } from "./Pins";
@@ -76,6 +78,8 @@ export default function CareLinkMapNative({
   recenterKey,
   fitAllKey,
   follow,
+  trackingStore,
+  trackingArrived,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -118,6 +122,11 @@ export default function CareLinkMapNative({
   // within view, user can pan/zoom freely. Booking: recenter only when the
   // patient's location actually changes (GPS / pin), not every render.
   const cameraRef = useRef<CameraRef>(null);
+  const trackingCameraRef = useRef<TrackingCameraHandle>(null);
+  // While the tracking camera owns the viewport, the legacy fit/fly effects
+  // below must stay out of its way — two controllers issuing camera commands
+  // is exactly the "map fights you" behaviour this replaces.
+  const liveCamera = !!trackingStore;
   const didFit = useRef(false);
   // A bounding box needs actual area. When every point in `fitCoords` is the
   // same place (pro standing at the patient's door, two test phones on one
@@ -133,6 +142,7 @@ export default function CareLinkMapNative({
   const hasRoute = fitSpan > 0.0004; // ≈45 m — below this there's nothing to frame
 
   useEffect(() => {
+    if (liveCamera) return; // TrackingCamera owns the viewport
     const cam = cameraRef.current;
     if (!cam) return;
     if (follow) {
@@ -154,11 +164,15 @@ export default function CareLinkMapNative({
       cam.flyTo({ center: [center.lng, center.lat], zoom: radiusKm > 0 ? 14 : 15, pitch: radiusKm > 0 ? 30 : 0, duration: 500 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRoute, center.lat, center.lng, radiusKm, follow]);
+  }, [hasRoute, center.lat, center.lng, radiusKm, follow, liveCamera]);
 
   // Re-center FAB → re-frame the route (tracking) or fly back to the patient (booking).
   useEffect(() => {
     if (recenterKey == null) return;
+    if (liveCamera) {
+      trackingCameraRef.current?.recenter();
+      return;
+    }
     const cam = cameraRef.current;
     if (!cam) return;
     if (hasRoute && fitCoords) {
@@ -199,6 +213,11 @@ export default function CareLinkMapNative({
       compassHiddenFacingNorth
       touchRotate
       touchPitch
+      onRegionIsChanging={(e) => {
+        // A real gesture, not our own easeTo. This is what stops the camera
+        // fighting the finger.
+        if (e.nativeEvent?.userInteraction) trackingCameraRef.current?.notifyUserGesture();
+      }}
       onPress={(e: NativeSyntheticEvent<PressEvent | PressEventWithFeatures>) => {
         const coords = (e.nativeEvent as unknown as { geometry?: { coordinates?: number[] } })?.geometry
           ?.coordinates;
@@ -229,7 +248,11 @@ export default function CareLinkMapNative({
       }}
     >
       {/* Uncontrolled camera — positioned imperatively so the user stays in control */}
-      <Camera ref={cameraRef} />
+      {liveCamera && trackingStore ? (
+        <TrackingCamera ref={trackingCameraRef} store={trackingStore} fallbackCenter={center} />
+      ) : (
+        <Camera ref={cameraRef} />
+      )}
 
       {radiusData ? (
         <GeoJSONSource id="radius" data={radiusData}>
@@ -306,7 +329,17 @@ export default function CareLinkMapNative({
         </ViewAnnotation>
       ))}
 
-      {pro ? (
+      {liveCamera && trackingStore ? (
+        // Live tracking: the marker subscribes to the store on its own leaf, so
+        // moving it does not re-render this map or the screen around it.
+        <LiveProMarker
+          store={trackingStore}
+          arrived={trackingArrived}
+          avatarUrl={pro?.avatarUrl ?? null}
+          avatarSource={pro?.avatarSource}
+          initials={pro?.initials ?? ""}
+        />
+      ) : pro ? (
         <ViewAnnotation lngLat={[pro.lng, pro.lat]} anchor="center">
           <ProAvatarMarker
             pro={{ avatarSource: pro.avatarSource, avatarUrl: pro.avatarUrl, initials: pro.initials ?? "", specialty: pro.specialty, name: pro.name }}

@@ -533,12 +533,12 @@ import {
 import { supabase } from "@/lib/supabase";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { fetchRoute } from "@/lib/routing";
+import { TrackingStore } from "@/lib/tracking/store";
 import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
 import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
 import { haptics } from "@/lib/haptics";
 import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
-import { useGlidingPosition } from "@/lib/hooks/useGlidingPosition";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCREEN_W  = Dimensions.get("window").width;
@@ -607,7 +607,17 @@ const pa = StyleSheet.create({
   initials: { color: "#FFFFFF", fontWeight: "700" },
 });
 
-type TrackPosition = { lat: number; lng: number; at: string; heading?: number | null; speed?: number | null };
+type TrackPosition = {
+  lat: number;
+  lng: number;
+  at: string;
+  heading?: number | null;
+  speed?: number | null;
+  /** Reported GPS accuracy (m) — the pipeline rejects fixes too coarse to draw. */
+  accuracy?: number | null;
+  /** Monotonic per-session counter; lets late packets be dropped. */
+  seq?: number | null;
+};
 
 // ── Arrival confetti — pure RN primitives, native-driven, no external lib ─────
 function ConfettiBurst() {
@@ -1007,17 +1017,40 @@ export default function LiveTrackingScreen() {
   // have lost signal, killed the app, or driven into a tunnel.
   const [lastFixAt, setLastFixAt] = useState<number | null>(null);
 
+  // ── Live motion pipeline (real bookings only) ─────────────────────────────
+  // Demo bookings keep their existing scripted animation: they already move
+  // smoothly on their own 120ms tick, and pushing them through a pipeline that
+  // renders 2s in the past would make the demo feel worse, not better.
+  const trackingStore = useMemo(() => (isDemoBooking ? null : new TrackingStore()), [isDemoBooking]);
+  useEffect(() => () => trackingStore?.destroy(), [trackingStore]);
+
+  // The drawn route is also the road the marker is map-matched to, so it
+  // follows streets instead of cutting across blocks.
+  useEffect(() => {
+    trackingStore?.setRoute(routeCoords ?? null);
+  }, [trackingStore, routeCoords]);
+
   const handlePosition = useCallback((pos: TrackPosition) => {
     liveActiveRef.current = true;
     setProLive(true);
     setLastFixAt(Date.now());
     setProCoord({ lat: pos.lat, lng: pos.lng });
     setProHeading(pos.heading ?? null);
+    // Receipt time, never the sender's clock: two phones disagree by seconds.
+    trackingStore?.push({
+      lat: pos.lat,
+      lng: pos.lng,
+      heading: pos.heading ?? null,
+      speed: pos.speed ?? null,
+      accuracy: pos.accuracy ?? null,
+      seq: pos.seq ?? Date.now(),
+      receivedAt: Date.now(),
+    });
     // capture first seen pro origin for routing (only if not demo)
     if (!isDemoBooking && !liveProOrigin) {
       setLiveProOrigin({ lat: pos.lat, lng: pos.lng });
     }
-  }, [isDemoBooking, liveProOrigin]);
+  }, [isDemoBooking, liveProOrigin, trackingStore]);
 
   // Smooth rendering position — the pro dot glides between real fixes
   // instead of snapping every ~2s, without affecting the progress/deviation
@@ -1025,8 +1058,13 @@ export default function LiveTrackingScreen() {
   // animate `proCoord` themselves on a fast 120ms tick (see the effect
   // below), so gliding on top of that would just lag behind it — only wrap
   // real, sparser GPS updates.
-  const glidingRealCoord = useGlidingPosition(!isDemoBooking ? proCoord : null);
-  const glidingProCoord = isDemoBooking ? proCoord : glidingRealCoord;
+  // Demo bookings animate their own scripted path on a 120ms tick, so they are
+  // passed through untouched. REAL bookings are smoothed by the motion pipeline
+  // inside TrackingStore, which runs outside React entirely — the old
+  // useGlidingPosition hook is deliberately NOT used here: it called setState
+  // every animation frame from this screen, re-rendering the map, the sheet,
+  // the provider card and the ETA sixty times a second to move one dot.
+  const glidingProCoord = proCoord;
 
   // The viewer's own compass heading, for the "you are here" marker's facing
   // cone (patient can be waiting/looking around while the pro is en route).
@@ -1172,9 +1210,11 @@ export default function LiveTrackingScreen() {
           center={proCoord ?? patientCoord}
           patient={patientCoord}
           meHeading={meHeading}
+          trackingStore={trackingStore}
+          trackingArrived={arrived}
           pro={
-            glidingProCoord
-              ? { ...glidingProCoord, heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
+            (isDemoBooking ? glidingProCoord : proCoord)
+              ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
               : undefined
           }
           route={routeCoords ?? undefined}

@@ -43,6 +43,7 @@ import {
   RENDER_DELAY_MS,
   shortestAngleDelta,
   type Fix,
+  type LatLng,
   type MotionSample,
   type RejectReason,
 } from "./motion";
@@ -140,6 +141,20 @@ export class TrackingStore {
    *  never the smoothed snapshot, or the numbers oscillate. */
   get latestFix(): Fix | null {
     return this.track.latest;
+  }
+
+  /**
+   * Attach (or clear) the road being followed. With a route the marker is
+   * map-matched and interpolated ALONG the street rather than through open
+   * space, so it cannot drift across buildings.
+   */
+  setRoute(points: LatLng[] | null): void {
+    this.track.setRoute(points);
+  }
+
+  /** True while positions are being map-matched to a trusted road. */
+  get onRoute(): boolean {
+    return this.track.onRoute;
   }
 
   /** Filter rejections by reason. Surfaced for the benchmark harness and for
