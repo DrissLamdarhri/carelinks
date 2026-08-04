@@ -1,7 +1,7 @@
 /**
  * CareLink — replay harness for the motion pipeline.
  *
- *   pnpm -C mobile-app test:motion
+ *   pnpm -C mobile-app test:tracking
  *
  * There is no test runner in this repo, and motion quality is exactly the kind
  * of thing that cannot be reviewed by reading a diff or eyeballed reliably on a
@@ -115,6 +115,92 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
   console.log(`4. rotation: max ${maxRate.toFixed(0)} deg/s, wrong-direction frames ${wrongWay}`);
   ok(wrongWay === 0, "rotated the long way round across the 0/360 boundary");
   ok(maxRate <= 181, "rotation exceeded the rate limit — snapping, not sweeping");
+}
+
+// ── 5. SMOOTHNESS: the path must be a curve, not a polygon ──────────────────
+// The quality target, derived from a real complaint ("it felt hesitant compared
+// with Google Maps"). Before curved interpolation this pipeline measured a p99
+// of 2.400 deg and a MAX of 4.42 deg per frame: dead-straight chords punctuated
+// by one visible jerk at every GPS fix. The thresholds below are the acceptance
+// criteria for that fix and exist to stop it regressing silently.
+{
+  const TURN_P99_MAX = 0.5;
+  const TURN_ABS_MAX = 1.0;
+
+  /** A gently curving drive: 3 deg/s, 14 m/s, fixes every 1.5s. */
+  function curvingRun(): { fixes: Fix[]; path: { lat: number; lng: number }[] } {
+    let lat = 34.03, lng = -5.0, brg = 45, t = 1_000_000, seq = 0;
+    const fixes: Fix[] = [];
+    const path: { lat: number; lng: number }[] = [];
+    for (let i = 0; i < 40; i++) {
+      brg = (brg + 4.5) % 360;
+      const step = 21;
+      lat += (step * Math.cos((brg * Math.PI) / 180)) / 111320;
+      lng += (step * Math.sin((brg * Math.PI) / 180)) / (111320 * Math.cos((lat * Math.PI) / 180));
+      t += 1500;
+      path.push({ lat, lng });
+      fixes.push({ lat, lng, heading: brg, speed: 14, accuracy: 8, seq: ++seq, receivedAt: t });
+    }
+    return { fixes, path };
+  }
+
+  /** Resample a path so vertices sit ~every `stepM` metres, as OSRM returns. */
+  function densify(pts: { lat: number; lng: number }[], stepM: number) {
+    const out = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const n = Math.max(1, Math.round(distanceM(pts[i], pts[i + 1]) / stepM));
+      for (let k = 1; k <= n; k++)
+        out.push({
+          lat: pts[i].lat + ((pts[i + 1].lat - pts[i].lat) * k) / n,
+          lng: pts[i].lng + ((pts[i + 1].lng - pts[i].lng) * k) / n,
+        });
+    }
+    return out;
+  }
+
+  function smoothness(label: string, route: { lat: number; lng: number }[] | null) {
+    const { fixes } = curvingRun();
+    const tr = new MotionTrack();
+    if (route) tr.setRoute(route);
+    for (const f of fixes) tr.push(f);
+
+    let prev: { lat: number; lng: number } | null = null;
+    let prevPrev: { lat: number; lng: number } | null = null;
+    const turns: number[] = [];
+    const speeds: number[] = [];
+    for (let now = fixes[0].receivedAt + RENDER_DELAY_MS + 100;
+         now <= fixes[fixes.length - 1].receivedAt - 100; now += 16.67) {
+      const s = tr.sampleAt(now);
+      if (!s) continue;
+      if (prev) {
+        const d = distanceM(prev, s);
+        speeds.push(d / 0.01667);
+        if (prevPrev && distanceM(prevPrev, prev) > 0.01 && d > 0.01) {
+          turns.push(Math.abs(shortestAngleDelta(bearingDeg(prevPrev, prev), bearingDeg(prev, s))));
+        }
+        prevPrev = prev;
+      }
+      prev = { lat: s.lat, lng: s.lng };
+    }
+    const sorted = [...turns].sort((a, b) => a - b);
+    const p99 = sorted[Math.min(sorted.length - 1, Math.ceil(0.99 * sorted.length) - 1)];
+    const max = Math.max(...turns);
+    const spread = Math.max(...speeds) - Math.min(...speeds);
+    console.log(`   ${label.padEnd(30)} p99=${p99.toFixed(3)} max=${max.toFixed(3)} spreadMps=${spread.toFixed(2)}`);
+    ok(p99 < TURN_P99_MAX, `${label}: p99 turn ${p99.toFixed(3)} deg exceeds ${TURN_P99_MAX} — path is polygonal`);
+    ok(max < TURN_ABS_MAX, `${label}: max turn ${max.toFixed(3)} deg exceeds ${TURN_ABS_MAX} — visible kink`);
+    // Constant speed was already achieved and must not be traded away for curvature.
+    ok(spread < 1.0, `${label}: speed spread ${spread.toFixed(2)} m/s — motion is surging`);
+  }
+
+  console.log("5. smoothness (target p99<0.5deg, max<1.0deg; was 2.400/4.42)");
+  const { path } = curvingRun();
+  smoothness("no route (spline only)", null);
+  smoothness("dense route (~5m, OSRM-like)", densify(path, 5));
+  smoothness("coarse route (21m segments)", path);
+  // A two-point straight-line fallback is NOT a road. Snapping to it made the
+  // marker jump 7m in a frame (424 m/s) until the route-trust gate was added.
+  smoothness("2-point straight-line route", [path[0], path[path.length - 1]]);
 }
 
 console.log(failures === 0 ? "\nALL MOTION CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);

@@ -10,7 +10,7 @@
  * motorway) in a test harness — smoothness regressions are invisible to code
  * review and to the naked eye, so they have to be asserted.
  *
- * FOUR STAGES
+ * FIVE STAGES
  *
  *  1. FILTER   — drop fixes that are physically implausible or too imprecise
  *                to be worth rendering. Bad data smoothed beautifully is still
@@ -31,13 +31,29 @@
  *                seconds, then hold. Freezing instantly reads as "the app
  *                broke"; extrapolating forever reads as a lie.
  *
- *  4. BEARING  — rotate along the SHORTEST angular path and rate-limit the
- *                turn, so 350°→10° sweeps +20° instead of spinning -340°.
+ *  4. SHAPE    — the path between fixes is a CURVE, not a chord. Straight-line
+ *                interpolation made the marker travel a polygon and jerk at
+ *                every fix (measured: p99 2.400°, max 4.42° per frame — the
+ *                "hesitant" quality next to Google Maps). Where a trusted route
+ *                exists the position is map-matched and interpolated ALONG THE
+ *                ROAD, so it cannot drift across buildings; otherwise a
+ *                centripetal Catmull-Rom curve through the fixes is used. The
+ *                two are blended by a confidence that eases in and out, so
+ *                leaving and rejoining a road is continuous rather than a jump.
+ *
+ *  5. BEARING  — taken from the tangent of the curve actually being travelled,
+ *                rotated along the SHORTEST angular path and rate-limited, so
+ *                350°→10° sweeps +20° instead of spinning -340°.
  *
  * Positions here are for RENDERING. Business logic (ETA, distance, arrival,
  * re-routing) must keep using the raw fix — smoothed values feeding decisions
  * is how you get an ETA that oscillates.
  */
+
+import { Route, bearingDeg, distanceM, splinePoint, type LatLng, type RouteMatch } from "./route";
+
+// Re-exported so callers keep a single import site for tracking geometry.
+export { bearingDeg, distanceM, Route, splinePoint, type LatLng };
 
 export type Fix = {
   lat: number;
@@ -92,26 +108,6 @@ function toRad(d: number): number {
   return (d * Math.PI) / 180;
 }
 
-/** Metres between two coordinates (haversine). */
-export function distanceM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_R * Math.asin(Math.sqrt(s));
-}
-
-/** Initial bearing a → b, degrees, normalised to [0, 360). */
-export function bearingDeg(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const φ1 = toRad(a.lat);
-  const φ2 = toRad(b.lat);
-  const Δλ = toRad(b.lng - a.lng);
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
-}
-
 /** Signed shortest angular difference from → to, in (-180, 180]. */
 export function shortestAngleDelta(from: number, to: number): number {
   return ((((to - from) % 360) + 540) % 360) - 180;
@@ -141,6 +137,38 @@ function project(
   return { lat: (φ2 * 180) / Math.PI, lng: (((λ2 * 180) / Math.PI + 540) % 360) - 180 };
 }
 
+// ── Curved interpolation ────────────────────────────────────────────────────
+// Straight-line interpolation between fixes draws chords across a curving road:
+// the marker travels a polygon and turns in a discrete jerk at every fix.
+// Measured on this pipeline before the change: p50 of 0.000 deg/frame (dead
+// straight) punctuated by kinks up to 4.42 deg, one per fix. That is what reads
+// as "hesitant" next to Google Maps.
+//
+// CENTRIPETAL Catmull-Rom (alpha = 0.5), not uniform. GPS fixes are unevenly
+// spaced in both time and distance, and uniform Catmull-Rom forms cusps and
+// self-intersecting loops on uneven spacing — visibly worse than the straight
+// lines it replaces. The centripetal parameterisation is provably free of both.
+
+// ── Map-matching confidence ─────────────────────────────────────────────────
+// Snapping must never be a hard on/off switch. Route position and free position
+// differ by the lateral deviation, so flipping between them between adjacent
+// segments teleports the marker by up to MAX_SNAP_M. Measured with a two-point
+// straight-line fallback route, where fixes near the endpoints matched and those
+// mid-curve did not: an 89.9 deg direction change and an apparent 1253 m/s.
+// A pro taking a side street would reproduce it.
+//
+// Instead the two positions are BLENDED by a confidence that eases in and out,
+// so leaving and rejoining a road is continuous.
+
+/** At or below this deviation, trust the road completely. */
+const SNAP_FULL_M = 12;
+/** Beyond this, ignore the road: they are genuinely somewhere else. */
+const MAX_SNAP_M = 25;
+/** Confidence units per second — 2.0 gives a ~0.5s crossfade. */
+const SNAP_RATE_PER_S = 2;
+/** How far ahead of the last match to scan — bounds per-fix matching cost. */
+const MATCH_WINDOW_M = 500;
+
 export type RejectReason = "stale-seq" | "inaccurate" | "teleport";
 
 /**
@@ -149,6 +177,12 @@ export type RejectReason = "stale-seq" | "inaccurate" | "teleport";
  */
 export class MotionTrack {
   private buffer: Fix[] = [];
+  /** Map-match for each buffered fix; null when it could not be matched. */
+  private matches: (RouteMatch | null)[] = [];
+  /** Eased 0..1 confidence that the marker is on the road. */
+  private renderSnap = 0;
+  private route: Route | null = null;
+  private lastMatchedOffsetM = 0;
   private lastSeq = -1;
   /** Rendered bearing, carried across samples so rotation can be rate-limited. */
   private renderBearing: number | null = null;
@@ -201,16 +235,89 @@ export class MotionTrack {
 
     this.lastSeq = fix.seq;
     this.buffer.push(fix);
-    if (this.buffer.length > MAX_BUFFER) this.buffer.shift();
+    this.matches.push(this.matchToRoute(fix));
+    if (this.buffer.length > MAX_BUFFER) {
+      this.buffer.shift();
+      this.matches.shift();
+    }
     return null;
+  }
+
+  /**
+   * Attach (or clear) the road the subject is following.
+   *
+   * With a route attached the marker is map-matched and interpolated ALONG the
+   * road rather than through open space, so it cannot drift across buildings
+   * and its heading comes from the street. Pass null when no route is drawn —
+   * before departure, after arrival, or when routing failed — and the pipeline
+   * falls back to the spline.
+   */
+  setRoute(points: LatLng[] | null): void {
+    this.route = points && points.length >= 2 ? new Route(points) : null;
+    this.lastMatchedOffsetM = 0;
+    // Re-match everything already buffered so a route arriving mid-trip takes
+    // effect immediately instead of only for future fixes.
+    this.matches = this.buffer.map((f) => this.matchToRoute(f));
+  }
+
+  /** True while positions are being map-matched to a road. */
+  get onRoute(): boolean {
+    return this.route != null && this.routeTrusted;
+  }
+
+  /**
+   * Is this route actually describing the journey being travelled?
+   *
+   * Snapping asserts "the subject is on this road". When most recent fixes fail
+   * to match, that assertion is false and snapping to it produces nonsense —
+   * measured with a two-point straight-line fallback route, where fixes near the
+   * endpoints matched while those mid-curve did not: matching flickered on and
+   * off and the marker jumped 7m in a single frame (an apparent 424 m/s).
+   *
+   * Requiring a majority of the recent window to match encodes the claim
+   * directly, and degrades to pure free-space interpolation when a route is
+   * merely a rough hint (a straight-line routing fallback) rather than a road.
+   */
+  private get routeTrusted(): boolean {
+    if (!this.route) return false;
+    const window = this.matches.slice(-8);
+    if (window.length < 3) return false;
+    let matched = 0;
+    for (const m of window) if (m) matched++;
+    return matched / window.length >= 0.6;
+  }
+
+  /**
+   * Match a fix to a distance along the route, or null when it should not be
+   * snapped.
+   *
+   * Matching is forward-only from the last accepted match: roads double back on
+   * themselves at hairpins, roundabouts and parallel return legs, and a global
+   * nearest-point search will happily snap a noisy fix to an earlier segment and
+   * drag the marker backwards. That is the exact defect that made the traversed
+   * route un-draw itself in the previous implementation.
+   *
+   * A fix further than MAX_SNAP_M from the road is left unmatched: the subject
+   * is genuinely off-route (a side street, a car park, a footpath), and drawing
+   * them on the road anyway would be a confident lie.
+   */
+  private matchToRoute(fix: Fix): RouteMatch | null {
+    if (!this.route) return null;
+    const m = this.route.match(fix, this.lastMatchedOffsetM, MATCH_WINDOW_M);
+    if (!m || m.deviationM > MAX_SNAP_M) return null;
+    this.lastMatchedOffsetM = m.offsetM;
+    return m;
   }
 
   /** Discard all state — call when the tracked subject changes. */
   reset(): void {
     this.buffer = [];
+    this.matches = [];
     this.lastSeq = -1;
     this.renderBearing = null;
     this.lastSampleAt = null;
+    this.lastMatchedOffsetM = 0;
+    this.renderSnap = 0;
   }
 
   /**
@@ -262,16 +369,63 @@ export class MotionTrack {
       const b = this.buffer[i + 1];
       const span = b.receivedAt - a.receivedAt;
       const f = span > 0 ? (t - a.receivedAt) / span : 1;
-      pos = { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
 
       const segment = distanceM(a, b);
       moving = span > 0 && segment / (span / 1000) > MOVING_SPEED_MPS;
-      // Prefer the device's own course while genuinely moving; fall back to the
-      // segment's geometry. A stationary phone's `heading` is noise.
-      targetBearing = moving
-        ? (b.heading ?? bearingDeg(a, b))
-        : (this.renderBearing ?? b.heading ?? bearingDeg(a, b));
       stale = false;
+
+      const mA = this.matches[i];
+      const mB = this.matches[i + 1];
+
+      // The free-space path is ALWAYS computed. It is the fallback the blend
+      // eases back to, so it must exist even while fully snapped.
+      const freePos = splinePoint(this.buffer[i - 1] ?? null, a, b, this.buffer[i + 2] ?? null, f);
+      const freeBearing = this.curveBearing(i, f, a, b, moving);
+
+      let roadPos: LatLng | null = null;
+      let roadBearing: number | null = null;
+      let targetSnap = 0;
+
+      if (mA && mB && this.route && this.routeTrusted) {
+        // Interpolate a scalar DISTANCE ALONG THE ROAD rather than a coordinate
+        // pair. The marker is then always exactly on the polyline and advances
+        // at a constant rate — the reason a navigation app's vehicle never clips
+        // a corner: its position simply cannot leave the street.
+        const offset = mA.offsetM + (mB.offsetM - mA.offsetM) * f;
+        const at = this.route.positionAt(offset);
+        if (at) {
+          roadPos = at.point;
+          // Road direction averaged over a short window. A single polyline
+          // segment's bearing steps at every vertex, which on a dense route is a
+          // flicker of small jumps rather than a sweep.
+          roadBearing = this.route.smoothBearingAt(offset);
+          const deviation = mA.deviationM + (mB.deviationM - mA.deviationM) * f;
+          targetSnap =
+            deviation <= SNAP_FULL_M
+              ? 1
+              : Math.max(0, 1 - (deviation - SNAP_FULL_M) / (MAX_SNAP_M - SNAP_FULL_M));
+        }
+      }
+
+      // Ease toward the target confidence instead of jumping to it.
+      const maxSnapStep = SNAP_RATE_PER_S * dtSec;
+      this.renderSnap =
+        this.renderSnap < targetSnap
+          ? Math.min(targetSnap, this.renderSnap + maxSnapStep)
+          : Math.max(targetSnap, this.renderSnap - maxSnapStep);
+
+      const w = roadPos ? this.renderSnap : 0;
+      pos =
+        w <= 0 || !roadPos
+          ? freePos
+          : {
+              lat: freePos.lat + (roadPos.lat - freePos.lat) * w,
+              lng: freePos.lng + (roadPos.lng - freePos.lng) * w,
+            };
+      targetBearing =
+        w <= 0 || roadBearing == null
+          ? freeBearing
+          : (((freeBearing + shortestAngleDelta(freeBearing, roadBearing) * w) % 360) + 360) % 360;
     }
 
     // Rotate the short way, rate-limited, so turns sweep instead of snapping.
@@ -281,5 +435,33 @@ export class MotionTrack {
         : approachAngle(this.renderBearing, targetBearing, MAX_TURN_RATE_DEG_S * dtSec);
 
     return { lat: pos.lat, lng: pos.lng, bearing: this.renderBearing, moving, stale, ageMs };
+  }
+
+  /**
+   * Heading from the TANGENT OF THE CURVE the marker is actually travelling,
+   * sampled either side of the current point.
+   *
+   * The previous implementation took the chord bearing a→b, which is constant
+   * across a whole segment and then steps at the fix boundary — the rotational
+   * half of the same polygon problem. Reading the tangent of the curve instead
+   * gives a heading that varies continuously through a bend.
+   *
+   * The device's own GPS course is deliberately NOT preferred here: it is
+   * quantised, noisy at low speed, and unrelated to the path being drawn, so
+   * trusting it makes the icon point somewhere the marker is not going.
+   */
+  private curveBearing(i: number, f: number, a: Fix, b: Fix, moving: boolean): number {
+    if (!moving) return this.renderBearing ?? a.heading ?? bearingDeg(a, b);
+    const prev = this.buffer[i - 1] ?? null;
+    const next = this.buffer[i + 2] ?? null;
+    const eps = 0.02;
+    const s0 = Math.max(0, f - eps);
+    const s1 = Math.min(1, f + eps);
+    if (s1 <= s0) return bearingDeg(a, b);
+    const p0 = splinePoint(prev, a, b, next, s0);
+    const p1 = splinePoint(prev, a, b, next, s1);
+    // Degenerate sample (stationary within the epsilon) — keep what we had.
+    if (distanceM(p0, p1) < 0.001) return this.renderBearing ?? bearingDeg(a, b);
+    return bearingDeg(p0, p1);
   }
 }
