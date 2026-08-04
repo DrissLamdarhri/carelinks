@@ -12,6 +12,8 @@
  */
 import React, { forwardRef, useImperativeHandle, useRef, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { SymbolLayerCandidate } from "./SymbolLayerCandidate";
+import { ViewAnnotationCandidate } from "./ViewAnnotationCandidate";
 import type { BenchRendererHandle, BenchRendererProps, RendererCandidate } from "./types";
 
 /**
@@ -57,9 +59,11 @@ export type CandidateEntry = RendererCandidate & {
 };
 
 /**
- * The registry. Phase 2 step 4 adds the two real candidates:
- *   • view-annotation — RN marker view, position driven as a React prop
- *   • symbol-layer    — native MapLibre SymbolLayer over an animated source
+ * The registry.
+ *
+ * All three share the store, the subscription mechanism (useSyncExternalStore),
+ * the map shell, and the 32px arrow asset. The ONLY variable is how the marker
+ * reaches the screen.
  */
 export const CANDIDATES: CandidateEntry[] = [
   {
@@ -67,6 +71,18 @@ export const CANDIDATES: CandidateEntry[] = [
     label: "Control",
     approach: "No map. Store + useSyncExternalStore only — the device's ceiling.",
     Component: ControlRenderer as CandidateEntry["Component"],
+  },
+  {
+    id: "view-annotation",
+    label: "ViewAnnotation",
+    approach: "RN marker view anchored to a coordinate prop (today's approach).",
+    Component: ViewAnnotationCandidate as CandidateEntry["Component"],
+  },
+  {
+    id: "symbol-layer",
+    label: "SymbolLayer",
+    approach: "Native MapLibre symbol over a GeoJSON source; GPU-driven rotation.",
+    Component: SymbolLayerCandidate as CandidateEntry["Component"],
   },
 ];
 
