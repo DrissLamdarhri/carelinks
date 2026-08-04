@@ -78,7 +78,7 @@ const MAX_ACCURACY_M = 50;
 /** ~200 km/h. Anything faster is a GPS glitch, not a car. */
 const MAX_SPEED_MPS = 55;
 /** Continue along the last vector this long before admitting we've lost them. */
-const DEAD_RECKON_MS = 5000;
+export const DEAD_RECKON_MS = 5000;
 /** Below this, `heading` from the GPS is noise and the phone may be stationary. */
 const MOVING_SPEED_MPS = 0.4;
 /** Cap on how fast the rendered arrow may rotate (deg/sec). */
