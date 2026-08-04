@@ -160,6 +160,45 @@ export function formatSuite(suite: BenchSuite): string {
   return out.join("\n");
 }
 
+/**
+ * One line per result, decision-critical metrics only.
+ *
+ * A 21-run suite is ~30 KB of pretty-printed JSON, which Android's share intent
+ * and most paste targets silently truncate — a full run was lost to exactly
+ * that. This is ~1.5 KB and survives any transport, while still carrying
+ * everything needed to choose a renderer.
+ *
+ * Columns: scenario | candidate | avgFPS | p50 | p95 | p99 | worst | >33ms |
+ *          dropped | stalls>100ms | markerUpdates | emitted/suppressed
+ */
+export function formatCompact(suite: BenchSuite): string {
+  const env = suite.results[0]?.environment;
+  const lines = [
+    `# CareLink bench ${suite.ranAt}`,
+    `# ${env ? `${env.brand}/${env.model} android-${env.osVersion} dev=${env.dev}` : "unknown device"}`,
+    "# scenario|candidate|fps|p50|p95|p99|worst|>33ms|dropped|stalls100|marker|emit/supp",
+  ];
+  for (const r of suite.results) {
+    lines.push(
+      [
+        r.scenarioId,
+        r.candidateId,
+        r.frames.fpsAverage.toFixed(1),
+        r.frames.p50Ms.toFixed(0),
+        r.frames.p95Ms.toFixed(0),
+        r.frames.p99Ms.toFixed(0),
+        r.frames.worstMs.toFixed(0),
+        r.frames.over33_4,
+        r.frames.droppedEstimate,
+        r.stalls.over100,
+        r.markerUpdates,
+        `${r.store.emitted}/${r.store.suppressed}`,
+      ].join("|"),
+    );
+  }
+  return lines.join("\n");
+}
+
 export type RegressionVerdict = {
   metric: string;
   scenarioId: string;

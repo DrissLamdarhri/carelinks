@@ -14,12 +14,12 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { TrackingStore } from "@/lib/tracking/store";
@@ -28,6 +28,7 @@ import { SCENARIOS } from "@/lib/tracking/bench/scenarios";
 import { runScenario } from "@/lib/tracking/bench/runner";
 import {
   compareToBaseline,
+  formatCompact,
   formatRegressions,
   formatSuite,
 } from "@/lib/tracking/bench/report";
@@ -37,13 +38,25 @@ const NAVY = "#0D0870";
 const BASELINE_KEY = "carelink.bench.baseline";
 const CENTER = { lat: 34.037, lng: -5.004 };
 
+/**
+ * Dev builds always allow it. A RELEASE build allows it only when explicitly
+ * built with EXPO_PUBLIC_ENABLE_BENCH=1.
+ *
+ * The escape hatch exists because dev builds are substantially slower than
+ * release, so if the control cannot hold a valid frame rate under __DEV__ the
+ * only way to get trustworthy numbers is to measure a release build — and the
+ * original `__DEV__`-only gate made that impossible. A shipped app is built
+ * without the flag, so the route stays inert where it matters.
+ */
+const BENCH_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_ENABLE_BENCH === "1";
+
 export default function BenchScreen() {
-  // Hard gate. The route exists in the bundle either way; this is what makes
-  // it inert in a production build.
-  if (!__DEV__) {
+  if (!BENCH_ENABLED) {
     return (
       <SafeAreaView style={s.root}>
-        <Text style={s.unavailable}>Benchmark is available in development builds only.</Text>
+        <Text style={s.unavailable}>
+          Benchmark is unavailable in this build. Rebuild with EXPO_PUBLIC_ENABLE_BENCH=1.
+        </Text>
       </SafeAreaView>
     );
   }
@@ -142,12 +155,30 @@ function Bench() {
     setReport((r) => `${r}\n\nSaved as baseline.`);
   }, [suite]);
 
-  const exportJson = useCallback(async () => {
-    if (!suite) return;
-    // Share rather than write to disk: the JSON needs to leave the device to be
-    // archived alongside the commit it describes.
-    await Share.share({ message: JSON.stringify(suite, null, 2) }).catch(() => {});
-  }, [suite]);
+  // Clipboard, not Share. A 21-run suite is ~30KB of pretty-printed JSON and
+  // Android's share intent silently truncated it — a complete run was lost that
+  // way, and the truncation is invisible until someone notices half the
+  // candidates are missing. Clipboard has no such limit.
+  const copy = useCallback(
+    async (label: string, text: string) => {
+      await Clipboard.setStringAsync(text);
+      setReport((r) => `${r}\n\nCopied ${label} (${(text.length / 1024).toFixed(1)} KB) to clipboard.`);
+    },
+    [],
+  );
+
+  const copyCompact = useCallback(() => {
+    if (suite) void copy("compact summary", formatCompact(suite));
+  }, [suite, copy]);
+
+  const copyReport = useCallback(() => {
+    if (suite) void copy("report", formatSuite(suite));
+  }, [suite, copy]);
+
+  const copyJson = useCallback(() => {
+    // Un-prettified: same data, roughly half the bytes.
+    if (suite) void copy("full JSON", JSON.stringify(suite));
+  }, [suite, copy]);
 
   return (
     <SafeAreaView style={s.root} edges={["top", "bottom"]}>
@@ -212,8 +243,14 @@ function Bench() {
             <TouchableOpacity style={[s.btn, s.btnAlt]} onPress={saveBaseline}>
               <Text style={s.btnAltText}>Save baseline</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.btn, s.btnAlt]} onPress={exportJson}>
-              <Text style={s.btnAltText}>Export JSON</Text>
+            <TouchableOpacity style={[s.btn, s.btnAlt]} onPress={copyCompact}>
+              <Text style={s.btnAltText}>Copy summary</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.btn, s.btnAlt]} onPress={copyReport}>
+              <Text style={s.btnAltText}>Copy report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.btn, s.btnAlt]} onPress={copyJson}>
+              <Text style={s.btnAltText}>Copy JSON</Text>
             </TouchableOpacity>
           </>
         ) : null}
