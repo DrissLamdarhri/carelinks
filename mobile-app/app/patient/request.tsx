@@ -395,6 +395,7 @@ export default function PatientRequestScreen() {
       const booking = await db.bookings.create({
         patient_id: user.id,
         specialty,
+        care_type: careTypes[careType] ?? null,
         notes: notes.trim() || null,
         address: address.trim(),
         budget_min_mad: Math.max(50, price - 20),

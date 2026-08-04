@@ -34,7 +34,8 @@ import {
 } from "@/lib/mock-data";
 import { db } from "@/lib/db/dal";
 import { geo, type NearbyProMapItem } from "@/lib/db/geo";
-import type { Booking } from "@/lib/db/types";
+import { usePatientBookings } from "@/lib/db/realtime";
+import { SPEC_LABEL, careLabel } from "@/lib/care-label";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { useAuth } from "@/lib/auth-context";
@@ -50,25 +51,41 @@ const serviceIconMap = {
 // City default (Fès) used to find nearby pros before a patient location exists.
 const HOME_CENTER = { lat: 34.037, lng: -5.004 };
 
-// Raw DB specialty → i18n key for the French/Arabic label on pro cards.
-const SPEC_LABEL: Record<string, string> = {
-  nurse: "spec_nurse",
-  physiotherapist: "spec_physio",
-  psychologist: "spec_psy",
-  yoga_instructor: "spec_yoga",
-};
-
 export default function PatientHomeScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const { user, profile, refreshProfile } = useAuth();
 
-  // Real data behind "Proches de vous" and "Prochain rendez-vous" (was mock).
+  // Real data behind "Proches de vous" (was mock).
   const [nearbyPros, setNearbyPros] = useState<NearbyProMapItem[]>([]);
   const [prosLoading, setProsLoading] = useState(true);
-  const [nextBooking, setNextBooking] = useState<Booking | null>(null);
   const [nextProName, setNextProName] = useState<string | null>(null);
-  const [workedWithIds, setWorkedWithIds] = useState<Set<string>>(new Set());
+
+  // "Prochain rendez-vous" — a live Supabase Realtime subscription (same hook
+  // patient/bookings.tsx uses), not a poll: any status/assignment change lands
+  // here the moment it happens, instead of waiting up to 30s or a tab switch.
+  const { bookings: myBookings } = usePatientBookings(user?.id ?? null);
+
+  const workedWithIds = useMemo(
+    () =>
+      new Set(
+        myBookings
+          .filter((b) => b.professional_id && ["completed", "in_progress", "en_route", "matched"].includes(b.status))
+          .map((b) => b.professional_id as string),
+      ),
+    [myBookings],
+  );
+
+  const nextBooking = useMemo(() => {
+    const upcoming = myBookings
+      .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
+      .sort((a, b) => {
+        const ta = a.scheduled_at ? Date.parse(a.scheduled_at) : Date.parse(a.created_at);
+        const tb = b.scheduled_at ? Date.parse(b.scheduled_at) : Date.parse(b.created_at);
+        return ta - tb;
+      });
+    return upcoming[0] ?? null;
+  }, [myBookings]);
 
   // Refresh profile when screen comes into focus
   // Profile changes rarely — refresh at most once a minute instead of on every
@@ -77,7 +94,7 @@ export default function PatientHomeScreen() {
     void refreshProfile();
   }, 60_000);
 
-  // Nearby professionals + the patient's next appointment, kept fresh on focus.
+  // Nearby professionals, kept fresh on focus.
   // (useFocusRefresh ignores any returned cleanup, so we guard setState with a
   // mounted ref rather than a per-run cancel flag.)
   const alive = useRef(true);
@@ -98,43 +115,25 @@ export default function PatientHomeScreen() {
         } finally {
           if (alive.current) setProsLoading(false);
         }
-
-        if (user?.id) {
-          try {
-            const all = await db.bookings.listForPatient(user.id);
-
-            // Pros the patient has actually dealt with before — surfaced first in
-            // "Proches de vous" (a familiar face is friendlier than a stranger).
-            const worked = new Set(
-              all
-                .filter((b) => b.professional_id && ["completed", "in_progress", "en_route", "matched"].includes(b.status))
-                .map((b) => b.professional_id as string),
-            );
-            if (alive.current) setWorkedWithIds(worked);
-
-            const upcoming = all
-              .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
-              .sort((a, b) => {
-                const ta = a.scheduled_at ? Date.parse(a.scheduled_at) : Date.parse(a.created_at);
-                const tb = b.scheduled_at ? Date.parse(b.scheduled_at) : Date.parse(b.created_at);
-                return ta - tb;
-              });
-            const next = upcoming[0] ?? null;
-            if (alive.current) setNextBooking(next);
-            if (next?.professional_id) {
-              const pro = await db.profiles.get(next.professional_id).catch(() => null);
-              if (alive.current) setNextProName(pro?.full_name ?? null);
-            } else if (alive.current) {
-              setNextProName(null);
-            }
-          } catch {
-            if (alive.current) setNextBooking(null);
-          }
-        }
       })();
-    }, [user?.id]),
+    }, []),
     30_000,
   );
+
+  // Resolve the next appointment's pro name whenever it (or who it points at)
+  // changes — nextBooking itself now updates live via the realtime hook above.
+  useEffect(() => {
+    if (!nextBooking?.professional_id) {
+      setNextProName(null);
+      return;
+    }
+    let cancelled = false;
+    db.profiles
+      .get(nextBooking.professional_id)
+      .then((pro) => { if (!cancelled) setNextProName(pro?.full_name ?? null); })
+      .catch(() => { if (!cancelled) setNextProName(null); });
+    return () => { cancelled = true; };
+  }, [nextBooking?.professional_id]);
 
   // Keep "Proches de vous" short and friendly: at most 3 pros, familiar faces
   // (already consulted) first, then the nearest.
@@ -369,7 +368,7 @@ export default function PatientHomeScreen() {
             <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
               <View style={styles.bookingBadgeRow}>
                 <Text style={styles.bookingBadge}>
-                  {SPEC_LABEL[nextBooking.specialty] ? t(SPEC_LABEL[nextBooking.specialty]) : nextBooking.specialty}
+                  {careLabel(nextBooking, t)}
                 </Text>
                 <Text style={styles.bookingStatus}>
                   {nextBooking.status === "in_progress"

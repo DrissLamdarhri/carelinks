@@ -18,16 +18,11 @@ import { useProBookingsWindow } from "@/lib/db/realtime";
 import { addDays, dateKey, effectiveDate, friendlyDayLabel, intlLocale, isSameDay, startOfWeek } from "@/lib/date-utils";
 import { DateStrip } from "@/components/DateStrip";
 import { MonthCalendarModal } from "@/components/MonthCalendarModal";
+import { careLabel } from "@/lib/care-label";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 const SCREEN_W = Dimensions.get("window").width;
-const SPEC_LABEL: Record<string, string> = {
-  nurse: "spec_nurse",
-  physiotherapist: "spec_physio",
-  psychologist: "spec_psy",
-  yoga_instructor: "spec_yoga",
-};
 
 export default function ProScheduleScreen() {
   const { t, locale } = useI18n();
@@ -98,7 +93,7 @@ export default function ProScheduleScreen() {
               </Text>
             </View>
           </View>
-          <Text style={s.spec}>{SPEC_LABEL[b.specialty] ? t(SPEC_LABEL[b.specialty]) : b.specialty}</Text>
+          <Text style={s.spec}>{careLabel(b, t)}</Text>
           <View style={s.metaRow}>
             <Clock size={12} color={Colors.textMuted} />
             <Text style={s.metaTxt}>

@@ -35,6 +35,7 @@ import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db/dal";
 import { geo, formatAddress } from "@/lib/db/geo";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
+import { careLabel } from "@/lib/care-label";
 import type { Booking, ProSpecialty } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -309,7 +310,7 @@ export default function ProHomeScreen() {
                 <ChevronRight size={16} color="#FFFFFF" />
               </View>
             </View>
-            <Text style={styles.missionPatient}>Patient · {(activeMission.specialty ?? "").replaceAll("_", " ")}</Text>
+            <Text style={styles.missionPatient}>Patient · {careLabel(activeMission, t)}</Text>
             {activeMission.address ? (
               <View style={styles.missionAddrRow}>
                 <MapPin size={13} color="rgba(255,255,255,0.85)" />
@@ -422,7 +423,7 @@ export default function ProHomeScreen() {
                     <View style={styles.jobSep} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.jobPatient}>{t("patient")}</Text>
-                      <Text style={styles.jobCare}>{(b.specialty ?? "").replaceAll("_", " ")}</Text>
+                      <Text style={styles.jobCare}>{careLabel(b, t)}</Text>
                       {b.address ? (
                         <View style={styles.jobAddrRow}>
                           <MapPin size={11} color={Colors.textMuted} />

@@ -274,16 +274,10 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { useOpenBookingsBySpecialty } from "@/lib/db/realtime";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { careLabel } from "@/lib/care-label";
 import type { OpenDemand, ProSpecialty, VerificationStatus } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
-
-const SPEC_LABEL: Record<string, string> = {
-  nurse: "spec_nurse",
-  physiotherapist: "spec_physio",
-  psychologist: "spec_psy",
-  yoga_instructor: "spec_yoga",
-};
 
 type LiveBookingsFeedProps = {
   specialty: ProSpecialty;
@@ -430,7 +424,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.title}>{t("care_request")}</Text>
-                <Text style={styles.subtitle}>{SPEC_LABEL[booking.specialty] ? t(SPEC_LABEL[booking.specialty]) : t("new_patient")}</Text>
+                <Text style={styles.subtitle}>{booking.specialty ? careLabel(booking, t) : t("new_patient")}</Text>
               </View>
               <View style={styles.priceBadge}>
                 <Text style={styles.priceVal}>

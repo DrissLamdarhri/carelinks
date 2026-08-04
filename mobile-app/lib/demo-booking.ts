@@ -47,6 +47,7 @@ export function buildDemoBooking(bookingId: string): Booking {
     meet_link: null,
     zoom_link: null,
     yoga_session_id: null,
+    care_type: null,
   };
 }
 
