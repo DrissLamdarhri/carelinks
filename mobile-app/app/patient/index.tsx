@@ -284,7 +284,21 @@ export default function PatientHomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
+        {/* The count is the answer to "who can actually come right now?" — the
+            list itself only ever contains online pros now (see
+            geo.findNearbyProsForMap), but saying so out loud is the difference
+            between a patient trusting the list and guessing at it. */}
+        <View style={styles.sectionHeadRow}>
+          <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
+          {!prosLoading && nearbyPros.length > 0 ? (
+            <View style={styles.onlineCount}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.onlineCountTxt}>
+                {nearbyPros.length} {t("pros_available_now")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         {prosLoading ? (
           <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primary} />
         ) : topPros.length === 0 ? (
@@ -303,10 +317,16 @@ export default function PatientHomeScreen() {
                 activeOpacity={0.85}
                 onPress={() => router.push(`/patient/provider/${n.id}`)}
               >
-                <Image
-                  source={n.avatar_url ? { uri: n.avatar_url } : DEFAULT_AVATAR}
-                  style={styles.proAvatar}
-                />
+                <View>
+                  <Image
+                    source={n.avatar_url ? { uri: n.avatar_url } : DEFAULT_AVATAR}
+                    style={styles.proAvatar}
+                  />
+                  {/* Presence badge. Only rendered when the server says online,
+                      never assumed from the row simply existing — that
+                      assumption is what put offline pros on the map. */}
+                  {n.is_online ? <View style={styles.proOnlineDot} /> : null}
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.proName} numberOfLines={1}>{name}</Text>
                   <View style={styles.proSpecRow}>
@@ -464,6 +484,10 @@ const styles = StyleSheet.create({
   quickText: { fontSize: 12, fontWeight: "600" },
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
+  sectionHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  onlineCount: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#16A34A" },
+  onlineCountTxt: { color: "#16A34A", fontSize: 11.5, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   serviceCard: {
     width: "48.5%",
@@ -542,6 +566,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   proAvatar: { width: 54, height: 54, borderRadius: 16 },
+  proOnlineDot: {
+    position: "absolute", right: -2, bottom: -2,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: "#16A34A", borderWidth: 2.5, borderColor: "#FFFFFF",
+  },
   proName: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600", marginBottom: 1 },
   proSpecialty: { color: Colors.textMuted, fontSize: 12, marginBottom: 4, textTransform: "capitalize" },
   proSpecRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },

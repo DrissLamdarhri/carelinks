@@ -5,12 +5,13 @@
 
 import { Tabs, useRouter, useSegments } from "expo-router";
 import { Home, CalendarDays, Wallet, User, MessageCircle } from "lucide-react-native";
-import { Platform, View } from "react-native";
+import { AppState, Platform, View } from "react-native";
 import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
+import { geo } from "@/lib/db/geo";
 import { supabase } from "@/lib/supabase";
 import { useMissionAccepted } from "@/lib/hooks/useMissionAccepted";
 
@@ -65,6 +66,30 @@ export default function ProLayout() {
     if (verif !== "approved" && !onPending) router.replace("/pro/pending");
     else if (verif === "approved" && onPending) router.replace("/pro");
   }, [verif, onPending, router]);
+
+  // ── Presence heartbeat ─────────────────────────────────────────────────────
+  // The patient's map shows a pro as online only if they are available AND have
+  // been seen recently (migration 0054). Without a heartbeat "recently" would
+  // only ever be updated by the 3-minute location refresh on the home screen,
+  // which stops the moment the pro opens any other tab — so a working pro would
+  // quietly vanish from the map while reading their messages.
+  //
+  // It lives in the LAYOUT, not a screen, because the layout is mounted for as
+  // long as the pro is anywhere in the portal. Two minutes against a 30-minute
+  // window means four consecutive failures before anyone notices.
+  useEffect(() => {
+    if (!user?.id || verif !== "approved") return;
+    const beat = () => void geo.heartbeat().catch(() => {});
+    beat();
+    const iv = setInterval(beat, 2 * 60 * 1000);
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") beat();
+    });
+    return () => {
+      clearInterval(iv);
+      sub.remove();
+    };
+  }, [user?.id, verif]);
   // Normalize bottom inset: ensure a small minimum and cap to avoid excess space on some Android devices
   const safeInset = Math.min(Math.max(insets.bottom || 0, 8), 18);
   const tabBottomPadding = Platform.OS === "ios" ? Math.max(safeInset, 8) : safeInset;

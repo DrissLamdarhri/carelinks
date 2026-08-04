@@ -166,7 +166,10 @@ export function BookingMap({
   showProList = true,
   onReserve: propsOnReserve,
   demo = true,
-  emptyText = "Aucun professionnel à proximité pour le moment.",
+  // "en ligne" is not decoration: the map only plots professionals who are
+  // actually available right now (migration 0054), so an empty map means
+  // "nobody is working nearby at this moment", not "nobody exists here".
+  emptyText = "Aucun professionnel en ligne à proximité pour le moment.",
   showChrome = true,
 }: BookingMapProps) {
   const { t } = useI18n();

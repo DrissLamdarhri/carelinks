@@ -13,6 +13,9 @@ export type NearbyProMapItem = {
   lat: number;
   lng: number;
   distanceKm: number;
+  /** Available AND seen in the last 30 minutes AND has a position (0054). */
+  is_online: boolean;
+  last_seen_at: string | null;
 };
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -128,19 +131,30 @@ export const geo = {
   },
 
   /**
-   * Real approved pros with coordinates, nearest first, for plotting on the
-   * booking map. Reads the public v_pros_public view and filters/sorts by
-   * haversine distance from the patient. Returns [] when none — callers must
-   * never fall back to fake people in production.
+   * Professionals to plot on the patient's map, nearest first.
+   *
+   * ONLINE ONLY, and that is the whole point of this function. It used to
+   * select every approved pro who had ever recorded a position and plot them
+   * all, so the map showed people who were not working — a patient looking at
+   * six pins had no idea that five of them were asleep. `is_online` is computed
+   * by the view (available + seen in the last 30 min + has a position), so the
+   * freshness rule lives in one place instead of being re-derived per screen.
+   *
+   * Returns [] when nobody is online. That is a real answer and the callers
+   * render an empty state for it — never fall back to fake people.
    */
   async findNearbyProsForMap(
     lat: number,
     lng: number,
-    opts?: { specialty?: string; radiusKm?: number; limit?: number }
+    opts?: { specialty?: string; radiusKm?: number; limit?: number; includeOffline?: boolean }
   ): Promise<NearbyProMapItem[]> {
-    const { data, error } = await supabase
+    let query = supabase
       .from("v_pros_public")
-      .select("id, full_name, avatar_url, specialty, rating_avg, hourly_rate_mad, lat, lng");
+      .select(
+        "id, full_name, avatar_url, specialty, rating_avg, hourly_rate_mad, lat, lng, is_online, last_seen_at",
+      );
+    if (!opts?.includeOffline) query = query.eq("is_online", true);
+    const { data, error } = await query;
     if (error) throw error;
 
     const radiusKm = opts?.radiusKm ?? 15;
@@ -152,6 +166,11 @@ export const geo = {
       .filter((r: any) => r.distanceKm <= radiusKm)
       .sort((a: any, b: any) => a.distanceKm - b.distanceKm)
       .slice(0, limit) as NearbyProMapItem[];
+  },
+
+  /** Stamp the signed-in professional as present. See migration 0054. */
+  async heartbeat(): Promise<void> {
+    await supabase.rpc("pro_heartbeat");
   },
 
   async findProsNearBooking(bookingId: string, radiusKm = 15): Promise<NearbyPro[]> {
