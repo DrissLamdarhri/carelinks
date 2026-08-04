@@ -1080,6 +1080,14 @@ export default function LiveTrackingScreen() {
   // live position. When they're already within 60m of the door there is nothing
   // to route, so the line is cleared rather than faked.
   const ARRIVAL_RADIUS_KM = 0.06;
+  /**
+   * Lateral distance from the road that counts as genuinely off-route.
+   *
+   * Comfortably wider than urban GPS error (5-15m) and than the pipeline's own
+   * 25m snap radius, so ordinary noise and a brief lane-level wander never
+   * trigger a recompute — only actually taking a different street does.
+   */
+  const OFF_ROUTE_M = 45;
   const reroutingRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const routeOriginRef = useRef<LatLng | null>(null);
@@ -1092,8 +1100,20 @@ export default function LiveTrackingScreen() {
       return;
     }
 
-    const anchor = routeOriginRef.current;
-    if (anchor && haversineKm(proCoord, anchor) < 0.06) return;
+    // RE-ROUTE ON LATERAL DEVIATION, NOT ON DISTANCE TRAVELLED.
+    //
+    // This previously refetched whenever the pro moved 60m from the point the
+    // route was computed FROM — which, for someone actually following the
+    // route, meant a fresh route every 60m. Each refetch re-based the road at
+    // the latest jittered fix, so the drawn route's first metres ran off the
+    // carriageway and the marker (matched to that route) inherited the error.
+    // It also hammered the routing server for no reason.
+    //
+    // Travelling along a road is not a reason to recompute it. Being off it is.
+    const deviation = trackingStore?.routeDeviationM ?? null;
+    const haveRoute = !!routeCoords && routeCoords.length >= 2;
+    const offRoute = haveRoute && (deviation == null || deviation > OFF_ROUTE_M);
+    if (haveRoute && !offRoute) return;
     if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < 10000) return;
 
     const origin = proCoord;
@@ -1108,7 +1128,7 @@ export default function LiveTrackingScreen() {
       setRouteLoaded(true);
       reroutingRef.current = false;
     })();
-  }, [proCoord, destCoord, isDemoBooking]);
+  }, [proCoord, destCoord, isDemoBooking, routeCoords, trackingStore]);
 
   // Keep the patient's screen honest about where the mission actually is: the pro
   // advances `matched → en_route → in_progress → completed` on their side, and

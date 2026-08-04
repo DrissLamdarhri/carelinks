@@ -102,9 +102,19 @@ export default function CareLinkMapNative({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [patient?.lat, patient?.lng, center.lat, center.lng, radiusKm],
   );
-  // Split the route EXACTLY at the driver's position (pro) so the marker always
-  // rides the seam — traversed ends at the marker, remaining starts at it.
-  const splitPt = pro ? { lat: pro.lat, lng: pro.lng } : null;
+  // Where to break the route into traversed and remaining.
+  //
+  // This used to be forced through `pro` — the RAW GPS fix — so BOTH lines were
+  // dragged off the carriageway to wherever the last fix landed. With the
+  // marker drawn at its map-matched position ON the road, the result was a
+  // visible spur: the route detoured to a point beside the street while the
+  // marker sat on it. Invisible zoomed out, glaring zoomed in, and the direct
+  // cause of "the route doesn't pass underneath the marker".
+  //
+  // While tracking, the seam is a genuine route vertex instead. OSRM vertices
+  // are only metres apart, so the seam still lands under the marker — but it
+  // lands ON THE ROAD, because it IS the road.
+  const splitPt = trackingStore ? null : pro ? { lat: pro.lat, lng: pro.lng } : null;
   const traversedData = useMemo(() => {
     if (!route || route.length < 2) return null;
     const pts = [...route.slice(0, progressIdx + 1), ...(splitPt ? [splitPt] : [])];

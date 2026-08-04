@@ -157,6 +157,11 @@ export class TrackingStore {
     return this.track.onRoute;
   }
 
+  /** Lateral distance of the newest fix from the route; null when unmatched. */
+  get routeDeviationM(): number | null {
+    return this.track.routeDeviationM;
+  }
+
   /** Filter rejections by reason. Surfaced for the benchmark harness and for
    *  diagnostics: a spike in `inaccurate` is a bad GPS environment, a spike in
    *  `stale-seq` is a misbehaving transport. */

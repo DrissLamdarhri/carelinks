@@ -205,6 +205,18 @@ export class MotionTrack {
   }
 
   /**
+   * Lateral distance of the newest fix from the attached route, or null when it
+   * could not be matched at all.
+   *
+   * Callers use this to decide whether a RE-ROUTE is warranted. The question
+   * "should we fetch a new road?" is about being laterally OFF the road, never
+   * about how far along it we have travelled.
+   */
+  get routeDeviationM(): number | null {
+    return this.matches.length ? (this.matches[this.matches.length - 1]?.deviationM ?? null) : null;
+  }
+
+  /**
    * Offer a fix. Returns null if accepted, or why it was rejected.
    * Rejection is normal and frequent; it is not an error.
    */
