@@ -1162,6 +1162,18 @@ export default function LiveTrackingScreen() {
       : fixAgeSec < 120
         ? t("position_stale_sec").replace("%d", String(fixAgeSec))
         : t("position_stale_min").replace("%d", String(Math.round(fixAgeSec / 60)));
+
+  // ── Arrival ───────────────────────────────────────────────────────────────
+  // Once the professional has declared arrival the journey is over, so the
+  // road path is retired. Leaving it drawn keeps implying travel that is no
+  // longer happening, and the marker would go on being map-matched to a route
+  // nobody is following any more.
+  useEffect(() => {
+    if (!arrived) return;
+    setRouteCoords(null);
+    trackingStore?.setRoute(null);
+  }, [arrived, trackingStore]);
+
   const proName      = proProfile?.full_name ?? trackProMeta.name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
   const proPhone     = proProfile?.phone     ?? null;
   const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);

@@ -4,7 +4,7 @@
  * nurse's LIVE GPS position, and the road route between them. Plus the patient's
  * address, live distance/ETA, and a Google-Maps "Naviguer" hand-off + call.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -38,9 +38,10 @@ import { haptics } from "@/lib/haptics";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
-import { useGlidingPosition } from "@/lib/hooks/useGlidingPosition";
 import { useForegroundPosition } from "@/lib/hooks/useForegroundPosition";
 import { fetchRoute } from "@/lib/routing";
+import { TrackingStore } from "@/lib/tracking/store";
+import { simulateTrip, type SimulationHandle } from "@/lib/tracking/simulate";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -211,14 +212,43 @@ export default function ProTrackingScreen() {
   // only thing that publishes). Before departure and after arrival nothing is
   // being shared, so a light foreground watch keeps the nurse visible on their
   // own map without running a second watch against the sensor.
-  const onNursePosition = useCallback((p: { lat: number; lng: number }) => {
-    setNurse({ lat: p.lat, lng: p.lng });
-  }, []);
+  // Same motion pipeline the patient sees, so the nurse's own dot is smoothed
+  // and map-matched identically. Sharing it is not just tidiness: if the two
+  // sides smoothed differently, a nurse comparing her screen with the patient's
+  // would see two different positions for herself.
+  const trackingStore = useMemo(() => new TrackingStore(), []);
+  useEffect(() => () => trackingStore.destroy(), [trackingStore]);
+  useEffect(() => {
+    trackingStore.setRoute(route ?? null);
+  }, [trackingStore, route]);
+
+  const onNursePosition = useCallback(
+    (p: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null; seq?: number | null }) => {
+      setNurse({ lat: p.lat, lng: p.lng });
+      trackingStore.push({
+        lat: p.lat,
+        lng: p.lng,
+        heading: p.heading ?? null,
+        speed: p.speed ?? null,
+        accuracy: p.accuracy ?? null,
+        seq: p.seq ?? Date.now(),
+        receivedAt: Date.now(),
+      });
+    },
+    [trackingStore],
+  );
   const broadcasting = booking?.status === "en_route";
   const ownPosition = useForegroundPosition(!broadcasting);
   useEffect(() => {
-    if (!broadcasting && ownPosition) setNurse(ownPosition);
-  }, [broadcasting, ownPosition]);
+    if (!broadcasting && ownPosition) {
+      setNurse(ownPosition);
+      trackingStore.push({
+        lat: ownPosition.lat, lng: ownPosition.lng,
+        heading: null, speed: null, accuracy: null,
+        seq: Date.now(), receivedAt: Date.now(),
+      });
+    }
+  }, [broadcasting, ownPosition, trackingStore]);
 
   // Arrival is NEVER inferred from GPS proximity. It used to auto-advance
   // `en_route → in_progress` within 80 m of `dest`, which fired on a coarse
@@ -276,10 +306,58 @@ export default function ProTrackingScreen() {
     })();
   }, [nurse, dest, t]);
 
-  // Own compass heading (facing cone on the "you are here" marker) + a smooth
-  // glide between GPS fixes instead of the dot snapping every ~2s.
+  // Compass heading for the pre-departure marker. Smoothing is NOT done here:
+  // useGlidingPosition called setState every animation frame from this screen,
+  // re-rendering the map, the nav strip and the sheet to move one dot. The
+  // motion pipeline in TrackingStore does it outside React instead.
   const meHeading = useDeviceHeading();
-  const glidingNurse = useGlidingPosition(nurse);
+
+  // Arrival retires the navigation: no route, no turn instructions. The nurse
+  // is standing at the door; continuing to show "in 200m, turn left" is noise
+  // at exactly the moment she needs the mission controls instead.
+  useEffect(() => {
+    if (booking?.status !== "in_progress") return;
+    setRoute(null);
+    setNavSteps([]);
+    trackingStore.setRoute(null);
+  }, [booking?.status, trackingStore]);
+
+  // ── Dev-only trip simulator ───────────────────────────────────────────────
+  // Publishes a synthetic drive along the real route onto the real channel, so
+  // the patient screen can be judged for FEEL without two people driving. Not a
+  // replacement for an outdoor test — real multipath, tunnels and thermal
+  // behaviour only appear outside — but it makes the UX reviewable indoors.
+  const simRef = useRef<SimulationHandle | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  useEffect(() => () => simRef.current?.stop(), []);
+  const toggleSimulation = useCallback(() => {
+    if (simRef.current) {
+      simRef.current.stop();
+      simRef.current = null;
+      setSimulating(false);
+      return;
+    }
+    if (!bookingId || !route || route.length < 2) {
+      showToast("Aucun trajet à simuler");
+      return;
+    }
+    setSimulating(true);
+    simRef.current = simulateTrip({
+      bookingId,
+      path: route,
+      speedMps: 12,
+      intervalMs: 1500,
+      jitterM: 8,
+      // A 10s dropout partway, so dead reckoning and the staleness banner get
+      // exercised in the same run rather than needing a separate tunnel.
+      outage: [25_000, 35_000],
+      onDone: () => {
+        simRef.current = null;
+        setSimulating(false);
+        showToast("Simulation terminée");
+      },
+    });
+  }, [bookingId, route]);
 
   // Advance the turn instruction as the nurse reaches each maneuver point.
   useEffect(() => {
@@ -428,12 +506,12 @@ export default function ProTrackingScreen() {
         ) : (
           <CareLinkMapView
             center={nurse ?? dest ?? MAP_CENTER}
-            patient={glidingNurse ?? undefined}
             meHeading={meHeading}
             destination={dest ?? undefined}
             route={route ?? undefined}
             fitCoords={fit}
-            follow={!!nurse}
+            trackingStore={trackingStore}
+            trackingVariant="self"
             radiusKm={0}
             nightAuto
           />
@@ -537,6 +615,17 @@ export default function ProTrackingScreen() {
         ) : null}
 
         {/* RULE #4 — nurse-initiated cancellation (penalty applies) */}
+        {__DEV__ && status === "en_route" ? (
+          <TouchableOpacity
+            style={[s.statusBtn, simulating ? s.statusBtnFar : s.simBtn]}
+            onPress={toggleSimulation}
+          >
+            <Text style={s.statusTxt}>
+              {simulating ? "Arrêter la simulation" : "Simuler un trajet (dev)"}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {status !== "completed" && status !== "cancelled" ? (
           <TouchableOpacity style={s.cancelJobBtn} disabled={busy} onPress={cancelByNurse}>
             <Text style={s.cancelJobTxt}>{t("cancel_job")}</Text>
@@ -629,6 +718,7 @@ const s = StyleSheet.create({
   },
   statusDone: { backgroundColor: NAVY },
   statusBtnFar: { backgroundColor: "#9CA3AF" },
+  simBtn: { backgroundColor: "#7C3AED" },
   statusTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   cancelJobBtn: { height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 10 },
   cancelJobTxt: { color: "#E24B4A", fontSize: 14, fontWeight: "700" },

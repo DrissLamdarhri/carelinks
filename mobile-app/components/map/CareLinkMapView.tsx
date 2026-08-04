@@ -83,6 +83,8 @@ export type CareLinkMapViewProps = {
   trackingStore?: import("@/lib/tracking/store").TrackingStore | null;
   /** Booking-level arrival; outranks anything inferred from the position. */
   trackingArrived?: boolean;
+  /** "self" draws your own heading arrow instead of a professional's avatar. */
+  trackingVariant?: "pro" | "self";
   style?: StyleProp<ViewStyle>;
 };
 

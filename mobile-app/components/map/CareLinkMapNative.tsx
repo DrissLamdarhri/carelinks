@@ -80,6 +80,7 @@ export default function CareLinkMapNative({
   follow,
   trackingStore,
   trackingArrived,
+  trackingVariant,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -334,6 +335,7 @@ export default function CareLinkMapNative({
         // moving it does not re-render this map or the screen around it.
         <LiveProMarker
           store={trackingStore}
+          variant={trackingVariant}
           arrived={trackingArrived}
           avatarUrl={pro?.avatarUrl ?? null}
           avatarSource={pro?.avatarSource}

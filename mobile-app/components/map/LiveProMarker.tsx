@@ -19,11 +19,20 @@
 import React, { memo, useSyncExternalStore } from "react";
 import { ViewAnnotation } from "@maplibre/maplibre-react-native";
 import type { ImageSourcePropType } from "react-native";
+import { MeMarker } from "./MapMarkers";
 import { TrackingMarker, type TrackingStatus } from "./TrackingMarker";
 import { STALE_AFTER_MS, type TrackingStore } from "@/lib/tracking/store";
 
 export type LiveProMarkerProps = {
   store: TrackingStore;
+  /**
+   * "pro"  — the professional as seen BY THE PATIENT: avatar, halo, status.
+   * "self" — your own position on your own screen (the nurse's map). A person
+   *          does not need their own photo pinned to their own dot, and an
+   *          avatar there competes with the destination for attention; the
+   *          familiar heading arrow is the right affordance.
+   */
+  variant?: "pro" | "self";
   /** Booking-level state. `arrived` outranks any GPS-derived status. */
   arrived?: boolean;
   avatarUrl?: string | null;
@@ -33,6 +42,7 @@ export type LiveProMarkerProps = {
 
 export const LiveProMarker = memo(function LiveProMarker({
   store,
+  variant = "pro",
   arrived = false,
   avatarUrl,
   avatarSource,
@@ -53,6 +63,9 @@ export const LiveProMarker = memo(function LiveProMarker({
 
   return (
     <ViewAnnotation lngLat={[sample.lng, sample.lat]} anchor="center">
+      {variant === "self" ? (
+        <MeMarker heading={sample.moving ? sample.bearing : null} />
+      ) : (
       <TrackingMarker
         status={status}
         bearing={sample.bearing}
@@ -61,6 +74,7 @@ export const LiveProMarker = memo(function LiveProMarker({
         avatarSource={avatarSource}
         initials={initials}
       />
+      )}
     </ViewAnnotation>
   );
 });
