@@ -85,6 +85,12 @@ export type CareLinkMapViewProps = {
   trackingArrived?: boolean;
   /** "self" draws your own heading arrow instead of a professional's avatar. */
   trackingVariant?: "pro" | "self";
+  /**
+   * Pixels at the bottom of the map that are covered, or that should simply be
+   * left free of the subject. The tracked marker settles above this, so the
+   * road AHEAD stays visible — which is where someone actually looks.
+   */
+  trackingPaddingBottom?: number;
   style?: StyleProp<ViewStyle>;
 };
 

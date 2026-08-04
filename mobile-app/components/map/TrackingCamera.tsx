@@ -41,13 +41,27 @@ type Props = {
   store: TrackingStore;
   /** Initial framing before the first fix lands. */
   fallbackCenter: { lat: number; lng: number };
+  /**
+   * Pixels of the map obscured at the bottom (the sheet, the action row).
+   *
+   * Passed to MapLibre as camera padding rather than nudged by hand: padding
+   * insets the viewport the camera frames against, so the tracked position
+   * settles in the middle of the VISIBLE map instead of the middle of the map
+   * view. Faking it with a coordinate offset would drift with zoom and break
+   * the moment the sheet is dragged.
+   */
+  paddingBottom?: number;
 };
 
 export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function TrackingCamera(
-  { store, fallbackCenter },
+  { store, fallbackCenter, paddingBottom = 0 },
   ref,
 ) {
   const cameraRef = useRef<CameraRef>(null);
+  // Read through a ref so a sheet drag does not re-create the apply callback
+  // and tear down the store subscription mid-journey.
+  const paddingBottomRef = useRef(paddingBottom);
+  paddingBottomRef.current = paddingBottom;
   const state = useRef<CameraState>(initialCameraState());
 
   useImperativeHandle(ref, () => ({
@@ -74,6 +88,7 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
       speedMps: store.latestFix?.speed ?? null,
       // The map is full-width; its shorter side is the window width.
       viewportPx: Dimensions.get("window").width,
+      obscuredPx: paddingBottomRef.current,
       distanceFromCenterM: state.current.center
         ? distanceM(state.current.center, target)
         : Number.POSITIVE_INFINITY,
@@ -86,6 +101,7 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
       zoom: command.zoom,
       pitch: command.pitch,
       duration: command.durationMs,
+      padding: { top: 0, left: 0, right: 0, bottom: paddingBottomRef.current },
     });
   }, [store]);
 

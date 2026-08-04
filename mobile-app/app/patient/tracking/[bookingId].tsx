@@ -543,7 +543,23 @@ import { haptics } from "@/lib/haptics";
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCREEN_W  = Dimensions.get("window").width;
 const SCREEN_H  = Dimensions.get("window").height;
-const MAP_H     = Math.round(SCREEN_H * 0.72); // ~72% = exactly the screenshot ratio
+/**
+ * The map gets the screen.
+ *
+ * Was 72%. A tracking screen whose lower third is a card feels cramped, and the
+ * sheet's job is to answer "who is coming" — a question asked once — while the
+ * map answers "where are they", which is asked continuously. The sheet still
+ * scrolls, so nothing is lost; it simply stops dominating.
+ */
+const MAP_H     = Math.round(SCREEN_H * 0.80);
+/**
+ * Bottom of the map deliberately kept clear of the marker.
+ *
+ * Passed to the camera as padding, so the professional settles ABOVE centre and
+ * the road ahead stays visible. People read a route forwards: framing the
+ * marker dead-centre spends half the screen on tarmac already driven.
+ */
+const FRAME_PAD = Math.round(SCREEN_H * 0.80 * 0.24);
 const NAVY      = "#0D0870";
 
 // ── Draggable sheet: drag the handle down to see the full map, back up to
@@ -1286,6 +1302,7 @@ export default function LiveTrackingScreen() {
           destination={patientCoord}
           trackingStore={trackingStore}
           trackingArrived={arrived}
+          trackingPaddingBottom={FRAME_PAD}
           pro={
             (isDemoBooking ? glidingProCoord : proCoord)
               ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }

@@ -54,12 +54,18 @@ const WHITE = "#FFFFFF";
  * it. A smaller marker glued tightly to the route looks more real than a large
  * one with better maths behind it.
  */
-const AVATAR = 38;
-// Re-balanced twice. 46 dominated the map and exaggerated every movement; 30
-// made the hero of the screen recede. 38 with a deeper shadow reads as the
-// subject without covering the street it is driving on.
+const AVATAR = 28;
+// Settled at 28 after 46 / 30 / 38.
+//
+// The earlier reasoning — "the marker is the hero of the screen" — was wrong.
+// The ROAD is the subject; the marker annotates it. Identity already lives in
+// the bottom sheet, where someone looks to answer "who is coming", while the
+// map answers "where are they". A marker large enough to cover several streets
+// makes every metre of movement read as exaggerated and pulls the eye onto the
+// badge instead of the route. Every mature ride-hailing map keeps it small for
+// this reason.
 /** Full marker box — leaves room for the halo and the orbiting heading arrow. */
-const BOX = 82;
+const BOX = 62;
 
 export type TrackingStatus = "live" | "arrived" | "stale";
 
@@ -147,7 +153,7 @@ export const TrackingMarker = memo(function TrackingMarker({
       {showHeading ? (
         <View style={[styles.orbit, { transform: [{ rotate: `${bearing}deg` }] }]}>
           <View style={[styles.heading, { backgroundColor: accent }]}>
-            <Navigation size={11} color={WHITE} fill={WHITE} strokeWidth={0} />
+            <Navigation size={9} color={WHITE} fill={WHITE} strokeWidth={0} />
           </View>
         </View>
       ) : null}
@@ -166,9 +172,9 @@ export const TrackingMarker = memo(function TrackingMarker({
           invisible to a red/green colour-deficient viewer. */}
       <View style={[styles.badge, { backgroundColor: accent }]}>
         {status === "arrived" ? (
-          <Check size={9} color={WHITE} strokeWidth={4} />
+          <Check size={7} color={WHITE} strokeWidth={4} />
         ) : status === "stale" ? (
-          <Pause size={7} color={WHITE} fill={WHITE} strokeWidth={0} />
+          <Pause size={6} color={WHITE} fill={WHITE} strokeWidth={0} />
         ) : (
           <View style={styles.liveDot} />
         )}
@@ -195,21 +201,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heading: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: WHITE,
     // Nudge so the arrow sits just outside the avatar ring.
-    marginTop: (BOX - AVATAR) / 2 - 20,
+    marginTop: (BOX - AVATAR) / 2 - 15,
   },
   avatarRing: {
-    width: AVATAR + 6,
-    height: AVATAR + 6,
-    borderRadius: (AVATAR + 6) / 2,
-    borderWidth: 3,
+    width: AVATAR + 5,
+    height: AVATAR + 5,
+    borderRadius: (AVATAR + 5) / 2,
+    borderWidth: 2.5,
     borderColor: WHITE,
     backgroundColor: WHITE,
     alignItems: "center",
@@ -226,19 +232,19 @@ const styles = StyleSheet.create({
   },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: NAVY },
   initialsWrap: { alignItems: "center", justifyContent: "center" },
-  initials: { color: WHITE, fontSize: 15, fontWeight: "700", letterSpacing: 0.3 },
+  initials: { color: WHITE, fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
   badge: {
     position: "absolute",
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
-    borderWidth: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.75,
     borderColor: WHITE,
     alignItems: "center",
     justifyContent: "center",
     // Bottom-right of the avatar disc, inside the marker box.
-    right: (BOX - AVATAR) / 2 - 5,
-    bottom: (BOX - AVATAR) / 2 - 2,
+    right: (BOX - AVATAR) / 2 - 4,
+    bottom: (BOX - AVATAR) / 2 - 1,
   },
-  liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: WHITE },
+  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: WHITE },
 });

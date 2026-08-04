@@ -108,18 +108,20 @@ export const ZOOM_BANDS: readonly ZoomBand[] = [
 ] as const;
 
 /**
- * Fraction of the viewport the marker may roam before the camera eases.
+ * Fraction of the visible map the marker may roam before the camera eases.
  *
- * Tightened from 0.32: with the closer framing above, a generous dead zone let
- * the marker wander toward the edge and then be hauled back, which reads as
- * lurching. A smaller zone with a LONGER, softer correction gives the opposite
- * feel — the camera seems to breathe with the vehicle rather than chase it.
+ * Measured against the interaction reference, which follows LOOSELY: the
+ * vehicle drifts across roughly a third of the frame before the camera responds
+ * at all. A tight zone makes the camera appear to chase the marker; a loose one
+ * with an unhurried correction reads as the map letting the journey happen and
+ * only occasionally catching up. Measured against the VISIBLE map, so the sheet
+ * does not shrink the usable frame.
  */
-export const DEAD_ZONE = 0.18;
+export const DEAD_ZONE = 0.30;
 /** Idle time after a gesture before following resumes (ms). */
-export const RESUME_AFTER_MS = 8000;
+export const RESUME_AFTER_MS = 6000;
 /** Drift correction. Long and soft: the camera should float, never snap. */
-const DRIFT_MS = 1600;
+const DRIFT_MS = 1200;
 const ZOOM_MS = 1100;
 
 export function initialCameraState(zoom = 16.0): CameraState {
@@ -159,6 +161,8 @@ export type CameraInputs = {
   speedMps: number | null;
   /** Shorter viewport dimension in pixels. */
   viewportPx: number;
+  /** Pixels hidden behind the sheet — excluded from the usable frame. */
+  obscuredPx?: number;
   /** Metres between the last commanded centre and the marker. */
   distanceFromCenterM: number;
 };
@@ -207,7 +211,8 @@ export function nextCameraCommand(
 
   // Dead zone: hold still until the marker approaches the edge of the
   // comfortable middle of the screen.
-  const allowedM = (viewportSpanM(zoom, input.viewportPx, input.target.lat) * DEAD_ZONE) / 2;
+  const usablePx = Math.max(120, input.viewportPx - (input.obscuredPx ?? 0));
+  const allowedM = (viewportSpanM(zoom, usablePx, input.target.lat) * DEAD_ZONE) / 2;
   if (input.distanceFromCenterM < allowedM) return { state, command: null };
 
   return {
