@@ -247,13 +247,67 @@ export type StartResult =
   | { ok: true; background: boolean }
   | { ok: false; reason: "permission-denied" | "failed" };
 
+// ── Permissions: ask at most once, never on every trip ──────────────────────
+/**
+ * `startLiveLocation` runs on every departure, every screen remount and every
+ * time the trip toggles active. Calling `request*PermissionsAsync` from there
+ * unconditionally meant the pro was shown the location dialogs over and over —
+ * reported from the field as "the activation of location, even if the user
+ * accepts it once, appears again and again".
+ *
+ * The rule now: read the current status first, and only ever put a dialog on
+ * screen when the OS says the question has genuinely not been answered.
+ *
+ *  • Already granted → return immediately. No dialog, no delay.
+ *  • Denied → return false. `canAskAgain` is false on Android after the
+ *    permanent denial, and re-requesting is a no-op that still costs a round
+ *    trip; on iOS it is silently ignored. Either way the pro must go to
+ *    Settings, and nagging them mid-drive does not help.
+ *  • Undetermined → ask, once.
+ *
+ * The background answer is additionally remembered on disk. Android 11+ never
+ * grants "Allow all the time" from a dialog — it deep-links to Settings — so an
+ * undetermined-and-declined background permission would otherwise re-prompt on
+ * every single trip forever. One ask per install is the honest budget for a
+ * permission the product degrades gracefully without.
+ */
+const BG_ASKED_KEY = "carelink.location.bgAsked";
+
+async function ensureForegroundPermission(): Promise<boolean> {
+  try {
+    const current = await Location.getForegroundPermissionsAsync();
+    if (current.granted) return true;
+    if (!current.canAskAgain || current.status !== Location.PermissionStatus.UNDETERMINED) {
+      return false;
+    }
+    return (await Location.requestForegroundPermissionsAsync()).granted;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureBackgroundPermission(): Promise<boolean> {
+  try {
+    const current = await Location.getBackgroundPermissionsAsync();
+    if (current.granted) return true;
+    if (!current.canAskAgain) return false;
+    if (await AsyncStorage.getItem(BG_ASKED_KEY)) return false;
+    // Record the attempt BEFORE showing the dialog: if the pro backgrounds the
+    // app to answer it in Settings and the process is killed, we must still
+    // count it as asked rather than starting the loop again on relaunch.
+    await AsyncStorage.setItem(BG_ASKED_KEY, "1");
+    return (await Location.requestBackgroundPermissionsAsync()).granted;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Begin publishing the pro's position for `bookingId`.
  * Idempotent: calling it again for the same trip is a no-op.
  */
 export async function startLiveLocation(bookingId: string): Promise<StartResult> {
-  const foreground = await Location.requestForegroundPermissionsAsync();
-  if (!foreground.granted) return { ok: false, reason: "permission-denied" };
+  if (!(await ensureForegroundPermission())) return { ok: false, reason: "permission-denied" };
 
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ bookingId } satisfies Session));
   lastPersistAt = 0;
@@ -271,13 +325,7 @@ export async function startLiveLocation(bookingId: string): Promise<StartResult>
   // Background permission is requested but NOT required: on Android the
   // foreground service keeps updates flowing without it, and on iOS the pro
   // still gets full accuracy while the app is open. Degrade, never block.
-  let background = false;
-  try {
-    const bg = await Location.requestBackgroundPermissionsAsync();
-    background = bg.granted;
-  } catch {
-    background = false;
-  }
+  const background = await ensureBackgroundPermission();
 
   try {
     const already = await TaskManager.isTaskRegisteredAsync(LIVE_LOCATION_TASK);

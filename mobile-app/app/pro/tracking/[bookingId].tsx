@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   StyleSheet,
   Text,
@@ -103,6 +104,27 @@ export default function ProTrackingScreen() {
   // gets no map, no route, and no GPS broadcast — just a waiting state.
   const [paymentReady, setPaymentReady] = useState(false);
 
+  /**
+   * Re-read the payment rows for this booking.
+   *
+   * This exists as its own function because a SINGLE read at mount plus a
+   * SINGLE realtime subscription turned out to be a trap: if the socket was
+   * asleep, the JWT had just rotated, or the INSERT landed in the gap between
+   * the first read and `subscribe()` resolving, `paymentReady` stayed false
+   * forever and the nurse sat on "waiting for payment" for a job that was paid
+   * minutes ago. There is no user action that recovers from that — the screen
+   * has no map, no route and no controls. Reported from the field as "the pro
+   * blocks even if the patient payed".
+   */
+  const refreshPayment = useCallback(async () => {
+    if (!bookingId) return false;
+    const pays = await db.payments.listForBookings([bookingId]).catch(() => null);
+    if (!pays) return false; // network/RLS error — say nothing, try again later
+    const paid = pays.some((p) => PAID_STATUSES.has(p.status));
+    if (paid) setPaymentReady(true);
+    return paid;
+  }, [bookingId]);
+
   // ── Load booking + resolve the patient's destination coords ────────────────
   useEffect(() => {
     let cancelled = false;
@@ -112,8 +134,7 @@ export default function ProTrackingScreen() {
         const b = await db.bookings.get(bookingId);
         if (cancelled) return;
         setBooking(b);
-        const pays = await db.payments.listForBookings([b.id]).catch(() => []);
-        if (!cancelled) setPaymentReady(pays.some((p) => PAID_STATUSES.has(p.status)));
+        if (!cancelled) void refreshPayment();
         if (b.patient_id) {
           const pf = await db.profiles.get(b.patient_id).catch(() => null);
           if (!cancelled) setPatient(pf);
@@ -162,6 +183,22 @@ export default function ProTrackingScreen() {
       void supabase.removeChannel(channel);
     };
   }, [bookingId, paymentReady]);
+
+  // Belt and braces for the same gate. Realtime is the FAST path, not the only
+  // one: while we're still waiting we also re-read every 5s, and immediately
+  // whenever the app comes back to the foreground (a socket that died while
+  // the screen was backgrounded reconnects silently but replays nothing).
+  useEffect(() => {
+    if (!bookingId || paymentReady) return;
+    const poll = setInterval(() => void refreshPayment(), 5000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshPayment();
+    });
+    return () => {
+      clearInterval(poll);
+      sub.remove();
+    };
+  }, [bookingId, paymentReady, refreshPayment]);
 
   // Departure is an explicit act, never a side effect of opening a screen.
   //
@@ -238,7 +275,10 @@ export default function ProTrackingScreen() {
     [trackingStore],
   );
   const broadcasting = booking?.status === "en_route";
-  const ownPosition = useForegroundPosition(!broadcasting);
+  // `request: true` — this is the one screen where asking is unambiguous: the
+  // nurse opened her navigation to a patient. Everywhere else location is
+  // incidental and the hook stays silent.
+  const ownPosition = useForegroundPosition(!broadcasting, { request: true });
   useEffect(() => {
     if (!broadcasting && ownPosition) {
       setNurse(ownPosition);
@@ -264,6 +304,7 @@ export default function ProTrackingScreen() {
   const reroutingRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const routeOriginRef = useRef<LatLng | null>(null);
+  const hasRouteRef = useRef(false);
   useEffect(() => {
     if (!nurse || !dest) return;
 
@@ -271,6 +312,7 @@ export default function ProTrackingScreen() {
     // squiggle between two points that are the same place.
     if (haversineKm(nurse, dest) <= 0.06) {
       routeOriginRef.current = null;
+      hasRouteRef.current = false;
       setRoute(null);
       setNavSteps([]);
       return;
@@ -281,14 +323,22 @@ export default function ProTrackingScreen() {
     // is what makes it redraw instead of hanging around stale.
     const anchor = routeOriginRef.current;
     if (anchor && haversineKm(nurse, anchor) < 0.06) return;
-    if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < 10000) return;
+    if (reroutingRef.current) return;
+    // The 10s cooldown protects the router from a jittering GPS mid-trip. It
+    // must NOT delay the first line: the seed fix and the first accurate fix
+    // often arrive seconds apart and hundreds of metres apart, and swallowing
+    // the second one leaves the route anchored to a cached position.
+    if (hasRouteRef.current && Date.now() - lastRerouteAtRef.current < 10000) return;
     reroutingRef.current = true;
     lastRerouteAtRef.current = Date.now();
     routeOriginRef.current = nurse;
 
     void (async () => {
-      const { coords, steps } = await fetchRoute(nurse, dest, { steps: true });
+      const { coords, steps, fromRouter } = await fetchRoute(nurse, dest, { steps: true });
       setRoute(coords);
+      // A straight-line fallback is not a route. Leaving the flag false lets
+      // the next fix retry immediately instead of waiting out the cooldown.
+      hasRouteRef.current = fromRouter && coords.length >= 2;
       // Turn-by-turn steps → localised instructions
       const parsed: NavStep[] = steps.map((st) => {
         const p = parseManeuver(st.maneuver, st.name ?? "", t);
@@ -317,6 +367,7 @@ export default function ProTrackingScreen() {
   // at exactly the moment she needs the mission controls instead.
   useEffect(() => {
     if (booking?.status !== "in_progress") return;
+    hasRouteRef.current = false;
     setRoute(null);
     setNavSteps([]);
     trackingStore.setRoute(null);
@@ -477,6 +528,15 @@ export default function ProTrackingScreen() {
   const status = booking?.status;
   const farFromPatient = distanceKm != null && distanceKm > 0.2;
 
+  // A booking that has moved past `matched` was, by construction, already past
+  // this gate once — `en_route` is only reachable by pressing "Je pars" on the
+  // unlocked screen. So if we can't read the payment row (RLS hiccup, offline,
+  // realtime miss) but the booking says the trip is underway, the right answer
+  // is to trust the booking rather than lock a nurse out of her own navigation
+  // mid-journey.
+  const paymentSettled =
+    paymentReady || status === "en_route" || status === "in_progress";
+
   const fit = nurse && dest ? [nurse, dest] : undefined;
   const curStep = navSteps.length ? navSteps[Math.min(navIdx, navSteps.length - 1)] : null;
   const stepDistKm = curStep && nurse ? haversineKm(nurse, curStep.loc) : null;
@@ -507,7 +567,7 @@ export default function ProTrackingScreen() {
     transform: [{ translateY: sheetTranslateY.value }],
   }));
 
-  if (!loading && !paymentReady && status !== "completed" && status !== "cancelled") {
+  if (!loading && !paymentSettled && status !== "completed" && status !== "cancelled") {
     return (
       <View style={s.waitRoot}>
         <TouchableOpacity style={[s.iconBtn, s.waitBack]} onPress={() => router.back()} accessibilityLabel="Retour">
@@ -525,6 +585,20 @@ export default function ProTrackingScreen() {
             </View>
             <Text style={s.price}>{booking?.final_price_mad ?? booking?.budget_max_mad ?? "—"} MAD</Text>
           </View>
+          {/* The automatic paths above should always win. This is here so that
+              a nurse who KNOWS the patient has paid is never reduced to force-
+              quitting the app to find out. */}
+          <TouchableOpacity
+            style={s.waitRetry}
+            onPress={() => {
+              void refreshPayment().then((paid) => {
+                if (!paid) showToast(t("waiting_payment_title"));
+              });
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={s.waitRetryTxt}>{t("retry")}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -537,7 +611,7 @@ export default function ProTrackingScreen() {
           trip is actually `en_route`. Before departure there is nothing to
           share; after arrival the patient is standing next to them and
           continuing to transmit is battery drain plus a privacy problem. */}
-      {bookingId && paymentReady ? (
+      {bookingId && paymentSettled ? (
         <LiveTrackingChannel
           bookingId={bookingId}
           mode="broadcast"
@@ -809,4 +883,10 @@ const s = StyleSheet.create({
     backgroundColor: "#FFFFFF", borderRadius: 18, padding: 16,
     shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 4,
   },
+  waitRetry: {
+    marginTop: 14, height: 44, paddingHorizontal: 26, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF",
+  },
+  waitRetryTxt: { color: NAVY, fontSize: 14, fontWeight: "700" },
 });

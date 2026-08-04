@@ -164,8 +164,12 @@ export const geo = {
   },
 
   async getCurrentPosition(): Promise<{ lat: number; lng: number }> {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) {
+    // Read before asking. This is called on a 3-minute timer while a pro is
+    // online, and an unconditional request there is how a permission dialog
+    // ends up reappearing long after the user answered it.
+    let { granted } = await Location.getForegroundPermissionsAsync();
+    if (!granted) granted = (await Location.requestForegroundPermissionsAsync()).granted;
+    if (!granted) {
       throw new Error("Permission de localisation refusée.");
     }
 

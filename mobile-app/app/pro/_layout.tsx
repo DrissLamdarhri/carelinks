@@ -78,8 +78,15 @@ export default function ProLayout() {
     justifyContent: "center" as const,
     backgroundColor: focused ? "#EDE5CC" : "transparent",
   });
+  // `href: null` alone was not enough: `report/[bookingId]` still rendered as a
+  // sixth tab (labelled "report/[bo…", with a missing-glyph icon) on a real
+  // build. Whatever the resolution quirk is, a screen that has no button and no
+  // item box cannot appear in the bar under any router version — so we state it
+  // three ways rather than trust one.
   const hiddenTabOptions = {
     href: null,
+    tabBarButton: () => null,
+    tabBarItemStyle: { display: "none" },
     tabBarStyle: { display: "none" },
   } as const;
   const hiddenFullScreenOptions = {

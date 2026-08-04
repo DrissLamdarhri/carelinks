@@ -338,10 +338,18 @@ export default function NurseOffersScreen() {
                   </View>
                 </View>
 
-                <View style={styles.metaRow}>
-                  <MapPin size={12} color={Colors.textMuted} />
-                  <Text style={styles.metaText}>Réponse en {offer.eta_min ?? 30} min</Text>
-                </View>
+                {/* Only shown when the professional actually stated an ETA.
+                    It used to fall back to a hardcoded "30 min", which is a
+                    number the patient reads as a commitment and nobody made;
+                    and `?? 30` does not catch a stored 0, so a bid with no
+                    real ETA rendered as "Réponse en 0 min". A promise of zero
+                    minutes is worse than no promise. */}
+                {typeof offer.eta_min === "number" && offer.eta_min > 0 ? (
+                  <View style={styles.metaRow}>
+                    <Clock3 size={12} color={Colors.textMuted} />
+                    <Text style={styles.metaText}>Arrive en ~{offer.eta_min} min</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.actionsRow}>
                   <TouchableOpacity

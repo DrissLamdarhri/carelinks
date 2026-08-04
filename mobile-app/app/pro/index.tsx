@@ -11,11 +11,18 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import {
   Activity,
   Banknote,
   Bell,
   ChevronRight,
+  ChevronsUpDown,
   FileText,
   MapPin,
   Navigation,
@@ -142,6 +149,69 @@ export default function ProHomeScreen() {
   const activeMission =
     appointments.find((b) => b.status === "matched" || b.status === "en_route" || b.status === "in_progress") ?? null;
 
+  // ── Keeping the mission card honest ────────────────────────────────────────
+  // `appointments` was only ever refetched on focus, behind a 20s TTL. Finish a
+  // mission, tap back, and you land here inside that window: the booking is
+  // `completed` in the database but the local copy still says `in_progress`, so
+  // the big "Mission en cours" card stays on screen occupying the best real
+  // estate on the page and offering to navigate to a patient who has already
+  // been seen. Reported as "the card is stuck there and not synchronized".
+  //
+  // Two independent corrections, because one channel is one point of failure:
+  //  1. realtime, so the card disappears the moment the status changes even if
+  //     the pro never leaves this screen;
+  //  2. a targeted re-read of that one booking on focus, which costs a single
+  //     row and covers a realtime event that never arrived.
+  useEffect(() => {
+    if (!user?.id) return;
+    const ch = supabase
+      .channel(`pro-bookings-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bookings", filter: `professional_id=eq.${user.id}` },
+        (payload) => {
+          const next = payload.new as Booking | null;
+          if (!next?.id) return;
+          setAppointments((prev) => {
+            const i = prev.findIndex((b) => b.id === next.id);
+            if (i === -1) return next.status === "open" ? prev : [next, ...prev];
+            if (prev[i].status === next.status) return prev; // nothing visible changed
+            const copy = prev.slice();
+            copy[i] = { ...copy[i], ...next };
+            return copy;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [user?.id]);
+
+  const activeMissionId = activeMission?.id ?? null;
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeMissionId) return;
+      let alive = true;
+      void db.bookings
+        .get(activeMissionId)
+        .then((fresh) => {
+          if (!alive || !fresh?.id) return;
+          setAppointments((prev) =>
+            prev.some((b) => b.id === fresh.id && b.status !== fresh.status)
+              ? prev.map((b) => (b.id === fresh.id ? fresh : b))
+              : prev,
+          );
+        })
+        .catch(() => {
+          /* offline — the card stays until we can prove otherwise */
+        });
+      return () => {
+        alive = false;
+      };
+    }, [activeMissionId]),
+  );
+
   // ── Real stats ──────────────────────────────────────────────────────────────
   const now = new Date();
   const completed = appointments.filter((b) => b.status === "completed");
@@ -215,6 +285,53 @@ export default function ProHomeScreen() {
     return () => clearInterval(iv);
   }, [isOnline, user?.id]);
 
+  // ── Draggable header ───────────────────────────────────────────────────────
+  // The header used to be a fixed block: greeting, online switch and three stat
+  // cards, ~300px of it, before a mission card, two quick actions and the tab
+  // row. On a real phone that left a sliver for the request feed — the pro
+  // could not see the offers, which is the only thing on this screen that earns
+  // them money.
+  //
+  // Statistics are a "how am I doing" glance, not something you need while
+  // scanning for work, so they collapse by default and the pro pulls the handle
+  // DOWN to see them. Everything that is operational — who you are, and the
+  // online switch that decides whether you get demands at all — always stays.
+  //
+  // `expanded` is 0..1 rather than a boolean so the drag itself is continuous:
+  // the stats follow the finger and settle to whichever end is nearer (or
+  // whichever way it was flicked).
+  const expanded = useSharedValue(0);
+  const dragStart = useSharedValue(0);
+  const statsHeight = useSharedValue(78); // replaced by the real measurement
+  const settle = (to: number) => {
+    "worklet";
+    expanded.value = withSpring(to, { damping: 20, stiffness: 220, mass: 0.6 });
+  };
+  const headerPan = Gesture.Pan()
+    .onStart(() => {
+      dragStart.value = expanded.value;
+    })
+    .onUpdate((e) => {
+      const next = dragStart.value + e.translationY / Math.max(1, statsHeight.value);
+      expanded.value = Math.max(0, Math.min(1, next));
+    })
+    .onEnd((e) => {
+      if (e.velocityY > 350) settle(1);
+      else if (e.velocityY < -350) settle(0);
+      else settle(expanded.value > 0.5 ? 1 : 0);
+    });
+  const headerTap = Gesture.Tap().onEnd(() => {
+    settle(expanded.value > 0.5 ? 0 : 1);
+  });
+  const headerGesture = Gesture.Exclusive(headerPan, headerTap);
+  const statsAnimatedStyle = useAnimatedStyle(() => ({
+    height: statsHeight.value * expanded.value,
+    opacity: expanded.value,
+  }));
+  const handleAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${expanded.value * 180}deg` }],
+  }));
+
   return (
     <View style={styles.root}>
       {/* ── Header ── */}
@@ -261,8 +378,6 @@ export default function ProHomeScreen() {
           </View>
         </View>
 
-        {syncLabel ? <Text style={styles.syncLabel}>{syncLabel}</Text> : null}
-
         {/* Online switch — big + clear */}
         <TouchableOpacity onPress={toggleOnline} disabled={busy} activeOpacity={0.9} style={[styles.onlineCard, isOnline && styles.onlineCardOn]}>
           <View style={[styles.onlineDot, { backgroundColor: isOnline ? "#4ADE80" : "rgba(255,255,255,0.4)" }]} />
@@ -278,12 +393,36 @@ export default function ProHomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Real stats */}
-        <View style={styles.statsRow}>
-          <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label={t("today")} />
-          <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
-          <Stat icon={Activity} value={`${monthMissions}`} label={t("this_month")} />
-        </View>
+        {/* Real stats — collapsed by default, pull the handle down for them.
+            `overflow: hidden` is what turns the animated height into a reveal
+            rather than a squash; the inner view keeps its natural size and
+            reports it, so nothing here depends on a hardcoded constant. */}
+        <Animated.View style={[styles.statsClip, statsAnimatedStyle]}>
+          <View
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              if (h > 0) statsHeight.value = h;
+            }}
+          >
+            {syncLabel ? <Text style={styles.syncLabel}>{syncLabel}</Text> : null}
+            <View style={styles.statsRow}>
+              <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label={t("today")} />
+              <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
+              <Stat icon={Activity} value={`${monthMissions}`} label={t("this_month")} />
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* The grab handle. Deliberately a wide, shallow strip rather than a
+            small chevron: it is dragged with a thumb while walking. */}
+        <GestureDetector gesture={headerGesture}>
+          <View style={styles.headerHandleZone} accessibilityRole="button" accessibilityLabel={t("my_stats")}>
+            <View style={styles.headerHandleBar} />
+            <Animated.View style={handleAnimatedStyle}>
+              <ChevronsUpDown size={13} color="rgba(255,255,255,0.55)" />
+            </Animated.View>
+          </View>
+        </GestureDetector>
       </LinearGradient>
 
       {/* ── Active mission — always visible when present ── */}
@@ -482,7 +621,10 @@ function Stat({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
 
-  header: { paddingHorizontal: 20, paddingTop: 44, paddingBottom: 18, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
+  header: { paddingHorizontal: 20, paddingTop: 44, paddingBottom: 4, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
+  statsClip: { overflow: "hidden" },
+  headerHandleZone: { alignItems: "center", justifyContent: "center", gap: 3, paddingTop: 8, paddingBottom: 6 },
+  headerHandleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.28)" },
   headerTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   userWrap: { flexDirection: "row", alignItems: "center", gap: 11, flex: 1 },
   avatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)" },
@@ -490,7 +632,7 @@ const styles = StyleSheet.create({
   userName: { color: "white", fontSize: 18, fontWeight: "700" },
   headerIcons: { flexDirection: "row", alignItems: "center", gap: 8 },
   bell: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
-  syncLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: -6, marginBottom: 10 },
+  syncLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginBottom: 8 },
   bellBadge: { position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#E24B4A", alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
   bellBadgeTxt: { color: "white", fontSize: 9, fontWeight: "800" },
 
