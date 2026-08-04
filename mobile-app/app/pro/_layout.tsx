@@ -78,14 +78,17 @@ export default function ProLayout() {
     justifyContent: "center" as const,
     backgroundColor: focused ? "#EDE5CC" : "transparent",
   });
-  // `href: null` alone was not enough: `report/[bookingId]` still rendered as a
-  // sixth tab (labelled "report/[bo…", with a missing-glyph icon) on a real
-  // build. Whatever the resolution quirk is, a screen that has no button and no
-  // item box cannot appear in the bar under any router version — so we state it
-  // three ways rather than trust one.
+  // `report/[bookingId]` was seen rendering as a sixth tab (labelled
+  // "report/[bo…", with a missing-glyph icon) on an installed build, even
+  // though it is declared here with `href: null` like its siblings.
+  //
+  // `tabBarButton: () => null` is NOT the answer: expo-router treats `href` and
+  // `tabBarButton` as mutually exclusive and throws outright, taking the whole
+  // pro portal down with it. `href` stays the real mechanism; the item style is
+  // a harmless second layer that collapses the slot if the route ever fails to
+  // match this declaration.
   const hiddenTabOptions = {
     href: null,
-    tabBarButton: () => null,
     tabBarItemStyle: { display: "none" },
     tabBarStyle: { display: "none" },
   } as const;
