@@ -205,5 +205,36 @@ function ok(cond: boolean, msg: string): void {
   ok(new StallProbe().result().samples === 0, "empty stall probe should not throw");
 }
 
+// ── 12. Assets referenced by candidates actually exist ─────────────────────
+// REGRESSION: the marker PNG was generated into the wrong directory (repo root
+// instead of mobile-app/), so `git add mobile-app/assets` matched nothing,
+// silently succeeded, and a commit shipped referencing a file that was not in
+// the repo at all. Metro only caught it at bundle time, on the device. A
+// require() of a missing asset is a build break, not a type error, so tsc will
+// never see it — this check is the only cheap place to catch it.
+{
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require("fs") as typeof import("fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path") as typeof import("path");
+
+  const importers: [string, string][] = [
+    ["lib/tracking/bench/SymbolLayerCandidate.tsx", "../../../assets/tracking/marker-arrow.png"],
+    ["lib/tracking/bench/ViewAnnotationCandidate.tsx", "../../../assets/tracking/marker-arrow.png"],
+  ];
+  // Tests run from .motion-replay/, so resolve against the package root.
+  const root = path.resolve(__dirname, "..");
+  let missing = 0;
+  for (const [importer, rel] of importers) {
+    const resolved = path.resolve(root, path.dirname(importer), rel);
+    if (!fs.existsSync(resolved)) {
+      console.log(`  missing asset: ${importer} -> ${rel}`);
+      missing++;
+    }
+  }
+  console.log(`12. assets: ${importers.length} references checked, missing=${missing}`);
+  ok(missing === 0, "a candidate requires an asset that does not exist — Metro will fail to bundle");
+}
+
 console.log(failures === 0 ? "\nALL BENCH-FRAMEWORK CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
