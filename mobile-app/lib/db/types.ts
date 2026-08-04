@@ -113,6 +113,7 @@ export interface OpenDemand {
   area_label: string | null; // "Agdal, Fès" — district + city, never the street
   approx_lat: number | null; // fuzzed to a ~1 km grid
   approx_lng: number | null;
+  care_type: string | null; // specific care picked (0050), e.g. "Pansement"
   created_at: ISODate;
 }
 
@@ -150,6 +151,9 @@ export interface Booking {
   // Yoga classes (0043) — which session this reservation is for, set at
   // creation time, before payment/enrollment exist.
   yoga_session_id: UUID | null;
+  // The specific care picked on the request form (0050), e.g. "Pansement" /
+  // "Injection IM" — null for services with no sub-type picker (yoga, psy).
+  care_type: string | null;
 }
 
 export interface Bid {
@@ -257,6 +261,44 @@ export interface Subscription {
   features: string[];
   created_at: ISODate;
   updated_at: ISODate;
+}
+
+/**
+ * Server-owned lifecycle of a live tracking session (migration 0051).
+ *
+ *  pending → channels open at bid acceptance; NO GPS may flow yet
+ *  active  → nurse pressed "Je pars" (booking `en_route`); GPS permitted
+ *  ended   → arrived / completed / cancelled / expired; permanently closed
+ *
+ * The client never writes any of this — it is derived from `bookings.status`
+ * by a database trigger, and Realtime Authorization (0052) reads it to decide
+ * who may join which stream.
+ */
+export type TrackingSessionStatus = "pending" | "active" | "ended";
+export type TrackingEndReason = "arrived" | "completed" | "cancelled" | "expired";
+
+export interface TrackingSession {
+  id: UUID;
+  booking_id: UUID;
+  patient_id: UUID;
+  pro_id: UUID;
+  status: TrackingSessionStatus;
+  created_at: ISODate;
+  gps_started_at: ISODate | null;
+  ended_at: ISODate | null;
+  end_reason: TrackingEndReason | null;
+  /** Last known professional position — cold-start seed, written ~every 15 s. */
+  last_lat: number | null;
+  last_lng: number | null;
+  last_heading: number | null;
+  last_speed: number | null;
+  last_seq: number;
+  last_at: ISODate | null;
+  /** Patient's opt-in live-location share (never set by a trigger). */
+  patient_share_granted_at: ISODate | null;
+  patient_share_expires_at: ISODate | null;
+  patient_share_revoked_at: ISODate | null;
+  patient_share_declined_at: ISODate | null;
 }
 
 export function toDbSpecialty(key: string): ProSpecialty {

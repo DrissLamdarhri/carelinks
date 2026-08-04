@@ -59,6 +59,7 @@ function circleFeature(center: LatLng, radiusKm: number, steps = 64): GeoJSON.Fe
 export default function CareLinkMapNative({
   center,
   patient,
+  meHeading,
   destination,
   pros = [],
   pro,
@@ -79,12 +80,16 @@ export default function CareLinkMapNative({
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
 
-  // Driver heading (deg) for the marker pointer — direction of travel along the route.
+  // Driver heading (deg) for the marker pointer — prefer the pro's real GPS
+  // course (reported live, only valid while actually moving) over the
+  // route-derived bearing, which is just a fallback for when the device
+  // hasn't reported a usable heading yet (stationary, cold GPS fix, demo path).
   const driverBearing = useMemo(() => {
+    if (pro?.heading != null) return pro.heading;
     if (!route || route.length < 2) return 0;
     const i = Math.min(progressIdx, route.length - 2);
     return bearingDeg(route[i], route[i + 1]);
-  }, [route, progressIdx]);
+  }, [pro?.heading, route, progressIdx]);
   // Memoized GeoJSON so frequent driver-position updates don't re-upload
   // unchanged sources (which caused flicker). Each segment needs ≥2 points.
   const radiusData = useMemo(
@@ -114,7 +119,18 @@ export default function CareLinkMapNative({
   // patient's location actually changes (GPS / pin), not every render.
   const cameraRef = useRef<CameraRef>(null);
   const didFit = useRef(false);
-  const hasRoute = !!(fitCoords && fitCoords.length >= 2);
+  // A bounding box needs actual area. When every point in `fitCoords` is the
+  // same place (pro standing at the patient's door, two test phones on one
+  // desk), fitBounds gets a zero-area box and MapLibre snaps the camera to a
+  // meaningless zoom — the map just goes blank. Treat that as "no route" and
+  // fly to the point instead.
+  const fitSpan = useMemo(() => {
+    if (!fitCoords || fitCoords.length < 2) return 0;
+    const lngs = fitCoords.map((c) => c.lng);
+    const lats = fitCoords.map((c) => c.lat);
+    return Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));
+  }, [fitCoords]);
+  const hasRoute = fitSpan > 0.0004; // ≈45 m — below this there's nothing to frame
 
   useEffect(() => {
     const cam = cameraRef.current;
@@ -261,7 +277,7 @@ export default function CareLinkMapNative({
 
       {patient ? (
         <ViewAnnotation lngLat={[patient.lng, patient.lat]} anchor="center">
-          <MeMarker />
+          <MeMarker heading={meHeading} />
         </ViewAnnotation>
       ) : null}
 

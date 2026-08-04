@@ -29,9 +29,14 @@ import { useAuth } from "@/lib/auth-context";
 import { YogaReminderModalHost } from "@/components/YogaReminderModal";
 import { showYogaReminderPopup } from "@/lib/yoga-reminder-popup";
 import { AppAlertHost } from "@/components/AppAlertHost";
+import { reconcileLiveLocationOnStartup } from "@/lib/live-location";
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
+// Importing this module registers the background location task. It MUST happen
+// at the app entry, not inside a screen: the OS can relaunch the app headless
+// straight into the task, with no component ever mounting.
+void reconcileLiveLocationOnStartup();
 
 function DeepLinkHandler() {
   const router = useRouter();

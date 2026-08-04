@@ -34,6 +34,8 @@ export type CareLinkMapViewProps = {
   center: LatLng;
   /** Patient ("Vous") pin + radius origin. */
   patient?: LatLng;
+  /** Live compass heading (0–360°) for the "you are here" pin's facing cone. */
+  meHeading?: number | null;
   /** Destination drop-pin (e.g. the patient's home on the nurse's navigation map). */
   destination?: LatLng;
   /** Nearby professionals to plot. */
@@ -45,6 +47,8 @@ export type CareLinkMapViewProps = {
     initials?: string;
     specialty?: string;
     name?: string;
+    /** Real device heading (deg, from GPS course) — preferred over the route-derived bearing when available. */
+    heading?: number | null;
   };
   /** Road-following route polyline. */
   route?: LatLng[];
@@ -113,6 +117,7 @@ export function CareLinkMapView(props: CareLinkMapViewProps) {
 function FallbackMap({
   center,
   patient,
+  meHeading,
   destination,
   pros = [],
   pro,
@@ -178,7 +183,7 @@ function FallbackMap({
 
       {patient ? (
         <View pointerEvents="none" style={[fb.pin, { left: toXY(patient).x - 13, top: toXY(patient).y - 13 }]}>
-          <MeMarker />
+          <MeMarker heading={meHeading} />
         </View>
       ) : null}
 

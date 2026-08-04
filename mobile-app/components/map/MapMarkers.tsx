@@ -15,7 +15,7 @@ import {
   View,
   type ImageSourcePropType,
 } from "react-native";
-import { Flag } from "lucide-react-native";
+import { Flag, Navigation } from "lucide-react-native";
 import { specialtyColor } from "./engine";
 import { useReducedMotion } from "@/lib/a11y";
 
@@ -193,8 +193,12 @@ function DriverPulse({ size, color }: { size: number; color: string }) {
 
 /** "You are here" — bright cyan puck (distinct from the navy destination pin
  *  at a glance) with two offset-phase ripple rings and a white halo so it
- *  reads clearly against both the light and dark map styles. Anchor center. */
-export function MeMarker() {
+ *  reads clearly against both the light and dark map styles. Anchor center.
+ *  Optional `heading` (0–360°, from the device compass) swaps the plain dot
+ *  for a solid navy arrow that rotates to point exactly the way the viewer
+ *  is physically facing — an unambiguous direction indicator, not a subtle
+ *  cone. Falls back to the plain dot while no heading is available yet. */
+export function MeMarker({ heading }: { heading?: number | null } = {}) {
   const reduced = useReducedMotion();
   const a = useRef(new Animated.Value(0)).current;
   const b = useRef(new Animated.Value(0)).current;
@@ -223,9 +227,17 @@ export function MeMarker() {
     <View style={styles.meWrap} pointerEvents="none">
       <Animated.View style={[styles.meRing, ringStyle(a)]} />
       <Animated.View style={[styles.meRing, ringStyle(b)]} />
-      <View style={styles.meHalo}>
-        <View style={styles.meDot} />
-      </View>
+      {heading != null ? (
+        // Bold filled arrow (navy body, white outline) so it stays readable on
+        // the dark map and the facing direction is unmistakable at a glance.
+        <View style={[styles.meArrow, { transform: [{ rotate: `${heading}deg` }] }]}>
+          <Navigation size={30} color="#FFFFFF" fill={NAVY} strokeWidth={2} />
+        </View>
+      ) : (
+        <View style={styles.meHalo}>
+          <View style={styles.meDot} />
+        </View>
+      )}
     </View>
   );
 }
@@ -317,6 +329,11 @@ const styles = StyleSheet.create({
   },
 
   meWrap: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  // NO elevation / shadow here. Android renders `elevation` as a shadow of the
+  // view's RECTANGULAR bounds — it can't derive the silhouette from an SVG
+  // child — so a drop shadow on this wrapper paints a visible grey box behind
+  // the arrow. Contrast comes from the arrow's own white stroke instead.
+  meArrow: { alignItems: "center", justifyContent: "center" },
   meRing: { position: "absolute", width: 34, height: 34, borderRadius: 17, backgroundColor: CYAN },
   meHalo: {
     width: 26,

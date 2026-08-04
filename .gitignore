@@ -84,3 +84,7 @@ coverage/
 .AppleDouble
 .LSOverride
 *.swp
+
+# Build artifacts
+*.apk
+*.aab

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { tracking } from "./tracking";
 import type {
   Address,
   Bid,
@@ -297,10 +298,6 @@ export const bookings = {
     if (status === "completed") patch.completed_at = new Date().toISOString();
     if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
     return unwrap(await supabase.from("bookings").update(patch).eq("id", id).select("*").single());
-  },
-  // Nurse marks "I'm leaving / en route" (matched → en_route). Enables RULE #3.
-  async markEnRoute(id: UUID): Promise<Booking> {
-    return this.setStatus(id, "en_route");
   },
   // Cancel via the escrow-aware RPC. The RPC picks the cancellation rule (1-4)
   // from the booking status + who is cancelling (patient vs nurse), settles the
@@ -667,8 +664,11 @@ export const payouts = {
   },
 };
 
+export { tracking } from "./tracking";
+
 export const db = {
   profiles,
+  tracking,
   patients,
   pros,
   proDocuments,

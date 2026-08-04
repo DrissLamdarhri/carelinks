@@ -37,6 +37,10 @@ import { showToast } from "@/lib/toast";
 import { haptics } from "@/lib/haptics";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
+import { useGlidingPosition } from "@/lib/hooks/useGlidingPosition";
+import { useForegroundPosition } from "@/lib/hooks/useForegroundPosition";
+import { fetchRoute } from "@/lib/routing";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
@@ -122,7 +126,12 @@ export default function ProTrackingScreen() {
           /* RPC not deployed — fall through */
         }
         if (!d && b.address) d = await geo.geocodeAddress(b.address);
-        if (!cancelled) setDest(d ?? MAP_CENTER);
+        // No MAP_CENTER fallback: defaulting to a hardcoded point in Fès meant
+        // that whenever the RPC and the geocoder both came up empty, the app
+        // confidently drew a road route to an address nobody lives at — and
+        // measured "distance to patient" against it. If we don't know where the
+        // patient is, we say so (no pin, no route) instead of inventing it.
+        if (!cancelled) setDest(d);
       } catch {
         if (!cancelled) showToast(t("reservation_not_found"));
       } finally {
@@ -153,18 +162,18 @@ export default function ProTrackingScreen() {
     };
   }, [bookingId, paymentReady]);
 
-  // Opening this screen IS setting out — the GPS broadcast starts the moment
-  // it renders. Advance `matched → en_route` so the patient immediately sees
-  // movement and the booking never stalls in `matched` waiting on a tap
-  // nobody remembers to make (that stall is what froze 85 bookings) — but
-  // only once payment is actually secured, matching the map gate above.
-  useEffect(() => {
-    if (!paymentReady || !booking || booking.status !== "matched") return;
-    db.bookings
-      .markEnRoute(booking.id)
-      .then(setBooking)
-      .catch(() => { /* non-blocking — the manual button still works */ });
-  }, [paymentReady, booking]);
+  // Departure is an explicit act, never a side effect of opening a screen.
+  //
+  // This used to auto-advance `matched → en_route` on render, which meant that
+  // merely LOOKING at the booking — to check the address, read the notes, see
+  // who the patient was — started broadcasting the nurse's live location and
+  // told the patient she was on her way. A professional reviewing a job before
+  // leaving, still finishing another visit, or preparing equipment was silently
+  // put on the map. `en_route` now happens only when they press "Je pars".
+  //
+  // The original motivation (85 bookings frozen in `matched`) is real, but the
+  // fix for a stalled booking is the timeout sweep in migration 0027, not
+  // lying about where a nurse is.
 
   // Stay honest about the booking's real status: this screen used to have no
   // idea if the booking was cancelled by the patient (or by this same pro,
@@ -197,62 +206,80 @@ export default function ProTrackingScreen() {
     };
   }, [bookingId, router, t]);
 
-  // The nurse's live GPS is watched + broadcast to the patient by
-  // <LiveTrackingChannel mode="broadcast"> below; onPosition updates our map.
+  // While en route, positions come from the background location service via
+  // <LiveTrackingChannel mode="broadcast"> below (it owns the GPS and is the
+  // only thing that publishes). Before departure and after arrival nothing is
+  // being shared, so a light foreground watch keeps the nurse visible on their
+  // own map without running a second watch against the sensor.
   const onNursePosition = useCallback((p: { lat: number; lng: number }) => {
     setNurse({ lat: p.lat, lng: p.lng });
   }, []);
-
-  // Arriving starts the visit on its own: `en_route → in_progress` as soon as the
-  // nurse's GPS is within ~80 m of the patient. The pro has their hands full on
-  // arrival, so waiting for a button here is what leaves escrow in limbo.
-  const arrivalMarked = useRef(false);
+  const broadcasting = booking?.status === "en_route";
+  const ownPosition = useForegroundPosition(!broadcasting);
   useEffect(() => {
-    if (arrivalMarked.current || !nurse || !dest || !booking) return;
-    if (booking.status !== "en_route") return;
-    if (haversineKm(nurse, dest) > 0.08) return;
-    arrivalMarked.current = true;
-    db.bookings
-      .setStatus(booking.id, "in_progress")
-      .then(setBooking)
-      .catch(() => { arrivalMarked.current = false; });
-  }, [nurse, dest, booking]);
+    if (!broadcasting && ownPosition) setNurse(ownPosition);
+  }, [broadcasting, ownPosition]);
 
-  // ── Fetch the road route once both endpoints are known ─────────────────────
-  const routeFetched = useRef(false);
+  // Arrival is NEVER inferred from GPS proximity. It used to auto-advance
+  // `en_route → in_progress` within 80 m of `dest`, which fired on a coarse
+  // geocoded destination and told the patient "Arrivé !" while the pro was
+  // still on the road. Only the pro pressing "Je suis arrivé" below moves the
+  // booking forward.
+
+  // ── Fetch the road route, and re-fetch if the nurse drifts off it ──────────
+  // Used to fetch exactly once (`routeFetched.current` latch) and never again
+  // — if the nurse took a different street than OSRM's first guess, the drawn
+  // line just stayed put, disconnected from where they actually were. Now it
+  // re-routes whenever the live position strays ~75m from the drawn path.
+  const reroutingRef = useRef(false);
+  const lastRerouteAtRef = useRef(0);
+  const routeOriginRef = useRef<LatLng | null>(null);
   useEffect(() => {
-    if (routeFetched.current || !nurse || !dest) return;
-    routeFetched.current = true;
+    if (!nurse || !dest) return;
+
+    // Standing at the door: nothing to route. Clearing beats drawing a residual
+    // squiggle between two points that are the same place.
+    if (haversineKm(nurse, dest) <= 0.06) {
+      routeOriginRef.current = null;
+      setRoute(null);
+      setNavSteps([]);
+      return;
+    }
+
+    // The line must start where the nurse IS. Anchoring on the origin it was
+    // computed from (rather than on distance to the nearest point of the line)
+    // is what makes it redraw instead of hanging around stale.
+    const anchor = routeOriginRef.current;
+    if (anchor && haversineKm(nurse, anchor) < 0.06) return;
+    if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < 10000) return;
+    reroutingRef.current = true;
+    lastRerouteAtRef.current = Date.now();
+    routeOriginRef.current = nurse;
+
     void (async () => {
-      try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${nurse.lng},${nurse.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`;
-        const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 5000);
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timeoutId);
-        const body = await res.json();
-        const r = body.routes?.[0];
-        const coords: LatLng[] | undefined = r?.geometry?.coordinates?.map(
-          (c: number[]) => ({ lat: c[1], lng: c[0] }),
-        );
-        setRoute(coords && coords.length >= 2 ? coords : [nurse, dest]);
-        // Turn-by-turn steps → French instructions
-        const rawSteps: any[] = r?.legs?.[0]?.steps ?? [];
-        const parsed: NavStep[] = rawSteps
-          .filter((st) => Array.isArray(st?.maneuver?.location))
-          .map((st) => {
-            const p = parseManeuver(st.maneuver, st.name ?? "", t);
-            return { instruction: p.instruction, dir: p.dir, loc: { lat: st.maneuver.location[1], lng: st.maneuver.location[0] } };
-          });
-        if (parsed.length) {
-          setNavSteps(parsed);
-          setNavIdx(parsed.length > 1 && parsed[0].dir !== "arrive" ? 1 : 0); // skip "depart"
-        }
-      } catch {
-        setRoute([nurse, dest]);
+      const { coords, steps } = await fetchRoute(nurse, dest, { steps: true });
+      setRoute(coords);
+      // Turn-by-turn steps → localised instructions
+      const parsed: NavStep[] = steps.map((st) => {
+        const p = parseManeuver(st.maneuver, st.name ?? "", t);
+        return {
+          instruction: p.instruction,
+          dir: p.dir,
+          loc: { lat: st.maneuver.location[1], lng: st.maneuver.location[0] },
+        };
+      });
+      if (parsed.length) {
+        setNavSteps(parsed);
+        setNavIdx(parsed.length > 1 && parsed[0].dir !== "arrive" ? 1 : 0); // skip "depart"
       }
+      reroutingRef.current = false;
     })();
-  }, [nurse, dest]);
+  }, [nurse, dest, t]);
+
+  // Own compass heading (facing cone on the "you are here" marker) + a smooth
+  // glide between GPS fixes instead of the dot snapping every ~2s.
+  const meHeading = useDeviceHeading();
+  const glidingNurse = useGlidingPosition(nurse);
 
   // Advance the turn instruction as the nurse reaches each maneuver point.
   useEffect(() => {
@@ -382,9 +409,17 @@ export default function ProTrackingScreen() {
   return (
     <View style={s.root}>
       {/* Broadcast the nurse's real GPS to the patient's live tracking — only
-          once a real payment exists, per the gate above. */}
+          once a real payment exists, per the gate above, and only while the
+          trip is actually `en_route`. Before departure there is nothing to
+          share; after arrival the patient is standing next to them and
+          continuing to transmit is battery drain plus a privacy problem. */}
       {bookingId && paymentReady ? (
-        <LiveTrackingChannel bookingId={bookingId} mode="broadcast" onPosition={onNursePosition} />
+        <LiveTrackingChannel
+          bookingId={bookingId}
+          mode="broadcast"
+          onPosition={onNursePosition}
+          active={status === "en_route"}
+        />
       ) : null}
 
       <View style={[s.mapWrap, StyleSheet.absoluteFillObject]}>
@@ -393,7 +428,8 @@ export default function ProTrackingScreen() {
         ) : (
           <CareLinkMapView
             center={nurse ?? dest ?? MAP_CENTER}
-            patient={nurse ?? undefined}
+            patient={glidingNurse ?? undefined}
+            meHeading={meHeading}
             destination={dest ?? undefined}
             route={route ?? undefined}
             fitCoords={fit}
@@ -479,11 +515,11 @@ export default function ProTrackingScreen() {
             style={[s.statusBtn, farFromPatient && s.statusBtnFar]}
             disabled={busy}
             onPress={() => {
-              // Same ~200m courtesy check the automatic effect above already
-              // uses at 80m — a professional confirmation shouldn't be
-              // tappable from across town. If we simply have no live GPS
-              // (nurse === null), trust the manual tap instead of blocking a
-              // mission that has to move forward somehow.
+              // ~200m courtesy check — a professional confirmation shouldn't be
+              // tappable from across town. If we have no live GPS or no known
+              // destination, trust the manual tap instead of blocking a mission
+              // that has to move forward somehow. This tap is the ONLY thing
+              // that marks arrival; nothing infers it from proximity.
               if (farFromPatient) {
                 showToast(t("too_far_to_arrive"));
                 return;
