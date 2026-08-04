@@ -969,7 +969,17 @@ export default function LiveTrackingScreen() {
       // Pro origin = matched pro's last reported coords from the public view.
       if (booking.professional_id) {
         try {
-          proOrigin = await geo.getProCoords(booking.professional_id);
+          // The SESSION's last known position first. live-location.ts persists
+          // the professional's real position here every ~15s during the trip,
+          // so this is where they actually are. `v_pros_public` below is only
+          // written when a pro toggles online or edits their profile — it can be
+          // hours old and kilometres away, and seeding from it means a patient
+          // reopening the screen mid-journey sees the wrong place entirely.
+          const session = await db.tracking.get(booking.id).catch(() => null);
+          if (session?.last_lat != null && session?.last_lng != null) {
+            proOrigin = { lat: session.last_lat, lng: session.last_lng };
+          }
+          if (!proOrigin) proOrigin = await geo.getProCoords(booking.professional_id);
         } catch {
           // ignore
         }
