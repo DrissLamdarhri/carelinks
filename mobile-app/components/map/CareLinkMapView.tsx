@@ -91,6 +91,17 @@ export type CareLinkMapViewProps = {
    * road AHEAD stays visible — which is where someone actually looks.
    */
   trackingPaddingBottom?: number;
+  /**
+   * Metres travelled along the route, used to split it into travelled and
+   * remaining.
+   *
+   * A DISTANCE, not an index. The screen previously computed an index against
+   * its own copy of the coordinates while the map sliced the array it actually
+   * draws; the two only agree if neither has been cleaned or resampled, and
+   * when they disagree the travelled portion silently stops advancing — the
+   * route appears frozen while the marker drives on.
+   */
+  trackingProgressM?: number | null;
   style?: StyleProp<ViewStyle>;
 };
 

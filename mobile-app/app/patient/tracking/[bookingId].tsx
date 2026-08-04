@@ -1033,6 +1033,12 @@ export default function LiveTrackingScreen() {
   // have lost signal, killed the app, or driven into a tunnel.
   const [lastFixAt, setLastFixAt] = useState<number | null>(null);
 
+  // Metres travelled along the drawn route. Updated once per GPS fix — the
+  // travelled/remaining split does not need frame precision, and re-rendering
+  // the screen at 60Hz to move a colour boundary is the pathology Phase 2
+  // removed.
+  const [routeProgressM, setRouteProgressM] = useState<number | null>(null);
+
   // ── Live motion pipeline (real bookings only) ─────────────────────────────
   // Demo bookings keep their existing scripted animation: they already move
   // smoothly on their own 120ms tick, and pushing them through a pipeline that
@@ -1083,6 +1089,7 @@ export default function LiveTrackingScreen() {
       seq: pos.seq ?? Date.now(),
       receivedAt: Date.now(),
     });
+    setRouteProgressM(trackingStore?.routeOffsetM ?? null);
     // capture first seen pro origin for routing (only if not demo)
     if (!isDemoBooking && !liveProOrigin) {
       setLiveProOrigin({ lat: pos.lat, lng: pos.lng });
@@ -1303,6 +1310,7 @@ export default function LiveTrackingScreen() {
           trackingStore={trackingStore}
           trackingArrived={arrived}
           trackingPaddingBottom={FRAME_PAD}
+          trackingProgressM={routeProgressM}
           pro={
             (isDemoBooking ? glidingProCoord : proCoord)
               ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }

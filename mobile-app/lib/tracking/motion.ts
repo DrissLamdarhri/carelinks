@@ -219,6 +219,11 @@ export class MotionTrack {
     return this.route?.usable ? this.route.renderPath() : null;
   }
 
+  /** Distance along the attached route of the newest matched fix, in metres. */
+  get routeOffsetM(): number | null {
+    return this.matches.length ? (this.matches[this.matches.length - 1]?.offsetM ?? null) : null;
+  }
+
   get routeDeviationM(): number | null {
     return this.matches.length ? (this.matches[this.matches.length - 1]?.deviationM ?? null) : null;
   }

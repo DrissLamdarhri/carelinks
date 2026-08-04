@@ -82,6 +82,7 @@ export default function CareLinkMapNative({
   trackingArrived,
   trackingVariant,
   trackingPaddingBottom,
+  trackingProgressM,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -116,18 +117,35 @@ export default function CareLinkMapNative({
   // are only metres apart, so the seam still lands under the marker — but it
   // lands ON THE ROAD, because it IS the road.
   const splitPt = trackingStore ? null : pro ? { lat: pro.lat, lng: pro.lng } : null;
+  // Where to break the line, expressed as an INDEX INTO THE ARRAY BEING DRAWN.
+  // When tracking, it is derived from metres travelled along that same array,
+  // so the split cannot drift out of step with the geometry on screen.
+  const splitIdx = useMemo(() => {
+    if (!route || route.length < 2) return progressIdx;
+    if (trackingProgressM == null) return progressIdx;
+    let acc = 0;
+    for (let i = 1; i < route.length; i++) {
+      const dLat = (route[i].lat - route[i - 1].lat) * 111_320;
+      const dLng =
+        (route[i].lng - route[i - 1].lng) * 111_320 * Math.cos((route[i].lat * Math.PI) / 180);
+      acc += Math.hypot(dLat, dLng);
+      if (acc >= trackingProgressM) return i;
+    }
+    return route.length - 1;
+  }, [route, progressIdx, trackingProgressM]);
+
   const traversedData = useMemo(() => {
     if (!route || route.length < 2) return null;
-    const pts = [...route.slice(0, progressIdx + 1), ...(splitPt ? [splitPt] : [])];
+    const pts = [...route.slice(0, splitIdx + 1), ...(splitPt ? [splitPt] : [])];
     return pts.length >= 2 ? lineFeature(pts) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, progressIdx, splitPt?.lat, splitPt?.lng]);
+  }, [route, splitIdx, splitPt?.lat, splitPt?.lng]);
   const remainingData = useMemo(() => {
     if (!route || route.length < 2) return null;
-    const pts = [...(splitPt ? [splitPt] : []), ...route.slice(progressIdx + 1)];
+    const pts = [...(splitPt ? [splitPt] : []), ...route.slice(splitIdx)];
     return pts.length >= 2 ? lineFeature(pts) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, progressIdx, splitPt?.lat, splitPt?.lng]);
+  }, [route, splitIdx, splitPt?.lat, splitPt?.lng]);
 
   // ── Camera: framed ONCE, then user-controlled (no fighting the finger) ──────
   // Tracking (has a route): fit the whole journey once → the driver glides

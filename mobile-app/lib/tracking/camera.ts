@@ -215,9 +215,21 @@ export function nextCameraCommand(
   const allowedM = (viewportSpanM(zoom, usablePx, input.target.lat) * DEAD_ZONE) / 2;
   if (input.distanceFromCenterM < allowedM) return { state, command: null };
 
+  // Far outside the frame — the subject is not merely drifting, they are
+  // off-screen. Easing over more than a second means staring at empty map
+  // hunting for the marker, which is exactly what happens at the start of a
+  // trip when the professional begins a kilometre away. Snap, then resume
+  // normal easing.
+  const lost = input.distanceFromCenterM > allowedM * 3;
   return {
     state: { ...state, center: input.target },
-    command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: DRIFT_MS, reason: "drift" },
+    command: {
+      center: input.target,
+      zoom,
+      pitch: TRACKING_PITCH,
+      durationMs: lost ? 0 : DRIFT_MS,
+      reason: lost ? "initial" : "drift",
+    },
   };
 }
 

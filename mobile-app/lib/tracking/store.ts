@@ -162,6 +162,11 @@ export class TrackingStore {
     return this.track.renderRoute;
   }
 
+  /** How far along the road the marker has travelled, in metres. */
+  get routeOffsetM(): number | null {
+    return this.track.routeOffsetM;
+  }
+
   /** Lateral distance of the newest fix from the route; null when unmatched. */
   get routeDeviationM(): number | null {
     return this.track.routeDeviationM;
