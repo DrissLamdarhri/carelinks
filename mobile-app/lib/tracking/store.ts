@@ -142,6 +142,13 @@ export class TrackingStore {
     return this.track.latest;
   }
 
+  /** Filter rejections by reason. Surfaced for the benchmark harness and for
+   *  diagnostics: a spike in `inaccurate` is a bad GPS environment, a spike in
+   *  `stale-seq` is a misbehaving transport. */
+  rejectionCounts(): Readonly<Record<RejectReason, number>> {
+    return this.track.rejected;
+  }
+
   // ── React-compatible external store ───────────────────────────────────────
   /** Subscribe to animated motion updates. Returns an unsubscribe function. */
   subscribe = (listener: () => void): (() => void) => {
