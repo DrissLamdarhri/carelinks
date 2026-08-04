@@ -167,6 +167,12 @@ export class TrackingStore {
     return this.track.routeDeviationM;
   }
 
+  /** True once several consecutive fixes agree the road was left — see
+   *  MotionTrack.isOffRoute for why one fix is not enough. */
+  isOffRoute(thresholdM: number, samples = 3): boolean {
+    return this.track.isOffRoute(thresholdM, samples);
+  }
+
   /** Filter rejections by reason. Surfaced for the benchmark harness and for
    *  diagnostics: a spike in `inaccurate` is a bad GPS environment, a spike in
    *  `stale-seq` is a misbehaving transport. */

@@ -534,6 +534,7 @@ import { supabase } from "@/lib/supabase";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { fetchRoute } from "@/lib/routing";
 import { TrackingStore } from "@/lib/tracking/store";
+import { Route } from "@/lib/tracking/route";
 import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
 import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
@@ -1029,6 +1030,27 @@ export default function LiveTrackingScreen() {
     trackingStore?.setRoute(routeCoords ?? null);
   }, [trackingStore, routeCoords]);
 
+  /**
+   * The polyline to DRAW — derived synchronously from the same coordinates the
+   * store is given, never read back off the store.
+   *
+   * Reading `trackingStore.renderRoute` during render looked equivalent and was
+   * not: `setRoute` runs in an effect AFTER render, so the frame that follows a
+   * refetch drew the PREVIOUS curve while the marker was already matched to the
+   * new one — and because a store getter cannot trigger a re-render, the map
+   * kept drawing the stale line indefinitely. The marker and the road were
+   * literally on two different geometries, which is the few-pixel offset that
+   * survived the last fix.
+   *
+   * Both sides now build a Route from the identical array, and Route is
+   * deterministic, so the drawn curve and the driven curve are the same points
+   * by construction.
+   */
+  const drawnRoute = useMemo(
+    () => (routeCoords && routeCoords.length >= 2 ? new Route(routeCoords).renderPath() : routeCoords),
+    [routeCoords],
+  );
+
   const handlePosition = useCallback((pos: TrackPosition) => {
     liveActiveRef.current = true;
     setProLive(true);
@@ -1086,6 +1108,15 @@ export default function LiveTrackingScreen() {
    * trigger a recompute — only actually taking a different street does.
    */
   const OFF_ROUTE_M = 45;
+  /**
+   * Minimum gap between route requests.
+   *
+   * Was 10s, which is slow enough to be noticed as the map insisting on a road
+   * the nurse has visibly abandoned. Three consecutive fixes already take ~4.5s
+   * to accumulate, so the deviation is well established by the time this fires
+   * and there is no need to wait further.
+   */
+  const REROUTE_COOLDOWN_MS = 4000;
   const reroutingRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const routeOriginRef = useRef<LatLng | null>(null);
@@ -1108,11 +1139,15 @@ export default function LiveTrackingScreen() {
     // It also hammered the routing server for no reason.
     //
     // Travelling along a road is not a reason to recompute it. Being off it is.
-    const deviation = trackingStore?.routeDeviationM ?? null;
+    // REALITY WINS OVER THE PLAN — but only once reality has said so more than
+    // once. A sustained deviation across several consecutive fixes means the
+    // professional genuinely took another street; a single 60m outlier is a
+    // multipath bounce off a building, and re-routing on it would discard a
+    // perfectly good road.
     const haveRoute = !!routeCoords && routeCoords.length >= 2;
-    const offRoute = haveRoute && (deviation == null || deviation > OFF_ROUTE_M);
+    const offRoute = haveRoute && !!trackingStore?.isOffRoute(OFF_ROUTE_M, 3);
     if (haveRoute && !offRoute) return;
-    if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < 10000) return;
+    if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < REROUTE_COOLDOWN_MS) return;
 
     const origin = proCoord;
     reroutingRef.current = true;
@@ -1256,9 +1291,8 @@ export default function LiveTrackingScreen() {
               ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
               : undefined
           }
-          // The SMOOTHED curve, which is exactly the path the marker walks —
-          // drawing the raw polyline instead left a visible gap on bends.
-          route={trackingStore?.renderRoute ?? routeCoords ?? undefined}
+          // The SMOOTHED curve, which is exactly the path the marker walks.
+          route={(isDemoBooking ? routeCoords : drawnRoute) ?? undefined}
           progressIdx={progressIdx}
           fitCoords={routeCoords ?? (proCoord ? [proCoord, patientCoord] : undefined)}
           radiusKm={0}

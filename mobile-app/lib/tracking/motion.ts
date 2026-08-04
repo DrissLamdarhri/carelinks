@@ -223,6 +223,26 @@ export class MotionTrack {
   }
 
   /**
+   * Has the subject SUSTAINEDLY left the planned road?
+   *
+   * Reality beats the plan, but a single fix is not reality — one multipath
+   * bounce off a tall building can throw a position 60m sideways, and
+   * re-routing on that would replace a perfectly good road because of one bad
+   * sample. Requiring several consecutive fixes to agree distinguishes "the
+   * professional turned down a different street" from "the GPS hiccuped".
+   *
+   * Note this asks about the RAW fixes, not the rendered marker: the marker is
+   * deliberately eased between road and free position, and a decision this
+   * consequential must be made on measurements, not on a display value.
+   */
+  isOffRoute(thresholdM: number, samples = 3): boolean {
+    if (!this.route) return false;
+    const window = this.matches.slice(-samples);
+    if (window.length < samples) return false;
+    return window.every((m) => m == null || m.deviationM > thresholdM);
+  }
+
+  /**
    * Offer a fix. Returns null if accepted, or why it was rejected.
    * Rejection is normal and frequent; it is not an error.
    */
