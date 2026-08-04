@@ -30,6 +30,7 @@ import { YogaReminderModalHost } from "@/components/YogaReminderModal";
 import { showYogaReminderPopup } from "@/lib/yoga-reminder-popup";
 import { AppAlertHost } from "@/components/AppAlertHost";
 import { reconcileLiveLocationOnStartup } from "@/lib/live-location";
+import { DevBenchLauncher } from "@/components/DevBenchLauncher";
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
@@ -127,6 +128,8 @@ export default function RootLayout() {
               <ActivityIndicator size="large" color="#EDE5CC" />
             </View>
           )}
+          {/* Dev-only entry to /dev/bench. Renders null in release builds. */}
+          <DevBenchLauncher />
           {/* Handles deep-links when app is already running in background */}
           <DeepLinkHandler />
           {/* Routes push-notification taps to the right booking */}
