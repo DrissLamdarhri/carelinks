@@ -329,6 +329,8 @@ export default function ProTrackingScreen() {
   // behaviour only appear outside — but it makes the UX reviewable indoors.
   const simRef = useRef<SimulationHandle | null>(null);
   const [simulating, setSimulating] = useState(false);
+  const PERSONALITIES = ["normal", "calm", "aggressive"] as const;
+  const personalityIdx = useRef(0);
   useEffect(() => () => simRef.current?.stop(), []);
   const toggleSimulation = useCallback(async (wrongTurn = false) => {
     if (simRef.current) {
@@ -360,6 +362,9 @@ export default function ProTrackingScreen() {
       return;
     }
     setSimulating(true);
+    const who = PERSONALITIES[personalityIdx.current % PERSONALITIES.length];
+    personalityIdx.current += 1;
+    showToast(`Conducteur : ${who}`);
     // A fixed bearing keeps runs comparable between attempts.
     const startM = 1600;
     const brg = 40 * (Math.PI / 180);
@@ -377,7 +382,9 @@ export default function ProTrackingScreen() {
     simRef.current = simulateTrip({
       bookingId,
       path,
-      speedMps: 11,
+      // Cycles per run so successive tests are not the same driver: a calm
+      // one hesitates at lights, an aggressive one brakes late into bends.
+      personality: PERSONALITIES[personalityIdx.current % PERSONALITIES.length],
       intervalMs: 1500,
       jitterM: 6,
       // Scenario B: leave the planned road partway and drive a genuinely

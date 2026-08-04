@@ -16,7 +16,7 @@
     "tunnel:fallback": "node ./scripts/start-tunnel-fallback.cjs",
     "build": "eas build",
     "lint": "eslint . --ext .ts,.tsx",
-    "test:tracking": "tsc lib/tracking/motion.ts lib/tracking/store.ts lib/tracking/motion.replay.ts lib/tracking/store.replay.ts lib/tracking/bench.replay.ts lib/tracking/camera.replay.ts --outDir .motion-replay --module commonjs --target es2020 --skipLibCheck --moduleResolution node && echo '{\"type\":\"commonjs\"}' > .motion-replay/package.json && node .motion-replay/motion.replay.js && node .motion-replay/store.replay.js && node .motion-replay/bench.replay.js && node .motion-replay/camera.replay.js",
+    "test:tracking": "tsc lib/tracking/motion.ts lib/tracking/store.ts lib/tracking/motion.replay.ts lib/tracking/store.replay.ts lib/tracking/driver.ts lib/tracking/bench.replay.ts lib/tracking/camera.replay.ts --outDir .motion-replay --module commonjs --target es2020 --skipLibCheck --moduleResolution node && echo '{\"type\":\"commonjs\"}' > .motion-replay/package.json && node .motion-replay/motion.replay.js && node .motion-replay/store.replay.js && node .motion-replay/bench.replay.js && node .motion-replay/camera.replay.js",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

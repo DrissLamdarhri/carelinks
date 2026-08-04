@@ -15,6 +15,8 @@ import { FrameCollector, MemorySampler, StallProbe, percentile } from "./bench/m
 import { synthesise, STANDARD_TRACES, toTrace } from "./bench/traces";
 import { SCENARIOS } from "./bench/scenarios";
 import { compareToBaseline, formatSuite } from "./bench/report";
+import { SimulatedDriver } from "./driver";
+import { Route } from "./route";
 import type { BenchResult, BenchSuite } from "./bench/types";
 
 let failures = 0;
@@ -272,6 +274,61 @@ function ok(cond: boolean, msg: string): void {
   ok(!good.includes("RUN INVALID"), "a healthy run was wrongly flagged invalid");
   ok(noControl.includes("No control candidate"), "a run without a control was not flagged");
   ok(mixed.includes("MIXED DEVICES"), "results from two different phones were not flagged");
+}
+
+// ── 14. The simulated driver behaves like a vehicle ─────────────────────────
+// The driver is test infrastructure, and broken test infrastructure produces
+// confident wrong conclusions about the product. It already did once: `done`
+// was `offsetM >= length`, but the driver brakes to a halt a few metres short
+// of the end (correct — you stop AT the door), so a 2.1km trip that finished in
+// four minutes still reported "in progress" after ten, sitting at zero speed.
+// In the app that means the simulation never ends.
+{
+  const pts: { lat: number; lng: number }[] = [];
+  let lat = 34.03, lng = -5.0, brg = 45;
+  for (let i = 0; i < 120; i++) {
+    brg += Math.sin(i / 9) * 7;
+    lat += (18 * Math.cos((brg * Math.PI) / 180)) / 111_320;
+    lng += (18 * Math.sin((brg * Math.PI) / 180)) / (111_320 * Math.cos((lat * Math.PI) / 180));
+    pts.push({ lat, lng });
+  }
+  const route = new Route(pts);
+  const results: Record<string, { t: number; stops: number; peak: number; maxAccel: number }> = {};
+
+  for (const who of ["calm", "normal", "aggressive"] as const) {
+    const d = new SimulatedDriver(route, who, 11);
+    let t = 0, stops = 0, peak = 0, maxAccel = 0, prev = 0, wasStopped = false;
+    let maxLateral = 0;
+    while (!d.done && t < 900) {
+      d.tick(0.1);
+      t += 0.1;
+      const s = d.sample();
+      if (s.stopped && !wasStopped) stops++;
+      wasStopped = s.stopped;
+      peak = Math.max(peak, s.speed);
+      maxAccel = Math.max(maxAccel, Math.abs(s.speed - prev) / 0.1);
+      prev = s.speed;
+      const m = route.match(s.point, 0);
+      if (m) maxLateral = Math.max(maxLateral, m.deviationM);
+    }
+    results[who] = { t, stops, peak, maxAccel };
+    console.log(
+      `    ${who.padEnd(11)} trip=${t.toFixed(0)}s stops=${stops} peak=${peak.toFixed(1)}m/s ` +
+        `maxAccel=${maxAccel.toFixed(1)}m/s2 maxLateral=${maxLateral.toFixed(2)}m`,
+    );
+    ok(t < 900, `${who}: trip never completed — 'done' is unreachable`);
+    ok(stops >= 2, `${who}: only ${stops} stops; a car that never halts reads as an object on rails`);
+    ok(maxAccel < 5, `${who}: ${maxAccel.toFixed(1)} m/s2 is not a car, it is a teleport`);
+    // Lane wander must stay well inside the map-matching snap radius, or the
+    // simulated driver would trip the off-route logic just by driving normally.
+    ok(maxLateral < 12, `${who}: wandered ${maxLateral.toFixed(1)}m from the centreline`);
+  }
+  console.log("14. simulated driver: personalities distinct and physically plausible");
+  ok(
+    results.aggressive.t < results.normal.t && results.normal.t < results.calm.t,
+    "personalities are not distinguishable — an aggressive driver should finish first",
+  );
+  ok(results.aggressive.peak > results.calm.peak, "aggressive should cruise faster than calm");
 }
 
 console.log(failures === 0 ? "\nALL BENCH-FRAMEWORK CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);

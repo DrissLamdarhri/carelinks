@@ -26,6 +26,7 @@ import { supabase } from "@/lib/supabase";
 import { proStreamTopic } from "@/lib/db/tracking";
 import { fetchRoute } from "@/lib/routing";
 import { Route, type LatLng } from "./route";
+import { SimulatedDriver, type DriverPersonality } from "./driver";
 
 export type SimulationHandle = { stop(): void };
 
@@ -58,10 +59,12 @@ export type SimulateOptions = {
   bookingId: string;
   /** The road to drive. Use the route already drawn on screen. */
   path: LatLng[];
-  /** Metres per second. 14 ≈ 50 km/h city driving; 1.4 ≈ walking. */
-  speedMps?: number;
-  /** Gap between broadcasts (ms) — mirrors the real adaptive sampling. */
+  /** How this driver behaves — cruising speed, aggression, patience at lights. */
+  personality?: DriverPersonality;
+  /** Nominal gap between broadcasts (ms). Actual gaps are jittered around it. */
   intervalMs?: number;
+  /** Seed, so two runs are the same experiment. */
+  seed?: number;
   /** Positional noise to add, in metres. Real urban GPS is 5-15m. */
   jitterM?: number;
   /**
@@ -99,8 +102,8 @@ export type SimulateOptions = {
  */
 export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const {
-    bookingId, path, speedMps = 14, intervalMs = 1500, jitterM = 8, outage,
-    corneringSlowdown = true, wrongTurnAtMs, destination, onProgress, onDone, onWrongTurn,
+    bookingId, path, personality = "normal", intervalMs = 1500, jitterM = 8, outage,
+    seed = 7, wrongTurnAtMs, destination, onProgress, onDone, onWrongTurn,
   } = opts;
 
   let route = new Route(path);
@@ -113,82 +116,92 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const channel = supabase.channel(proStreamTopic(bookingId), { config: { private: true } });
   void channel.subscribe();
 
-  let offsetM = 0;
-  let currentSpeed = speedMps;
+  const driver = new SimulatedDriver(route, personality, seed);
+  const rnd = (() => {
+    let a = (seed * 2654435761) >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  })();
+
   let seq = 0;
   let elapsed = 0;
+  let sincePublish = 0;
+  let nextPublishAt = intervalMs;
+  let diverged = false;
   let stopped = false;
+
+  // Physics runs fast and evenly; GPS is published slowly and unevenly. Keeping
+  // the two rates separate is what lets fixes arrive irregularly — as a real
+  // handset delivers them — without the underlying motion becoming irregular
+  // too. Conflating them is why the old simulator could only ever produce a
+  // metronome.
+  const PHYSICS_MS = 100;
 
   const timer = setInterval(() => {
     if (stopped) return;
-    elapsed += intervalMs;
+    elapsed += PHYSICS_MS;
+    sincePublish += PHYSICS_MS;
+    driver.tick(PHYSICS_MS / 1000);
 
-    // Local curvature: how much the road bends over the next ~40m. A sharp
-    // bend drops the speed toward 35%, a straight leaves it untouched.
-    let factor = 1;
-    if (corneringSlowdown) {
-      const b0 = route.smoothBearingAt(offsetM, 15);
-      const b1 = route.smoothBearingAt(Math.min(route.length, offsetM + 40), 15);
-      if (b0 != null && b1 != null) {
-        const bend = Math.abs((((b1 - b0) % 360) + 540) % 360 - 180);
-        factor = Math.max(0.35, 1 - bend / 90);
-      }
-    }
-    // Ease toward the target rather than stepping — a vehicle has mass.
-    currentSpeed += (speedMps * factor - currentSpeed) * 0.35;
-    offsetM += currentSpeed * (intervalMs / 1000);
-
-    if (offsetM >= route.length) {
+    if (driver.done) {
       stop();
       onDone?.();
       return;
     }
-    onProgress?.(offsetM / route.length);
-
-    // A dropout publishes nothing at all — which is what a tunnel looks like
-    // from the receiving end, and exercises dead reckoning and the staleness UI.
-    if (outage && elapsed >= outage[0] && elapsed <= outage[1]) return;
+    onProgress?.(driver.progress);
 
     // ── The wrong turn ────────────────────────────────────────────────────
-    // Fetch a real road to the same destination via a waypoint set ~300m to the
-    // side, then drive THAT. A straight-line detour would be trivially rejected
-    // by map-matching and would prove nothing; taking an actual different
-    // street is the situation the deviation logic exists for.
-    if (!divergd && wrongTurnAtMs != null && destination && elapsed >= wrongTurnAtMs) {
-      divergd = true;
-      const here = route.positionAt(offsetM);
-      if (here) {
-        const side = (here.bearing + 90) * (Math.PI / 180);
-        const via = {
-          lat: here.point.lat + (300 * Math.cos(side)) / 111_320,
-          lng:
-            here.point.lng +
-            (300 * Math.sin(side)) / (111_320 * Math.cos((here.point.lat * Math.PI) / 180)),
-        };
-        void fetchRoute(here.point, destination, { via }).then(({ coords, fromRouter }) => {
-          if (stopped || !fromRouter || coords.length < 2) return;
-          route = new Route(coords);
-          offsetM = 0;
-          onWrongTurn?.();
-        });
-      }
+    // A real road to the same destination via a waypoint ~300m to the side. A
+    // straight-line detour would be trivially rejected by map-matching and
+    // would prove nothing; taking an actual different street is the situation
+    // the deviation logic exists for.
+    if (!diverged && wrongTurnAtMs != null && destination && elapsed >= wrongTurnAtMs) {
+      diverged = true;
+      const here = driver.sample();
+      const side = (here.heading + 90) * (Math.PI / 180);
+      const via = {
+        lat: here.point.lat + (300 * Math.cos(side)) / 111_320,
+        lng:
+          here.point.lng +
+          (300 * Math.sin(side)) / (111_320 * Math.cos((here.point.lat * Math.PI) / 180)),
+      };
+      void fetchRoute(here.point, destination, { via }).then(({ coords, fromRouter }) => {
+        if (stopped || !fromRouter || coords.length < 2) return;
+        driver.setRoute(new Route(coords));
+        onWrongTurn?.();
+      });
     }
 
-    const at = route.positionAt(offsetM);
-    if (!at) return;
+    if (sincePublish < nextPublishAt) return;
+    sincePublish = 0;
+    // Real fixes do not arrive on a metronome: the OS is busy, the radio is
+    // asleep, the chip is re-acquiring. Occasionally one is very late.
+    nextPublishAt = intervalMs * (0.75 + rnd() * 0.7) + (rnd() < 0.08 ? intervalMs * 1.8 : 0);
 
+    if (outage && elapsed >= outage[0] && elapsed <= outage[1]) return;
+
+    const at = driver.sample();
     const jitterDeg = jitterM / 111_320;
-    const payload = {
-      lat: at.point.lat + (Math.random() - 0.5) * 2 * jitterDeg,
-      lng: at.point.lng + (Math.random() - 0.5) * 2 * jitterDeg,
-      at: new Date().toISOString(),
-      heading: at.bearing,
-      speed: currentSpeed,
-      accuracy: 6 + Math.random() * 6,
-      seq: ++seq,
-    };
-    void channel.send({ type: "broadcast", event: "position", payload });
-  }, intervalMs);
+    void channel.send({
+      type: "broadcast",
+      event: "position",
+      payload: {
+        lat: at.point.lat + (rnd() - 0.5) * 2 * jitterDeg,
+        lng: at.point.lng + (rnd() - 0.5) * 2 * jitterDeg,
+        at: new Date().toISOString(),
+        // A stationary phone reports no usable course; publishing one anyway
+        // would let the marker point somewhere meaningless at a red light.
+        heading: at.stopped ? null : at.heading,
+        speed: at.speed,
+        accuracy: 5 + rnd() * 7,
+        seq: ++seq,
+      },
+    });
+  }, PHYSICS_MS);
 
   function stop() {
     if (stopped) return;
