@@ -212,6 +212,12 @@ export class MotionTrack {
    * "should we fetch a new road?" is about being laterally OFF the road, never
    * about how far along it we have travelled.
    */
+  /** The attached road, sampled as it must be DRAWN so the line and the marker
+   *  are the same points. Null when no route is attached. */
+  get renderRoute(): LatLng[] | null {
+    return this.route?.usable ? this.route.renderPath() : null;
+  }
+
   get routeDeviationM(): number | null {
     return this.matches.length ? (this.matches[this.matches.length - 1]?.deviationM ?? null) : null;
   }

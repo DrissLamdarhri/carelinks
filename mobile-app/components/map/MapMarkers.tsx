@@ -15,7 +15,7 @@ import {
   View,
   type ImageSourcePropType,
 } from "react-native";
-import { Flag, Navigation } from "lucide-react-native";
+import { Home, Navigation } from "lucide-react-native";
 import { specialtyColor } from "./engine";
 import { useReducedMotion } from "@/lib/a11y";
 
@@ -245,19 +245,78 @@ export function MeMarker({ heading }: { heading?: number | null } = {}) {
 /** Destination drop-pin — bold navy teardrop with a white flag icon and a
  *  soft ground shadow, so it reads as clearly "planted" at the exact point
  *  rather than floating. Anchor bottom (the tail's point is the real coord). */
-export function DestinationPin() {
+export function DestinationPin({ label }: { label?: string } = {}) {
   return (
     <View style={styles.destWrap} pointerEvents="none">
-      <View style={styles.destHead}>
-        <Flag size={19} color="#FFFFFF" fill="#FFFFFF" />
+      {/* Ground contact. Without something on the surface the pin reads as
+          hovering, especially on a tilted map — this ellipse is what visually
+          plants it at the exact coordinate the route ends on. */}
+      <View style={styles.destShadow} />
+      <View style={styles.destPin}>
+        <View style={styles.destInner}>
+          <Home size={13} color={NAVY} strokeWidth={2.6} />
+        </View>
       </View>
-      <View style={styles.destTail} />
-      <View style={styles.destGroundShadow} />
+      {/* Tapered stem down to the anchor point, so the route can terminate
+          INSIDE the marker rather than stopping beside it. */}
+      <View style={styles.destStem} />
+      <View style={styles.destTip} />
+      {label ? <Text style={styles.destLabel}>{label}</Text> : null}
     </View>
   );
 }
 
+
 const styles = StyleSheet.create({
+  // ── Destination pin ───────────────────────────────────────────────────────
+  // Anchored at the TIP: the coordinate is the point of the stem, so the route
+  // ends inside the marker instead of alongside it.
+  destWrap: { alignItems: "center", width: 46 },
+  destPin: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2.5,
+    borderColor: NAVY,
+    shadowColor: "#000",
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 12,
+  },
+  destInner: { alignItems: "center", justifyContent: "center" },
+  destStem: { width: 3, height: 10, backgroundColor: NAVY, marginTop: -1 },
+  destTip: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: NAVY,
+    marginTop: -3,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  destShadow: {
+    position: "absolute",
+    bottom: 0,
+    width: 20,
+    height: 6,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  destLabel: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "700",
+    color: NAVY,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
+    overflow: "hidden",
+  },
   wrap: { alignItems: "center", justifyContent: "flex-end" },
 
   cardHolder: { position: "absolute", bottom: "100%", marginBottom: 8, alignItems: "center" },
@@ -362,33 +421,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  destWrap: { alignItems: "center", justifyContent: "flex-end" },
-  destHead: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: NAVY,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 9,
-  },
-  destTail: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderTopWidth: 11,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: NAVY,
-    marginTop: -2,
-  },
   destGroundShadow: {
     width: 16,
     height: 5,

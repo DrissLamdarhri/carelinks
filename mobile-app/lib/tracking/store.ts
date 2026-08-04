@@ -157,6 +157,11 @@ export class TrackingStore {
     return this.track.onRoute;
   }
 
+  /** The road as it must be DRAWN — the exact curve the marker travels. */
+  get renderRoute(): LatLng[] | null {
+    return this.track.renderRoute;
+  }
+
   /** Lateral distance of the newest fix from the route; null when unmatched. */
   get routeDeviationM(): number | null {
     return this.track.routeDeviationM;

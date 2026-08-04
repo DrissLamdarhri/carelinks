@@ -538,7 +538,6 @@ import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
 import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
 import { haptics } from "@/lib/haptics";
-import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCREEN_W  = Dimensions.get("window").width;
@@ -1068,7 +1067,6 @@ export default function LiveTrackingScreen() {
 
   // The viewer's own compass heading, for the "you are here" marker's facing
   // cone (patient can be waiting/looking around while the pro is en route).
-  const meHeading = useDeviceHeading();
 
   // ── The drawn route always starts where the pro actually is ────────────────
   // Previously the route was fetched once from a stale seed origin and only
@@ -1123,8 +1121,15 @@ export default function LiveTrackingScreen() {
       // fetchRoute never throws: on failure it hands back a straight line
       // between the two real endpoints rather than an invented road path.
       const { coords } = await fetchRoute(origin, destCoord);
+      // OSRM snaps the endpoint to the nearest road, which can leave the line
+      // stopping 10-20m short of the actual door — the route visibly ending
+      // beside the destination pin instead of inside it. Walking the last leg
+      // is both what navigation apps draw and what the nurse will physically do.
+      const last = coords[coords.length - 1];
+      const withFinalLeg =
+        last && haversineKm(last, destCoord) > 0.003 ? [...coords, destCoord] : coords;
       routeOriginRef.current = origin;
-      setRouteCoords(coords);
+      setRouteCoords(withFinalLeg);
       setRouteLoaded(true);
       reroutingRef.current = false;
     })();
@@ -1240,8 +1245,10 @@ export default function LiveTrackingScreen() {
       <View style={[s.mapFull, { backgroundColor: CREAM }]}>
         <CareLinkMapView
           center={proCoord ?? patientCoord}
-          patient={patientCoord}
-          meHeading={meHeading}
+          // The patient's own location is where the nurse is DRIVING TO, so it
+          // reads as an arrival pin, not a "you are here" compass. That also
+          // lets the route terminate inside the marker instead of beside it.
+          destination={patientCoord}
           trackingStore={trackingStore}
           trackingArrived={arrived}
           pro={
@@ -1249,7 +1256,9 @@ export default function LiveTrackingScreen() {
               ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
               : undefined
           }
-          route={routeCoords ?? undefined}
+          // The SMOOTHED curve, which is exactly the path the marker walks —
+          // drawing the raw polyline instead left a visible gap on bends.
+          route={trackingStore?.renderRoute ?? routeCoords ?? undefined}
           progressIdx={progressIdx}
           fitCoords={routeCoords ?? (proCoord ? [proCoord, patientCoord] : undefined)}
           radiusKm={0}

@@ -40,6 +40,8 @@ export type CameraState = {
 export type CameraCommand = {
   center: { lat: number; lng: number };
   zoom: number;
+  /** Map tilt in degrees. */
+  pitch: number;
   durationMs: number;
   reason: "initial" | "drift" | "zoom-band" | "resume" | "fit";
 };
@@ -63,7 +65,23 @@ export type CameraCommand = {
  * nobody asked for. A first draft used z15, which spans ~3.2km across a phone
  * and fails that requirement outright; the camera test now asserts this floor.
  */
-export const MIN_ZOOM = 15.5;
+export const MIN_ZOOM = 16.4;
+
+/**
+ * Map tilt during tracking.
+ *
+ * A flat overhead map reads as a diagram. A tilted one reads as a place you are
+ * in — the horizon implies distance, building extrusions gain height, and the
+ * marker travels INTO the scene rather than across a plan. This is the single
+ * cheapest change that moves the screen from "I am watching a city map" to
+ * "someone is coming to me", which is the emotional register this screen is
+ * supposed to occupy.
+ *
+ * 38 degrees, not the 50-60 a driver's navigation view uses: the patient is not
+ * steering, and a steep tilt would compress the road ahead into a sliver and
+ * hide the approach.
+ */
+export const TRACKING_PITCH = 38;
 
 export type ZoomBand = {
   readonly name: string;
@@ -74,20 +92,35 @@ export type ZoomBand = {
   readonly zoom: number;
 };
 
+/**
+ * Deliberately CLOSE. An earlier set topped out around z16 and the feedback was
+ * immediate: too much of the city, movement looks slow, no immersion. Uber,
+ * Bolt and inDrive all stay near enough that individual streets, junctions and
+ * buildings are legible, because recognising your own neighbourhood is what
+ * makes an approach feel real. Distance travelled per second also reads as
+ * faster when the frame is tighter — the same motion simply feels more alive.
+ */
 export const ZOOM_BANDS: readonly ZoomBand[] = [
-  { name: "stationary", enterAbove: -1, exitBelow: -1, zoom: 17.2 },
-  { name: "walking", enterAbove: 0.8, exitBelow: 0.5, zoom: 16.8 },
-  { name: "urban", enterAbove: 6.0, exitBelow: 4.5, zoom: 16.2 },
+  { name: "stationary", enterAbove: -1, exitBelow: -1, zoom: 17.8 },
+  { name: "walking", enterAbove: 0.8, exitBelow: 0.5, zoom: 17.6 },
+  { name: "urban", enterAbove: 6.0, exitBelow: 4.5, zoom: 17.1 },
   { name: "fast", enterAbove: 18.0, exitBelow: 15.0, zoom: MIN_ZOOM },
 ] as const;
 
-/** Fraction of the viewport the marker may roam before the camera eases. */
-export const DEAD_ZONE = 0.32;
+/**
+ * Fraction of the viewport the marker may roam before the camera eases.
+ *
+ * Tightened from 0.32: with the closer framing above, a generous dead zone let
+ * the marker wander toward the edge and then be hauled back, which reads as
+ * lurching. A smaller zone with a LONGER, softer correction gives the opposite
+ * feel — the camera seems to breathe with the vehicle rather than chase it.
+ */
+export const DEAD_ZONE = 0.18;
 /** Idle time after a gesture before following resumes (ms). */
 export const RESUME_AFTER_MS = 8000;
-/** Easing duration for a drift correction — long enough to read as a glide. */
-const DRIFT_MS = 900;
-const ZOOM_MS = 700;
+/** Drift correction. Long and soft: the camera should float, never snap. */
+const DRIFT_MS = 1600;
+const ZOOM_MS = 1100;
 
 export function initialCameraState(zoom = 16.0): CameraState {
   return { mode: "following", userTouchedAt: null, zoom, center: null };
@@ -150,7 +183,7 @@ export function nextCameraCommand(
     const zoom = zoomForSpeed(input.speedMps, state.zoom);
     return {
       state: { ...state, mode: "following", userTouchedAt: null, zoom, center: input.target },
-      command: { center: input.target, zoom, durationMs: 1200, reason: "resume" },
+      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: 1800, reason: "resume" },
     };
   }
 
@@ -160,7 +193,7 @@ export function nextCameraCommand(
   if (!state.center) {
     return {
       state: { ...state, zoom, center: input.target },
-      command: { center: input.target, zoom, durationMs: 0, reason: "initial" },
+      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: 0, reason: "initial" },
     };
   }
 
@@ -168,7 +201,7 @@ export function nextCameraCommand(
   if (zoom !== state.zoom) {
     return {
       state: { ...state, zoom, center: input.target },
-      command: { center: input.target, zoom, durationMs: ZOOM_MS, reason: "zoom-band" },
+      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: ZOOM_MS, reason: "zoom-band" },
     };
   }
 
@@ -179,7 +212,7 @@ export function nextCameraCommand(
 
   return {
     state: { ...state, center: input.target },
-    command: { center: input.target, zoom, durationMs: DRIFT_MS, reason: "drift" },
+    command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: DRIFT_MS, reason: "drift" },
   };
 }
 

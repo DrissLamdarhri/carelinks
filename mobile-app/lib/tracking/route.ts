@@ -143,6 +143,7 @@ export class Route {
   readonly points: LatLng[];
   /** cumulative[i] = distance in metres from the start to points[i]. */
   private readonly cumulative: number[];
+  private cachedRenderPath: LatLng[] | null = null;
 
   constructor(points: LatLng[]) {
     // Consecutive duplicates produce zero-length segments, which are a division
@@ -167,6 +168,36 @@ export class Route {
 
   get usable(): boolean {
     return this.points.length >= 2 && this.length > 0;
+  }
+
+  /**
+   * The route as it must be DRAWN, sampled along the same smoothed curve that
+   * `positionAt` walks.
+   *
+   * This exists because of a visible defect: `positionAt` curves through the
+   * vertices, but the map was drawing the raw polyline — straight chords between
+   * those same vertices. The marker therefore travelled a smoothed path while
+   * the line rendered as a polygon, and on bends the two separated by a metre or
+   * two. Zoomed out that is sub-pixel; zoomed in it is a gap between the avatar
+   * and the road, and it destroys the illusion that the professional is on the
+   * street.
+   *
+   * Drawing THIS instead makes the agreement exact by construction: the line and
+   * the marker are literally the same points. Cached, since a route changes only
+   * when it is refetched.
+   */
+  renderPath(stepM = 4): LatLng[] {
+    if (this.cachedRenderPath) return this.cachedRenderPath;
+    if (!this.usable) return this.points;
+    const out: LatLng[] = [];
+    const total = this.length;
+    const n = Math.max(2, Math.ceil(total / stepM));
+    for (let i = 0; i <= n; i++) {
+      const at = this.positionAt((i / n) * total);
+      if (at) out.push(at.point);
+    }
+    this.cachedRenderPath = out;
+    return out;
   }
 
   /**

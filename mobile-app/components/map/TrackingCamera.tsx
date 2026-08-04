@@ -21,6 +21,7 @@ import { Dimensions } from "react-native";
 import { Camera, type CameraRef } from "@maplibre/maplibre-react-native";
 import { distanceM } from "@/lib/tracking/route";
 import {
+  TRACKING_PITCH,
   initialCameraState,
   nextCameraCommand,
   withRecenterRequest,
@@ -83,6 +84,7 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
     cam.easeTo({
       center: [command.center.lng, command.center.lat],
       zoom: command.zoom,
+      pitch: command.pitch,
       duration: command.durationMs,
     });
   }, [store]);
@@ -96,9 +98,9 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
       ref={cameraRef}
       initialViewState={{
         center: [fallbackCenter.lng, fallbackCenter.lat],
-        zoom: 16.2,
+        zoom: 17.1,
         bearing: 0,
-        pitch: 0,
+        pitch: TRACKING_PITCH,
       }}
     />
   );

@@ -54,9 +54,12 @@ const WHITE = "#FFFFFF";
  * it. A smaller marker glued tightly to the route looks more real than a large
  * one with better maths behind it.
  */
-const AVATAR = 30;
+const AVATAR = 38;
+// Re-balanced twice. 46 dominated the map and exaggerated every movement; 30
+// made the hero of the screen recede. 38 with a deeper shadow reads as the
+// subject without covering the street it is driving on.
 /** Full marker box — leaves room for the halo and the orbiting heading arrow. */
-const BOX = 62;
+const BOX = 82;
 
 export type TrackingStatus = "live" | "arrived" | "stale";
 
@@ -124,7 +127,7 @@ export const TrackingMarker = memo(function TrackingMarker({
   }, [pulsing, ringA, ringB]);
 
   const ringStyle = (v: Animated.Value) => ({
-    opacity: v.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 0.22, 0] }),
+    opacity: v.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 0.26, 0] }),
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }],
   });
 
@@ -144,7 +147,7 @@ export const TrackingMarker = memo(function TrackingMarker({
       {showHeading ? (
         <View style={[styles.orbit, { transform: [{ rotate: `${bearing}deg` }] }]}>
           <View style={[styles.heading, { backgroundColor: accent }]}>
-            <Navigation size={10} color={WHITE} fill={WHITE} strokeWidth={0} />
+            <Navigation size={11} color={WHITE} fill={WHITE} strokeWidth={0} />
           </View>
         </View>
       ) : null}
@@ -163,7 +166,7 @@ export const TrackingMarker = memo(function TrackingMarker({
           invisible to a red/green colour-deficient viewer. */}
       <View style={[styles.badge, { backgroundColor: accent }]}>
         {status === "arrived" ? (
-          <Check size={8} color={WHITE} strokeWidth={4} />
+          <Check size={9} color={WHITE} strokeWidth={4} />
         ) : status === "stale" ? (
           <Pause size={7} color={WHITE} fill={WHITE} strokeWidth={0} />
         ) : (
@@ -192,40 +195,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heading: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: WHITE,
     // Nudge so the arrow sits just outside the avatar ring.
-    marginTop: (BOX - AVATAR) / 2 - 17,
+    marginTop: (BOX - AVATAR) / 2 - 20,
   },
   avatarRing: {
-    width: AVATAR + 5,
-    height: AVATAR + 5,
-    borderRadius: (AVATAR + 5) / 2,
-    borderWidth: 2.5,
+    width: AVATAR + 6,
+    height: AVATAR + 6,
+    borderRadius: (AVATAR + 6) / 2,
+    borderWidth: 3,
     borderColor: WHITE,
     backgroundColor: WHITE,
     alignItems: "center",
     justifyContent: "center",
+    // Deeper, softer shadow. On a tilted map a flat disc reads as a sticker
+    // lying on the surface; a real drop shadow lifts it off the street and is
+    // most of what makes the marker feel like an object in the scene rather
+    // than an annotation drawn over it.
     shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 8,
+    shadowOpacity: 0.38,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 14,
   },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: NAVY },
   initialsWrap: { alignItems: "center", justifyContent: "center" },
-  initials: { color: WHITE, fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
+  initials: { color: WHITE, fontSize: 15, fontWeight: "700", letterSpacing: 0.3 },
   badge: {
     position: "absolute",
-    width: 13,
-    height: 13,
-    borderRadius: 6.5,
-    borderWidth: 1.5,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+    borderWidth: 2,
     borderColor: WHITE,
     alignItems: "center",
     justifyContent: "center",
@@ -233,5 +240,5 @@ const styles = StyleSheet.create({
     right: (BOX - AVATAR) / 2 - 5,
     bottom: (BOX - AVATAR) / 2 - 2,
   },
-  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: WHITE },
+  liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: WHITE },
 });
