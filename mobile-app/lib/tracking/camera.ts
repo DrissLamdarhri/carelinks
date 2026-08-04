@@ -68,20 +68,20 @@ export type CameraCommand = {
 export const MIN_ZOOM = 16.4;
 
 /**
- * Map tilt during tracking.
+ * Map tilt during tracking. ZERO.
  *
- * A flat overhead map reads as a diagram. A tilted one reads as a place you are
- * in — the horizon implies distance, building extrusions gain height, and the
- * marker travels INTO the scene rather than across a plan. This is the single
- * cheapest change that moves the screen from "I am watching a city map" to
- * "someone is coming to me", which is the emotional register this screen is
- * supposed to occupy.
+ * A 38-degree tilt was tried for cinematic depth and made things worse: a
+ * ViewAnnotation is positioned in screen space, so under pitch the marker no
+ * longer sits convincingly on the ground plane it is supposed to be standing
+ * on, and the avatar reads as floating BESIDE the road rather than on it. On a
+ * tracking screen, "is he actually on that street?" has to be answerable at a
+ * glance, and tilt was trading that away for atmosphere.
  *
- * 38 degrees, not the 50-60 a driver's navigation view uses: the patient is not
- * steering, and a steep tilt would compress the road ahead into a sliver and
- * hide the approach.
+ * Flat is not a compromise here — it is what makes the alignment legible.
+ * Revisit only with a style that genuinely extrudes buildings, and only after
+ * confirming annotations stay glued to the surface under pitch.
  */
-export const TRACKING_PITCH = 38;
+export const TRACKING_PITCH = 0;
 
 export type ZoomBand = {
   readonly name: string;

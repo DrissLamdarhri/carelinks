@@ -13,7 +13,7 @@
  *
  * Pure logic, no React Native, so it runs under plain node.
  */
-import { MotionTrack, bearingDeg, distanceM, shortestAngleDelta, RENDER_DELAY_MS, type Fix } from "./motion";
+import { MotionTrack, Route, bearingDeg, distanceM, shortestAngleDelta, RENDER_DELAY_MS, type Fix } from "./motion";
 
 let failures = 0;
 function ok(cond: boolean, msg: string): void {
@@ -144,16 +144,27 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
     return { fixes, path };
   }
 
-  /** Resample a path so vertices sit ~every `stepM` metres, as OSRM returns. */
-  function densify(pts: { lat: number; lng: number }[], stepM: number) {
-    const out = [pts[0]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const n = Math.max(1, Math.round(distanceM(pts[i], pts[i + 1]) / stepM));
-      for (let k = 1; k <= n; k++)
-        out.push({
-          lat: pts[i].lat + ((pts[i + 1].lat - pts[i].lat) * k) / n,
-          lng: pts[i].lng + ((pts[i + 1].lng - pts[i].lng) * k) / n,
-        });
+  /**
+   * A dense route as OSRM actually returns one: vertices sampled along the TRUE
+   * curve of the road.
+   *
+   * Not produced by densifying the coarse path. Linear densification puts
+   * vertices every few metres but concentrates every degree of turning at the
+   * original coarse vertices — a finely-sampled POLYGON, which is not what a
+   * router emits and which no real road resembles. Testing against it would
+   * have argued for smoothing dense routes, and smoothing a real route rounds
+   * its genuine junction corners and drags the drawn line off the carriageway.
+   */
+  function densePath(stepM: number) {
+    const out: { lat: number; lng: number }[] = [];
+    let lat = 34.03, lng = -5.0, brg = 45;
+    const perStep = (4.5 * stepM) / 21; // same arc as curvingRun, finer sampling
+    const steps = Math.round((40 * 21) / stepM);
+    for (let i = 0; i < steps; i++) {
+      brg = (brg + perStep) % 360;
+      lat += (stepM * Math.cos((brg * Math.PI) / 180)) / 111320;
+      lng += (stepM * Math.sin((brg * Math.PI) / 180)) / (111320 * Math.cos((lat * Math.PI) / 180));
+      out.push({ lat, lng });
     }
     return out;
   }
@@ -168,6 +179,8 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
     let prevPrev: { lat: number; lng: number } | null = null;
     const turns: number[] = [];
     const speeds: number[] = [];
+    const offsets: number[] = [];
+    const drawn = route ? new Route(route) : null;
     for (let now = fixes[0].receivedAt + RENDER_DELAY_MS + 100;
          now <= fixes[fixes.length - 1].receivedAt - 100; now += 16.67) {
       const s = tr.sampleAt(now);
@@ -180,23 +193,46 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
         }
         prevPrev = prev;
       }
+      if (drawn) {
+        const m = drawn.match(s, 0);
+        if (m) offsets.push(m.deviationM);
+      }
       prev = { lat: s.lat, lng: s.lng };
     }
     const sorted = [...turns].sort((a, b) => a - b);
     const p99 = sorted[Math.min(sorted.length - 1, Math.ceil(0.99 * sorted.length) - 1)];
     const max = Math.max(...turns);
     const spread = Math.max(...speeds) - Math.min(...speeds);
-    console.log(`   ${label.padEnd(30)} p99=${p99.toFixed(3)} max=${max.toFixed(3)} spreadMps=${spread.toFixed(2)}`);
-    ok(p99 < TURN_P99_MAX, `${label}: p99 turn ${p99.toFixed(3)} deg exceeds ${TURN_P99_MAX} — path is polygonal`);
-    ok(max < TURN_ABS_MAX, `${label}: max turn ${max.toFixed(3)} deg exceeds ${TURN_ABS_MAX} — visible kink`);
-    // Constant speed was already achieved and must not be traded away for curvature.
+    const offMax = offsets.length ? Math.max(...offsets) : 0;
+    console.log(
+      `   ${label.padEnd(30)} p99=${p99.toFixed(3)} max=${max.toFixed(3)} ` +
+        `spreadMps=${spread.toFixed(2)} offRouteMax=${route ? offMax.toFixed(2) + "m" : "n/a"}`,
+    );
+
+    // A two-point straight line is not a road: the trust gate refuses it and the
+    // marker correctly follows free space instead. Asserting it sits on that
+    // line would demand the exact bug the gate exists to prevent.
+    if (route && tr.onRoute) {
+      // THE PROPERTY THAT ACTUALLY MATTERS once a road is attached: the marker
+      // must sit ON the line that is drawn. Turn-angle smoothness is the wrong
+      // test here — a real dense route genuinely turns ~1 degree per vertex, and
+      // demanding less than that forced a spline that ROUNDED real junction
+      // corners and dragged the drawn line off the carriageway. The user saw
+      // exactly that and called it worse. The marker inheriting the road's own
+      // geometry is correct; leaving the road never is.
+      ok(offMax < 0.5, `${label}: marker strayed ${offMax.toFixed(2)}m from the drawn route`);
+    } else if (!route) {
+      ok(p99 < TURN_P99_MAX, `${label}: p99 turn ${p99.toFixed(3)} deg exceeds ${TURN_P99_MAX} — path is polygonal`);
+      ok(max < TURN_ABS_MAX, `${label}: max turn ${max.toFixed(3)} deg exceeds ${TURN_ABS_MAX} — visible kink`);
+    }
+    // Constant speed was already achieved and must not be traded away.
     ok(spread < 1.0, `${label}: speed spread ${spread.toFixed(2)} m/s — motion is surging`);
   }
 
   console.log("5. smoothness (target p99<0.5deg, max<1.0deg; was 2.400/4.42)");
   const { path } = curvingRun();
   smoothness("no route (spline only)", null);
-  smoothness("dense route (~5m, OSRM-like)", densify(path, 5));
+  smoothness("dense route (~5m, OSRM-like)", densePath(5));
   smoothness("coarse route (21m segments)", path);
   // A two-point straight-line fallback is NOT a road. Snapping to it made the
   // marker jump 7m in a frame (424 m/s) until the route-trust gate was added.

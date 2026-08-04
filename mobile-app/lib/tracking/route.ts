@@ -145,6 +145,21 @@ export class Route {
   private readonly cumulative: number[];
   private cachedRenderPath: LatLng[] | null = null;
 
+  /**
+   * True when the polyline is already dense enough to BE the road.
+   *
+   * This matters more than it sounds. Smoothing was added so that a coarse
+   * route (a 2-point straight-line fallback, a simplified overview) would not
+   * hand back its own vertex corners. But an OSRM `overview=full` route already
+   * has vertices every few metres and its corners are REAL — a junction is
+   * genuinely a right angle. Splining through those rounds them off, so the
+   * drawn line cuts the corner and leaves the carriageway at exactly the places
+   * a viewer is most likely to be looking.
+   *
+   * Dense routes are therefore used verbatim: the road is the road.
+   */
+  readonly dense: boolean;
+
   constructor(points: LatLng[]) {
     // Consecutive duplicates produce zero-length segments, which are a division
     // by zero waiting to happen in the projection below.
@@ -160,6 +175,10 @@ export class Route {
     for (let i = 1; i < cleaned.length; i++) {
       this.cumulative[i] = this.cumulative[i - 1] + distanceM(cleaned[i - 1], cleaned[i]);
     }
+
+    const total = cleaned.length > 1 ? this.cumulative[cleaned.length - 1] : 0;
+    const avgSegment = cleaned.length > 1 ? total / (cleaned.length - 1) : Infinity;
+    this.dense = cleaned.length >= 8 && avgSegment <= 20;
   }
 
   get length(): number {
@@ -189,6 +208,9 @@ export class Route {
   renderPath(stepM = 4): LatLng[] {
     if (this.cachedRenderPath) return this.cachedRenderPath;
     if (!this.usable) return this.points;
+    // A dense route IS the road. Resampling it through a spline would only
+    // round its real corners and pull the drawn line off the street.
+    if (this.dense) return (this.cachedRenderPath = this.points);
     const out: LatLng[] = [];
     const total = this.length;
     const n = Math.max(2, Math.ceil(total / stepM));
@@ -275,7 +297,12 @@ export class Route {
     // the correct trade: a vehicle rounds a corner too, and an instantaneous
     // pivot looks far more artificial than a metre of easing.
     return {
-      point: splinePoint(this.points[lo - 1] ?? null, a, b, this.points[lo + 2] ?? null, t),
+      // Dense route: walk the segment exactly, so the marker sits on the same
+      // geometry that is drawn. Only a coarse polyline gets curved, and only
+      // because its vertices are too far apart to be the road on their own.
+      point: this.dense
+        ? { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t }
+        : splinePoint(this.points[lo - 1] ?? null, a, b, this.points[lo + 2] ?? null, t),
       bearing: bearingDeg(a, b),
       segment: lo,
     };

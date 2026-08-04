@@ -181,6 +181,7 @@ export class MotionTrack {
   private matches: (RouteMatch | null)[] = [];
   /** Eased 0..1 confidence that the marker is on the road. */
   private renderSnap = 0;
+  private snapInitialised = false;
   private route: Route | null = null;
   private lastMatchedOffsetM = 0;
   private lastSeq = -1;
@@ -356,6 +357,7 @@ export class MotionTrack {
     this.lastSampleAt = null;
     this.lastMatchedOffsetM = 0;
     this.renderSnap = 0;
+    this.snapInitialised = false;
   }
 
   /**
@@ -445,12 +447,20 @@ export class MotionTrack {
         }
       }
 
-      // Ease toward the target confidence instead of jumping to it.
-      const maxSnapStep = SNAP_RATE_PER_S * dtSec;
-      this.renderSnap =
-        this.renderSnap < targetSnap
-          ? Math.min(targetSnap, this.renderSnap + maxSnapStep)
-          : Math.max(targetSnap, this.renderSnap - maxSnapStep);
+      // Ease BETWEEN states, but adopt the first one outright. Ramping up from
+      // zero at the start of a session left the marker up to 0.7m off the road
+      // for the first half-second — visible at high zoom, and pointless: there
+      // is no previous position to ease away from.
+      if (this.snapInitialised) {
+        const maxSnapStep = SNAP_RATE_PER_S * dtSec;
+        this.renderSnap =
+          this.renderSnap < targetSnap
+            ? Math.min(targetSnap, this.renderSnap + maxSnapStep)
+            : Math.max(targetSnap, this.renderSnap - maxSnapStep);
+      } else {
+        this.renderSnap = targetSnap;
+        this.snapInitialised = true;
+      }
 
       const w = roadPos ? this.renderSnap : 0;
       pos =
