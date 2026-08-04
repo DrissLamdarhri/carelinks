@@ -26,7 +26,6 @@ import { useI18n } from "@/lib/i18n";
 import { ReviewsList } from "@/components/ReviewsList";
 import { db } from "@/lib/db/dal";
 import type { Professional, Profile } from "@/lib/db/types";
-import { mockProfessionals } from "@/lib/mock-data";
 
 // Gradient tuned to the pro's specialty so the profile feels part of that
 // service's world (same palette as the psychologist "zoomed" profile).
@@ -92,25 +91,21 @@ export default function ProviderProfileScreen() {
     };
   }, [providerId]);
 
-  const fallback = useMemo(
-    () => mockProfessionals.find((item) => item.id === providerId),
-    [providerId]
-  );
-
-  const displayName =
-    profile?.full_name ||
-    (fallback ? `${fallback.firstName} ${fallback.lastName}` : "Professionnel");
-  const avatar = profile?.avatar_url || fallback?.avatar || null;
-  const city = profile?.city || fallback?.city || "Maroc";
-  const rating = professional?.rating_avg ?? fallback?.rating ?? 0;
-  const reviewCount = professional?.rating_count ?? fallback?.reviewCount ?? 0;
-  const isVerified = professional?.verification_status === "approved" || Boolean(fallback);
+  // No mock fallback. Showing an invented name, photo, city and rating for an
+  // unknown id was bad enough; `isVerified` was ALSO true whenever the fallback
+  // matched, so a fabricated professional carried a verification badge.
+  const displayName = profile?.full_name || "Professionnel";
+  const avatar = profile?.avatar_url || null;
+  const city = profile?.city || "Maroc";
+  const rating = professional?.rating_avg ?? 0;
+  const reviewCount = professional?.rating_count ?? 0;
+  const isVerified = professional?.verification_status === "approved";
   const specialtyKey = professional?.specialty ?? "";
   const specialty = SPEC_LABEL_KEY[specialtyKey]
     ? t(SPEC_LABEL_KEY[specialtyKey])
     : professional?.specialty
     ? professional.specialty.replaceAll("_", " ")
-    : fallback?.specialty || t("health_professional");
+    : t("health_professional");
   const gradient = SPEC_GRADIENT[specialtyKey] ?? Gradients.nurse;
   const initials = displayName
     .split(" ")
@@ -130,7 +125,7 @@ export default function ProviderProfileScreen() {
   const experience = professional?.years_experience
     ? `${professional.years_experience}+`
     : "—";
-  const price = professional?.hourly_rate_mad ?? fallback?.minPrice ?? null;
+  const price = professional?.hourly_rate_mad ?? null;
   const services = (SPEC_SERVICES[specialtyKey] ?? []).map((k) => t(k));
 
   return (

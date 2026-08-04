@@ -16,7 +16,7 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
-import { buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
 
@@ -25,7 +25,6 @@ export default function BookingChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [recipientProfile, setRecipientProfile] = useState<Profile | null>(null);
@@ -39,12 +38,6 @@ export default function BookingChatScreen() {
       if (!bookingId) {
         setLoading(false);
         setErrorMessage(t("reservation_not_found"));
-        return;
-      }
-      if (isDemoBooking) {
-        setRecipientId(DEMO_PRO_1_ID);
-        setRecipientProfile(buildDemoProfile(DEMO_PRO_1_ID));
-        setLoading(false);
         return;
       }
       setLoading(true);
@@ -78,7 +71,7 @@ export default function BookingChatScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
   return (
     <KeyboardAvoidingView

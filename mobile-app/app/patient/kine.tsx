@@ -33,12 +33,7 @@ const FREQ: { key: Exclude<Recurrence, "none">; label: string }[] = [
   { key: "monthly", label: "recurrence_monthly" },
 ];
 const PRESETS = [6, 10, 12];
-type Kine = { id: string; name: string; focus: string; real: boolean };
-const DEMO_KINE: Kine[] = [
-  { id: "demo-kine-1", name: "Dr. Hamza Alami", focus: "Rééducation motrice", real: false },
-  { id: "demo-kine-2", name: "Dr. Leila Saïdi", focus: "Kiné respiratoire", real: false },
-  { id: "demo-kine-3", name: "Dr. Omar Tazi", focus: "Drainage & sport", real: false },
-];
+type Kine = { id: string; name: string; focus: string };
 const initialsOf = (n: string) => n.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 
 export default function KineScreen() {
@@ -47,8 +42,14 @@ export default function KineScreen() {
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const [mode, setMode] = useState<"single" | "program">("program");
-  const [kines, setKines] = useState<Kine[]>(DEMO_KINE);
-  const [kineId, setKineId] = useState<string>(DEMO_KINE[0].id);
+  // Real, approved physiotherapists only. This list used to be seeded with
+  // three invented practitioners ("Dr. Hamza Alami" and friends) that real
+  // pros were merely appended to — so a patient could build a ten-session
+  // rehabilitation programme around a person who does not exist, and the
+  // booking was created with professional_id = null.
+  const [kines, setKines] = useState<Kine[]>([]);
+  const [kinesLoading, setKinesLoading] = useState(true);
+  const [kineId, setKineId] = useState<string | null>(null);
   const [focus, setFocus] = useState(0);
   const [sessions, setSessions] = useState(10);
   const [freq, setFreq] = useState<Exclude<Recurrence, "none">>("weekly");
@@ -58,17 +59,24 @@ export default function KineScreen() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const { data: pros } = await supabase.from("professionals").select("id").eq("specialty", "physiotherapist").eq("verification_status", "approved");
-      if (!pros?.length) return;
-      const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", pros.map((p) => p.id));
-      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name as string]));
-      const real: Kine[] = pros.map((p) => ({ id: p.id, name: nameById.get(p.id) ?? "Kinésithérapeute", focus: t("spec_physio"), real: true }));
-      if (active) setKines([...real, ...DEMO_KINE]);
+      try {
+        const { data: pros } = await supabase.from("professionals").select("id").eq("specialty", "physiotherapist").eq("verification_status", "approved");
+        const ids = (pros ?? []).map((p) => p.id);
+        if (!ids.length) return;
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+        const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name as string]));
+        const real: Kine[] = ids.map((id) => ({ id, name: nameById.get(id) ?? t("spec_physio"), focus: t("spec_physio") }));
+        if (!active) return;
+        setKines(real);
+        setKineId((cur) => cur ?? real[0]?.id ?? null);
+      } finally {
+        if (active) setKinesLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []);
 
-  const chosen = useMemo(() => kines.find((k) => k.id === kineId) ?? kines[0], [kines, kineId]);
+  const chosen = useMemo(() => kines.find((k) => k.id === kineId) ?? kines[0] ?? null, [kines, kineId]);
   const total = sessions * PRICE;
 
   const reserve = async () => {
@@ -77,14 +85,20 @@ export default function KineScreen() {
     if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
-      const realId = chosen && chosen.real ? chosen.id : null;
-      if (realId) {
-        const realPro = await db.pros.get(realId).catch(() => null);
-        if (!realPro?.is_available) {
-          toastError(t("no_pros_online_block"));
-          setSubmitting(false);
-          return;
-        }
+      // No practitioner, no programme. There is no "null professional"
+      // fallback any more, because there are no invented practitioners to
+      // fall back from.
+      const realId = chosen?.id ?? null;
+      if (!realId) {
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
+      const realPro = await db.pros.get(realId).catch(() => null);
+      if (!realPro?.is_available) {
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
       }
       const [h, m] = ["10", "00"];
       const firstISO = new Date(`${dates[startDay].iso}T${h}:${m}:00`).toISOString();
@@ -143,6 +157,11 @@ export default function KineScreen() {
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
           {/* Kiné picker (same practitioner across the program) */}
           <Text style={s.label}>{t("choose_kine")}</Text>
+          {kinesLoading ? (
+            <ActivityIndicator color={KINE} style={{ alignSelf: "flex-start", marginVertical: 12 }} />
+          ) : kines.length === 0 ? (
+            <View style={s.emptyKine}><Text style={s.emptyKineTxt}>{t("no_pros_nearby")}</Text></View>
+          ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 20 }}>
             {kines.map((k) => {
               const on = k.id === kineId;
@@ -156,6 +175,7 @@ export default function KineScreen() {
               );
             })}
           </ScrollView>
+          )}
 
           {/* Focus */}
           <Text style={s.label}>{t("reeducation_type")}</Text>
@@ -263,6 +283,8 @@ const s = StyleSheet.create({
   kineAvatarTxt: { color: KINE_DARK, fontSize: 15, fontWeight: "800" },
   kineName: { color: Colors.textPrimary, fontSize: 13, fontWeight: "800" },
   kineFocus: { color: Colors.textMuted, fontSize: 11, marginTop: 1 },
+  emptyKine: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16, marginVertical: 4 },
+  emptyKineTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
   kineCheck: { position: "absolute", top: 10, right: 10 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1.5, borderColor: "#ECECEC", backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },

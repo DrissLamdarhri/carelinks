@@ -28,7 +28,6 @@ import { useI18n } from "@/lib/i18n";
 import { useFocusRefresh } from "@/lib/hooks/useFocusRefresh";
 import {
   MOROCCAN_CITIES,
-  mockPatientProfile,
   quickServices,
   primaryServices,
 } from "@/lib/mock-data";
@@ -56,7 +55,7 @@ export default function PatientHomeScreen() {
   const { t } = useI18n();
   const { user, profile, refreshProfile } = useAuth();
 
-  // Real data behind "Proches de vous" (was mock).
+  // Professionals who are online right now, near this patient.
   const [nearbyPros, setNearbyPros] = useState<NearbyProMapItem[]>([]);
   const [prosLoading, setProsLoading] = useState(true);
   const [nextProName, setNextProName] = useState<string | null>(null);
@@ -148,12 +147,11 @@ export default function PatientHomeScreen() {
       .slice(0, 3);
   }, [nearbyPros, workedWithIds]);
 
-  // Use real profile data, fallback to mock for display purposes
   const displayName = {
-    firstName: profile?.firstName || mockPatientProfile.firstName,
-    lastName: profile?.lastName || mockPatientProfile.lastName,
+    firstName: profile?.firstName || "",
+    lastName: profile?.lastName || "",
   };
-  const city = profile?.city || mockPatientProfile.city;
+  const city = profile?.city || "";
   const avatar = profile?.avatar;
 
   return (

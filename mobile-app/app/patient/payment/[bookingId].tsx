@@ -17,7 +17,7 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
-import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { showAppAlert } from "@/lib/app-alert";
 import { confirmYogaPayment } from "@/lib/db/yoga";
@@ -47,7 +47,6 @@ export default function PaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemo = isDemoBookingId(bookingId);
   const { user } = useAuth();
   const { t } = useI18n();
   const STEPS = [t("step_summary"), t("payment_title"), t("step_confirmation")];
@@ -66,26 +65,21 @@ export default function PaymentScreen() {
   const [service, setService] = useState("Soin à domicile");
   const [txId, setTxId] = useState("");
 
-  // Pre-filled with valid mock values — this is a simulated CMI checkout (no
-  // real card is ever charged), so there's no reason to make testers retype
-  // the same 16 digits on every single test run. Still fully editable.
-  const [cardNum, setCardNum] = useState("4242424242424242");
-  const [cardName, setCardName] = useState("TEST CARELINK");
-  const [exp, setExp] = useState("1229");
-  const [cvv, setCvv] = useState("123");
-  const [otp, setOtp] = useState("1234");
+  // Empty, like any real checkout. These used to ship pre-filled with
+  // 4242 4242 4242 4242 / TEST CARELINK / 12-29 / 123 and an OTP of 1234, so a
+  // patient could reach "Payer" without entering anything — convenient while
+  // testing, indistinguishable from a broken payment form in front of a user.
+  const [cardNum, setCardNum] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [exp, setExp] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [otp, setOtp] = useState("");
 
   useEffect(() => {
     let active = true;
     void (async () => {
       if (!bookingId) { setLoading(false); return; }
       try {
-        if (isDemo) {
-          if (!active) return;
-          setPrestation(150); setProId(DEMO_PRO_1_ID); setProName("Salma B."); setCity("Casablanca");
-          setService("Injection à domicile"); setSpecialty("nurse");
-          return;
-        }
         const b = await db.bookings.get(bookingId);
         if (!active) return;
         setPrestation(Math.round(Number(b.final_price_mad ?? b.budget_max_mad ?? b.budget_min_mad ?? 0)));
@@ -107,7 +101,7 @@ export default function PaymentScreen() {
       }
     })();
     return () => { active = false; };
-  }, [bookingId, isDemo]);
+  }, [bookingId]);
 
   const total = prestation + SERVICE_FEE;
   const commission = Math.round(prestation * COMMISSION_RATE);
@@ -155,7 +149,7 @@ export default function PaymentScreen() {
     if (!bookingId || !user?.id || submitting) return;
     setSubmitting(true);
     try {
-      if (!isDemo && specialty === "yoga_instructor") {
+      if (specialty === "yoga_instructor") {
         // Paying IS what reserves the seat (migration 0043) — the enrollment,
         // the payment row, and the booking's matched status are all created
         // together, atomically, only here. If the class filled up while this
@@ -179,7 +173,7 @@ export default function PaymentScreen() {
           }
           throw error;
         }
-      } else if (!isDemo) {
+      } else {
         // Re-read the booking right before charging: for urgent/emergency the
         // hold is placed before any pro is matched, and checkout (card entry,
         // 3-D Secure) takes long enough that a pro can claim the job in the

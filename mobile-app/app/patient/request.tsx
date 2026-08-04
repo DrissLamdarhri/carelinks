@@ -45,7 +45,6 @@ import { toDbSpecialty } from "@/lib/db/types";
 import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
-import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
 import { useServiceTypes } from "@/lib/service-types";
 import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
@@ -63,36 +62,7 @@ const SHEET_PEEK_HEIGHT = 132;
 const SHEET_COLLAPSED_TOP = SCREEN_H - SHEET_PEEK_HEIGHT;
 const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 
-// Demo mode is OFF in production. Set EXPO_PUBLIC_DEMO=true only for demo builds
-// (shows fallback photo-pros + a wide search radius so the map is never empty).
-const DEMO = process.env.EXPO_PUBLIC_DEMO === "true";
-const SEARCH_RADIUS_KM = DEMO ? 80 : 15;
-
-// Demo professionals positioned AROUND the map center so the map is never empty
-// during the demo (no real approved pros are seeded yet). Once real pros exist,
-// `mapPros` from findNearbyProsForMap takes over automatically.
-function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
-  const base = [
-    { id: "fz", initials: "FZ", name: "Fatima Zahra", specialty: "Infirmière", rating: 4.9, priceMad: 180, dLat: 0.006, dLng: 0.004, avatar: "https://randomuser.me/api/portraits/women/65.jpg" },
-    { id: "km", initials: "KM", name: "Karim Mansour", specialty: "Kinésithérapeute", rating: 4.8, priceMad: 220, dLat: 0.003, dLng: -0.007, avatar: "https://randomuser.me/api/portraits/men/32.jpg" },
-    { id: "sr", initials: "SR", name: "Samira Rifai", specialty: "Psychologue", rating: 4.7, priceMad: 350, dLat: -0.005, dLng: 0.006, avatar: "https://randomuser.me/api/portraits/women/44.jpg" },
-    { id: "yb", initials: "YB", name: "Youssef Bennani", specialty: "Infirmier", rating: 4.6, priceMad: 160, dLat: -0.007, dLng: -0.004, avatar: "https://randomuser.me/api/portraits/men/52.jpg" },
-  ];
-  return base.map((p) => ({
-    id: p.id,
-    initials: p.initials,
-    name: p.name,
-    shortName: p.name.split(" ")[0],
-    specialty: p.specialty,
-    rating: p.rating,
-    priceMad: p.priceMad,
-    avatarSource: DEMO_PRO_AVATARS[p.id],
-    avatarUrl: p.avatar,
-    lat: c.lat + p.dLat,
-    lng: c.lng + p.dLng,
-    distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
-  }));
-}
+const SEARCH_RADIUS_KM = 15;
 
 // Display-only declutter: on a discovery map, pros seeded/located at nearly the
 // same point stack into a single unreadable blob. Fan any near-duplicates out on
@@ -236,8 +206,6 @@ export default function PatientRequestScreen() {
     }
     return Array.from(map.values());
   }, [dates]);
-  const demoMode = DEMO;
-
   const canSubmit = useMemo(
     () => address.trim().length > 3 || coords !== null,
     [address, coords]
@@ -259,7 +227,7 @@ export default function PatientRequestScreen() {
       try {
         const rows = await geo.findNearbyProsForMap(c.lat, c.lng, {
           specialty: toDbSpecialty(serviceKey),
-          radiusKm: SEARCH_RADIUS_KM, // 15 km in prod; wide only in demo builds
+          radiusKm: SEARCH_RADIUS_KM,
         });
         if (cancelled) return;
         setMapPros(
@@ -428,13 +396,10 @@ export default function PatientRequestScreen() {
     }
   };
 
-  // Prefer REAL nearby pros from the DB; fall back to demo photo-pros only when
-  // none are found (so seeding real pros makes them appear automatically).
-  const effectivePros = declutterPros(
-    mapPros.length > 0 ? mapPros : demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : [],
-  );
-
-  const usingRealPros = mapPros.length > 0;
+  // Real online professionals, or nothing. The fallback to four invented
+  // photo-pros ("Fatima Zahra", "Karim Mansour", …) is gone — an empty map is
+  // an honest answer and the map renders an empty state for it.
+  const effectivePros = declutterPros(mapPros);
   // Tapped pro → small detail card (clean, doesn't cover the map).
   const selectedPro = effectivePros.find((p) => p.id === selectedProId) ?? null;
 
@@ -505,7 +470,6 @@ export default function PatientRequestScreen() {
             initialLat={coords?.lat ?? DEFAULT_CENTER.lat}
             initialLng={coords?.lng ?? DEFAULT_CENTER.lng}
             pros={effectivePros}
-            demo={demoMode}
             primaryColor={theme.primary}
             showChrome={false}
             onChange={(lat, lng) => {
@@ -556,12 +520,14 @@ export default function PatientRequestScreen() {
           <Users size={18} color={theme.primary} />
         </TouchableOpacity>
 
-        {/* Debug/confidence chip: how many pros loaded + real vs demo */}
+        {/* How many professionals are online around this point. Was a
+            debug chip reading "N pros (réel)" or "N démo"; there is no démo
+            any more, and neither label was written for a patient to read. */}
         {effectivePros.length > 0 ? (
           <View style={styles.countChip}>
-            <View style={[styles.countDot, { backgroundColor: usingRealPros ? "#22C55E" : "#F59E0B" }]} />
+            <View style={[styles.countDot, { backgroundColor: "#22C55E" }]} />
             <Text style={styles.countChipText}>
-              {effectivePros.length} {usingRealPros ? "pros (réel)" : "démo"}
+              {effectivePros.length} {t("pros_available_now")}
             </Text>
           </View>
         ) : null}

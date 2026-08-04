@@ -48,12 +48,12 @@ export default function PsychologistBookingScreen() {
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const params = useLocalSearchParams<{ proId?: string; name?: string; price?: string }>();
-  const psyName = (typeof params.name === "string" && params.name) || "Dr. Dalila Mansouri";
+  const psyName = (typeof params.name === "string" && params.name) || t("clinical_psychologist");
   const psyInitials = psyName.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "DM";
   const PRICE = Number(params.price) || DEFAULT_PRICE;
-  // A real professional_id when the psychologist came from the DB directory;
-  // null for the built-in demo entries.
-  const chosenProId = typeof params.proId === "string" && !params.proId.startsWith("demo") ? params.proId : null;
+  // Always a real professional_id now — the "demo-psy-*" placeholders the
+  // directory used to inject are gone, so there is nothing to filter out.
+  const chosenProId = typeof params.proId === "string" && params.proId ? params.proId : null;
   const [confirming, setConfirming] = useState(false);
   const [plan, setPlan] = useState<PlanType>("single");
   const [recurrence, setRecurrence] = useState<Exclude<Recurrence, "none">>("weekly");

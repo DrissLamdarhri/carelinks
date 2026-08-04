@@ -24,14 +24,7 @@ import { db } from "@/lib/db/dal";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { Booking, Bid, Professional, Profile } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
-import {
-  buildDemoBids,
-  buildDemoBooking,
-  buildDemoProfessional,
-  buildDemoProfile,
-  isDemoBookingId,
-  normalizeRouteParam,
-} from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 
 type ProOfferMeta = {
   fullName: string;
@@ -69,14 +62,8 @@ export default function NurseOffersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
 
-  const { bids: liveBids, loading: liveLoading, error } = useBookingBids(isDemoBooking ? null : bookingId);
-  const [demoBids, setDemoBids] = useState<Bid[]>(() =>
-    isDemoBooking && bookingId ? buildDemoBids(bookingId) : []
-  );
-  const bids = isDemoBooking ? demoBids : liveBids;
-  const loading = isDemoBooking ? false : liveLoading;
+  const { bids, loading, error } = useBookingBids(bookingId);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -94,10 +81,6 @@ export default function NurseOffersScreen() {
       }
 
       try {
-        if (isDemoBooking) {
-          if (!cancelled) setBooking(buildDemoBooking(bookingId));
-          return;
-        }
         const next = await db.bookings.get(bookingId);
         if (!cancelled) setBooking(next);
       } catch (loadError) {
@@ -110,12 +93,7 @@ export default function NurseOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId, isDemoBooking]);
-
-  useEffect(() => {
-    if (!isDemoBooking || !bookingId) return;
-    setDemoBids(buildDemoBids(bookingId));
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
   const visibleOffers = useMemo(
     () =>
@@ -126,21 +104,11 @@ export default function NurseOffersScreen() {
     [bids, hiddenOfferIds]
   );
 
-  const demoMetaByProId = useMemo<Record<string, ProOfferMeta>>(() => {
-    if (!isDemoBooking) return {};
-    return Object.fromEntries(
-      [...new Set(visibleOffers.map((offer) => offer.professional_id))].map((proId) => [
-        proId,
-        getMeta(buildDemoProfile(proId), buildDemoProfessional(proId), t),
-      ])
-    );
-  }, [isDemoBooking, visibleOffers]);
-  const metaByProId = isDemoBooking ? demoMetaByProId : liveMetaByProId;
+  const metaByProId = liveMetaByProId;
 
   useEffect(() => {
     const loadMeta = async () => {
       const uniqueProIds = [...new Set(visibleOffers.map((offer) => offer.professional_id))];
-      if (isDemoBooking) return;
       const missingIds = uniqueProIds.filter((id) => !metaByProId[id]);
       if (missingIds.length === 0) return;
 
@@ -161,24 +129,13 @@ export default function NurseOffersScreen() {
       setLiveMetaByProId((prev) => ({ ...prev, ...Object.fromEntries(fetched) }));
     };
     void loadMeta();
-  }, [isDemoBooking, visibleOffers]);
+  }, [visibleOffers]);
 
   const handleAccept = async (offer: Bid) => {
     if (!bookingId) return;
     setActionError(null);
     setActionId(offer.id);
     try {
-      if (isDemoBooking) {
-        setDemoBids((prev) =>
-          prev.map((bid) => ({
-            ...bid,
-            status: bid.id === offer.id ? "accepted" : "rejected",
-          }))
-        );
-        // Escrow: pay first so the funds are held before the nurse travels.
-        router.replace(`/patient/payment/${encodeURIComponent(bookingId)}`);
-        return;
-      }
       // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
       await db.bids.acceptAndMatch(offer.id);
       toastSuccess(t("offer_accepted_notified"));
@@ -197,13 +154,6 @@ export default function NurseOffersScreen() {
     setActionError(null);
     setActionId(`${offerId}:reject`);
     try {
-      if (isDemoBooking) {
-        setDemoBids((prev) =>
-          prev.map((bid) => (bid.id === offerId ? { ...bid, status: "rejected" } : bid))
-        );
-        setHiddenOfferIds((prev) => [...prev, offerId]);
-        return;
-      }
       await db.bids.setStatus(offerId, "rejected");
       setHiddenOfferIds((prev) => [...prev, offerId]);
     } catch (rejectError) {

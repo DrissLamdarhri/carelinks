@@ -48,14 +48,6 @@ const MAX_SCALE = 2.6; // pinch-zoom in limit
 const SCREEN_W = Dimensions.get("window").width;
 const MAP_H    = 320;
 
-const DEMO_PROS: ProPinData[] = [
-  { id:"fz", initials:"FZ", name:"Fatima Zahra",  shortName:"Fatima Z.",  specialty:"Infirmière",       distanceKm:0.8, rating:4.9, priceMad:180, lat:34.044, lng:-4.993 },
-  { id:"km", initials:"KM", name:"Karim Mansour", shortName:"Karim M.",   specialty:"Kinésithérapeute", distanceKm:1.4, rating:4.8, priceMad:220, lat:34.040, lng:-4.984 },
-  { id:"sr", initials:"SR", name:"Samira Rifai",  shortName:"Samira R.",  specialty:"Psychologue",      distanceKm:2.1, rating:4.7, priceMad:350, lat:34.033, lng:-5.017 },
-];
-
-const DEMO_ADDRESSES = ["Rue Ibn Batouta, Fès", "Bd Hassan II, Fès", "Quartier Narjiss, Fès", "Médina, Fès"];
-
 async function nominatim(lat: number, lng: number): Promise<string | null> {
   try {
     const r = await fetch(
@@ -95,7 +87,7 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
               style={[list.reserveBtn, { backgroundColor: color }]}
               onPress={() => {
                 try { 
-                  // notify parent that user wants to reserve this demo pro
+                  // notify parent that the user wants to book this pro
                   // (parent handles booking creation / navigation)
                   // @ts-ignore
                   typeof propsOnReserve !== 'undefined' && propsOnReserve(pro.id);
@@ -142,11 +134,8 @@ export type BookingMapProps = {
   pros?: ProPinData[];
   height?: number;
   showProList?: boolean;
-  // called when user taps "Réserver" on a listed pro (demo/demo-mode)
+  // called when the user taps "Réserver" on a listed pro
   onReserve?: (proId: string) => void;
-  // When true (default), fall back to sample pros if none are provided.
-  // Set false in production so real users never see fake professionals.
-  demo?: boolean;
   // Message shown over the map when there are no pros to display.
   emptyText?: string;
   // When false, hides the internal search bar + GPS button (use when the parent
@@ -165,7 +154,6 @@ export function BookingMap({
   height = MAP_H,
   showProList = true,
   onReserve: propsOnReserve,
-  demo = true,
   // "en ligne" is not decoration: the map only plots professionals who are
   // actually available right now (migration 0054), so an empty map means
   // "nobody is working nearby at this moment", not "nobody exists here".
@@ -175,7 +163,11 @@ export function BookingMap({
   const { t } = useI18n();
   const vw = SCREEN_W;
   const vh = height;
-  const displayPros = pros && pros.length > 0 ? pros : demo ? DEMO_PROS : [];
+  // Whatever the caller gives us, and nothing else. There used to be a fallback
+  // to three invented professionals whenever `pros` was empty — and `demo`
+  // DEFAULTED TO TRUE, so every caller that forgot to pass it showed fake
+  // people at hardcoded Fès coordinates.
+  const displayPros = pros ?? [];
   const isEmpty = displayPros.length === 0;
 
   // ── Native pan value — this is the performance core ───────────────────────
@@ -184,19 +176,24 @@ export function BookingMap({
 
   const [selPro,    setSelPro]    = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
-  const [address,   setAddress]   = useState(DEMO_ADDRESSES[0]);
+  // The real address of whatever the map is centred on. This used to be a
+  // rotating list of four invented Fès streets, cycling every 4.2 seconds —
+  // the address bar was a screensaver, not information.
+  const [address,   setAddress]   = useState<string | null>(null);
   const [locating,  setLocating]  = useState(false);
 
-  // Rotate demo address occasionally — cheap, low-frequency state (not per-frame)
   React.useEffect(() => {
-    const iv = setInterval(() => {
-      setAddress((prev) => {
-        const idx = DEMO_ADDRESSES.indexOf(prev);
-        return DEMO_ADDRESSES[(idx + 1) % DEMO_ADDRESSES.length];
+    let cancelled = false;
+    const id = setTimeout(() => {
+      void nominatim(initialLat, initialLng).then((label) => {
+        if (!cancelled && label) setAddress(label);
       });
-    }, 4200);
-    return () => clearInterval(iv);
-  }, []);
+    }, 600); // debounce: the centre moves continuously while panning
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [initialLat, initialLng]);
 
   // ── PanResponder — drives pan natively, with rubber-band clamp at release ──
   const panResponder = useMemo(
@@ -379,7 +376,7 @@ export function BookingMap({
           <>
             <View style={styles.searchBar} pointerEvents="box-none">
               <View style={[styles.searchDot, { backgroundColor: primaryColor }]} />
-              <Text style={styles.searchText} numberOfLines={1}>{address}</Text>
+              <Text style={styles.searchText} numberOfLines={1}>{address ?? "…"}</Text>
               <TouchableOpacity
                 style={[styles.modBtn, { borderColor: primaryColor + "30" }]}
                 onPress={() => {}}

@@ -34,7 +34,6 @@ import {
 import { Colors, Gradients, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
-import { mockProProfile } from "@/lib/mock-data";
 import { LiveBookingsFeed } from "@/components/LiveBookingsFeed";
 import { useProDemandNotifications } from "@/lib/hooks/useProDemandNotifications";
 import { useAuth } from "@/lib/auth-context";
@@ -142,7 +141,7 @@ export default function ProHomeScreen() {
   const displayName =
     profile?.firstName || profile?.lastName
       ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
-      : mockProProfile.name;
+      : t("professional");
   const avatar = profile?.avatar || DEFAULT_AVATAR;
   // Includes en_route: a pro actively driving to a patient who accidentally
   // backs out of the tracking screen must still have a way back in — without

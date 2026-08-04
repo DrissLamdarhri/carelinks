@@ -5,7 +5,6 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { isDemoBookingId } from "@/lib/demo-booking";
 import { useBookingBids } from "@/lib/db/realtime";
 import type { Bid } from "@/lib/db/types";
 
@@ -14,14 +13,10 @@ type BidderInfo = { full_name: string | null; avatar_url: string | null; rating_
 type LiveBidsFeedProps = {
   bookingId: string;
   onAccepted?: (bidId: string) => void;
-  mockBids?: Bid[];
 };
 
-export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedProps) {
-  const isDemoBooking = isDemoBookingId(bookingId);
-  const { pendingBids: liveBids, loading: liveLoading } = useBookingBids(isDemoBooking ? null : bookingId);
-  const pendingBids = isDemoBooking ? mockBids ?? [] : liveBids;
-  const loading = isDemoBooking ? false : liveLoading;
+export function LiveBidsFeed({ bookingId, onAccepted }: LiveBidsFeedProps) {
+  const { pendingBids, loading } = useBookingBids(bookingId);
   const { t } = useI18n();
   const [accepting, setAccepting] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -62,10 +57,6 @@ export function LiveBidsFeed({ bookingId, onAccepted, mockBids }: LiveBidsFeedPr
     setErrorMessage(null);
     setAccepting(bid.id);
     try {
-      if (isDemoBooking) {
-        onAccepted?.(bid.id);
-        return;
-      }
       // RLS-safe atomic accept + match (same RPC as the offers screen).
       await db.bids.acceptAndMatch(bid.id);
       toastSuccess(t("offer_accepted"));

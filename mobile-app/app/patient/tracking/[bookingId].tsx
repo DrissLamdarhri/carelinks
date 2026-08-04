@@ -90,8 +90,7 @@ import { useI18n } from "@/lib/i18n";
 //   const router   = useRouter();
 //   const params   = useLocalSearchParams<{ bookingId?: string | string[] }>();
 //   const bookingId    = normalizeRouteParam(params.bookingId);
-//   const isDemoBooking = isDemoBookingId(bookingId);
-
+// 
 //   // ── Data ──────────────────────────────────────────────────────────────────
 //   const [booking,    setBooking]    = useState<Booking | null>(null);
 //   const [proProfile, setProProfile] = useState<Profile | null>(null);
@@ -145,7 +144,7 @@ import { useI18n } from "@/lib/i18n";
 //     };
 //     void load();
 //     return () => { cancelled = true; };
-//   }, [bookingId, isDemoBooking]);
+//   }, [bookingId]);
 
 //   // ── Demo: step pro along path ─────────────────────────────────────────────
 //   useEffect(() => {
@@ -210,7 +209,7 @@ import { useI18n } from "@/lib/i18n";
 //   return (
 //     <View style={styles.root}>
 //       {/* Supabase Realtime (non-visual) */}
-//       {!isDemoBooking && bookingId ? (
+//       {bookingId ? (
 //         <LiveTrackingChannel
 //           bookingId={bookingId}
 //           mode="watch"
@@ -524,12 +523,7 @@ import { showToast } from "@/lib/toast";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { careLabel } from "@/lib/care-label";
 import type { Booking, Profile } from "@/lib/db/types";
-import {
-  buildDemoBooking,
-  buildDemoProfile,
-  isDemoBookingId,
-  normalizeRouteParam,
-} from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { supabase } from "@/lib/supabase";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { fetchRoute } from "@/lib/routing";
@@ -537,7 +531,6 @@ import { TrackingStore } from "@/lib/tracking/store";
 import { Route } from "@/lib/tracking/route";
 import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
-import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
 import { haptics } from "@/lib/haptics";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -575,17 +568,6 @@ const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 type LatLng = { lat: number; lng: number };
 
 const MAP_CENTER: LatLng = { lat: 34.037, lng: -5.004 };
-
-const DEMO_PATH: LatLng[] = [
-  { lat: 34.052, lng: -4.982 },
-  { lat: 34.049, lng: -4.986 },
-  { lat: 34.046, lng: -4.990 },
-  { lat: 34.043, lng: -4.994 },
-  { lat: 34.040, lng: -4.998 },
-  { lat: 34.037, lng: -5.001 },
-];
-
-const DEMO_SPEED_KMH = 28; // Demo vehicle speed used for ETA calculations (km/h)
 
 // ── Pro avatar circle (photo or initials, exact style from screenshot) ─────────
 function ProAvatar({
@@ -692,15 +674,14 @@ export default function LiveTrackingScreen() {
   const router        = useRouter();
   const params        = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId     = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
 
   const [booking,    setBooking]    = useState<Booking | null>(null);
   const [proProfile, setProProfile] = useState<Profile | null>(null);
   const [proRating,  setProRating]  = useState<{ avg: number; count: number } | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [eta,        setEta]        = useState<number | null>(isDemoBooking ? 10 : null);
+  const [eta,        setEta]        = useState<number | null>(null);
   const [errorMsg,   setErrorMsg]   = useState<string | null>(null);
-  const [proCoord,   setProCoord]   = useState<LatLng | null>(isDemoBooking ? DEMO_PATH[0] : null);
+  const [proCoord,   setProCoord]   = useState<LatLng | null>(null);
   // The care destination, kept as its own value instead of being read back off
   // `routeCoords[last]`. Deriving it from the polyline meant a stale route also
   // meant a stale destination, and clearing the route erased the home marker.
@@ -786,9 +767,7 @@ export default function LiveTrackingScreen() {
   // arrival (booking → in_progress). Same source of truth as the "Arrivé !"
   // banner — never GPS proximity, which used to set this off mid-journey.
   const arrivedHaptic = useRef(false);
-  const hasArrived = isDemoBooking
-    ? eta === 0
-    : booking?.status === "in_progress" || booking?.status === "completed";
+  const hasArrived = booking?.status === "in_progress" || booking?.status === "completed";
   useEffect(() => {
     if (hasArrived && !arrivedHaptic.current) {
       arrivedHaptic.current = true;
@@ -806,15 +785,6 @@ export default function LiveTrackingScreen() {
       if (!bookingId) { setLoading(false); setErrorMsg(t("reservation_not_found")); return; }
       setLoading(true);
       try {
-        if (isDemoBooking) {
-          const b = buildDemoBooking(bookingId);
-          if (!cancelled) {
-            setBooking(b);
-            setProProfile(buildDemoProfile(b.professional_id ?? ""));
-            setEta(10);
-          }
-          return;
-        }
         const b = await db.bookings.get(bookingId);
         let prof: Profile | null = null;
         if (b.professional_id) {
@@ -853,107 +823,13 @@ export default function LiveTrackingScreen() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [bookingId, isDemoBooking]);
-
-  // ── Demo path animation (smooth, speed-based with real route fetch) ──────
-  useEffect(() => {
-    if (!isDemoBooking) return;
-    let cancelled = false;
-    let iv: ReturnType<typeof setInterval> | undefined;
-
-    // If route not loaded, fetch route from OSRM between a demo start and the patient center
-    (async () => {
-      try {
-        // demo start (example in Fès outskirts) and destination (patient)
-        const demoStart = DEMO_PATH[0];
-        const dest = MAP_CENTER;
-        const result = await fetchRoute(demoStart, dest);
-        const coords: LatLng[] = result.fromRouter ? result.coords : DEMO_PATH;
-
-        if (cancelled) return;
-        setRouteCoords(coords);
-
-        // compute center of route for projection
-        const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
-        const center = { lat: avg.lat / coords.length, lng: avg.lng / coords.length };
-        setRouteCenter(center);
-        setRouteLoaded(true);
-
-        // start smooth motion along route using speed
-        const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
-        const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
-
-        let current: LatLng = { ...coords[0] };
-        let targetIdx = 1;
-
-        const remainingMeters = (pos: LatLng, idx: number) => {
-          let rem = distMeters(pos, coords[idx]);
-          for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
-          return rem;
-        };
-
-        // initial ETA
-        const initialRem = remainingMeters(current, 1);
-        setEta(Math.max(0, Math.ceil(initialRem / speedMps / 60)));
-        setProCoord({ ...current });
-
-        const tickInterval = 120; // small, frequent steps → the marker glides
-        iv = setInterval(() => {
-          if (cancelled) return;
-          if (targetIdx >= coords.length) {
-            setEta(0);
-            setProCoord({ ...coords[coords.length - 1] });
-            if (iv) clearInterval(iv);
-            return;
-          }
-
-          const target = coords[targetIdx];
-          const segDist = distMeters(current, target);
-          if (segDist < 1) {
-            current = { ...target };
-            targetIdx += 1;
-            setProCoord({ ...current });
-            return;
-          }
-
-          const dt = tickInterval / 1000;
-          const move = Math.min(1, (speedMps * dt) / segDist);
-          current = {
-            lat: current.lat + (target.lat - current.lat) * move,
-            lng: current.lng + (target.lng - current.lng) * move,
-          };
-
-          setProCoord({ ...current });
-
-          const rem = remainingMeters(current, targetIdx);
-          const etaMin = Math.max(0, Math.ceil(rem / speedMps / 60));
-          setEta(etaMin);
-
-          if (targetIdx === coords.length - 1 && rem < 5) {
-            setEta(0);
-            setProCoord({ ...coords[coords.length - 1] });
-            if (iv) clearInterval(iv);
-          }
-        }, tickInterval);
-      } catch (e) {
-        // fallback to older local path if routing fails
-        console.warn("Route fetch failed, using demo path", e);
-        setRouteCoords(DEMO_PATH);
-        setRouteCenter(MAP_CENTER);
-        setRouteLoaded(true);
-        setProCoord(DEMO_PATH[0]);
-      }
-    })();
-
-    return () => { cancelled = true; if (iv) clearInterval(iv); };
-  }, [isDemoBooking]);
+  }, [bookingId]);
 
   // ── Real booking: seed the map from the pro's last known REAL position only.
   // No synthetic origin, no scripted glide — if the pro hasn't shared a real
   // location yet, the screen stays in the "waiting" state until they do.
   useEffect(() => {
     let cancelled = false;
-    if (isDemoBooking) return;
     if (!booking) return;
 
     (async () => {
@@ -1014,17 +890,16 @@ export default function LiveTrackingScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [booking, isDemoBooking]);
+  }, [booking]);
 
   // ETA is derived purely from real distance — it only changes when a real GPS
   // update moves proCoord (via handlePosition) or the patient position resolves.
   // No countdown, no scripted speed: if the pro isn't moving, the number doesn't move.
   useEffect(() => {
-    if (isDemoBooking) return;
     if (distanceKm == null) { setEta(null); return; }
     const ASSUMED_SPEED_KMH = 30;
     setEta(Math.max(0, Math.round((distanceKm / ASSUMED_SPEED_KMH) * 60)));
-  }, [distanceKm, isDemoBooking]);
+  }, [distanceKm]);
 
   const [liveProOrigin, setLiveProOrigin] = useState<LatLng | null>(null);
   // Once the pro broadcasts real GPS, live positions win over the scripted glide.
@@ -1053,7 +928,7 @@ export default function LiveTrackingScreen() {
   // Demo bookings keep their existing scripted animation: they already move
   // smoothly on their own 120ms tick, and pushing them through a pipeline that
   // renders 2s in the past would make the demo feel worse, not better.
-  const trackingStore = useMemo(() => (isDemoBooking ? null : new TrackingStore()), [isDemoBooking]);
+  const trackingStore = useMemo(() => new TrackingStore(), []);
   useEffect(() => () => trackingStore?.destroy(), [trackingStore]);
 
   // The drawn route is also the road the marker is map-matched to, so it
@@ -1101,10 +976,10 @@ export default function LiveTrackingScreen() {
     });
     setRouteProgressM(trackingStore?.routeOffsetM ?? null);
     // capture first seen pro origin for routing (only if not demo)
-    if (!isDemoBooking && !liveProOrigin) {
+    if (!liveProOrigin) {
       setLiveProOrigin({ lat: pos.lat, lng: pos.lng });
     }
-  }, [isDemoBooking, liveProOrigin, trackingStore]);
+  }, [liveProOrigin, trackingStore]);
 
   // Smooth rendering position — the pro dot glides between real fixes
   // instead of snapping every ~2s, without affecting the progress/deviation
@@ -1118,8 +993,6 @@ export default function LiveTrackingScreen() {
   // useGlidingPosition hook is deliberately NOT used here: it called setState
   // every animation frame from this screen, re-rendering the map, the sheet,
   // the provider card and the ETA sixty times a second to move one dot.
-  const glidingProCoord = proCoord;
-
   // The viewer's own compass heading, for the "you are here" marker's facing
   // cone (patient can be waiting/looking around while the pro is en route).
 
@@ -1154,7 +1027,7 @@ export default function LiveTrackingScreen() {
   const lastRerouteAtRef = useRef(0);
   const routeOriginRef = useRef<LatLng | null>(null);
   useEffect(() => {
-    if (isDemoBooking || !proCoord || !destCoord) return;
+    if (!proCoord || !destCoord) return;
 
     if (haversineKm(proCoord, destCoord) <= ARRIVAL_RADIUS_KM) {
       routeOriginRef.current = null;
@@ -1201,7 +1074,7 @@ export default function LiveTrackingScreen() {
       setRouteLoaded(true);
       reroutingRef.current = false;
     })();
-  }, [proCoord, destCoord, isDemoBooking, routeCoords, trackingStore]);
+  }, [proCoord, destCoord, routeCoords, trackingStore]);
 
   // Keep the patient's screen honest about where the mission actually is: the pro
   // advances `matched → en_route → in_progress → completed` on their side, and
@@ -1212,7 +1085,7 @@ export default function LiveTrackingScreen() {
   // to "end session" on a job that had already been cancelled out from under them.
   const cancelledHandledRef = useRef(false);
   useEffect(() => {
-    if (!bookingId || isDemoBooking) return;
+    if (!bookingId) return;
     const channel = supabase
       .channel(`booking:track:${bookingId}:${Math.random().toString(36).slice(2)}`)
       .on(
@@ -1237,7 +1110,7 @@ export default function LiveTrackingScreen() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bookingId, isDemoBooking, router, t]);
+  }, [bookingId, router, t]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   // "Arrivé !" is a fact the PRO declares, not something this screen guesses.
@@ -1250,7 +1123,7 @@ export default function LiveTrackingScreen() {
   // killed, tunnel) and only while a trip is actually in flight.
   const fixAgeSec    = lastFixAt != null ? Math.round((nowTs - lastFixAt) / 1000) : null;
   const staleLabel   =
-    isDemoBooking || arrived || !proLive || fixAgeSec == null || fixAgeSec < 30
+    arrived || !proLive || fixAgeSec == null || fixAgeSec < 30
       ? null
       : fixAgeSec < 120
         ? t("position_stale_sec").replace("%d", String(fixAgeSec))
@@ -1267,9 +1140,9 @@ export default function LiveTrackingScreen() {
     trackingStore?.setRoute(null);
   }, [arrived, trackingStore]);
 
-  const proName      = proProfile?.full_name ?? trackProMeta.name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
+  const proName      = proProfile?.full_name ?? trackProMeta.name ?? "Professionnel";
   const proPhone     = proProfile?.phone     ?? null;
-  const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
+  const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? null;
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
   const proSpecialty = booking ? careLabel(booking, t) : t("spec_nurse");
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;
@@ -1302,7 +1175,7 @@ export default function LiveTrackingScreen() {
 
   return (
     <View style={s.root}>
-      {!isDemoBooking && bookingId ? (
+      {bookingId ? (
         <LiveTrackingChannel bookingId={bookingId} mode="watch" onPosition={handlePosition} />
       ) : null}
 
@@ -1322,12 +1195,12 @@ export default function LiveTrackingScreen() {
           trackingPaddingBottom={FRAME_PAD}
           trackingProgressM={routeProgressM}
           pro={
-            (isDemoBooking ? glidingProCoord : proCoord)
-              ? { ...((isDemoBooking ? glidingProCoord : proCoord) as LatLng), heading: proHeading, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
+            proCoord
+              ? { ...(proCoord as LatLng), heading: proHeading, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
               : undefined
           }
           // The SMOOTHED curve, which is exactly the path the marker walks.
-          route={(isDemoBooking ? routeCoords : drawnRoute) ?? undefined}
+          route={drawnRoute ?? undefined}
           progressIdx={progressIdx}
           fitCoords={routeCoords ?? (proCoord ? [proCoord, patientCoord] : undefined)}
           radiusKm={0}
@@ -1396,7 +1269,7 @@ export default function LiveTrackingScreen() {
             <Text style={s.progressLabel}>
               {arrived
                 ? t("pro_arrived")
-                : !isDemoBooking && !proLive
+                : !proLive
                   ? t("waiting_pro_departure")
                   : t("en_route_to_you")}
             </Text>
@@ -1424,7 +1297,6 @@ export default function LiveTrackingScreen() {
             <View style={s.avatarWrap}>
               <ProAvatar
                 uri={proAvatar}
-                source={isDemoBooking ? DEMO_DRIVER_AVATAR : undefined}
                 initials={proInitials}
                 size={52}
               />
@@ -1441,13 +1313,9 @@ export default function LiveTrackingScreen() {
               <View style={s.ratingRow}>
                 <Text style={s.ratingStar}>★</Text>
                 <Text style={s.ratingVal}>
-                  {isDemoBooking ? "4.8" : proRating?.avg ? proRating.avg.toFixed(1) : "—"}
+                  {proRating?.avg ? proRating.avg.toFixed(1) : "—"}
                 </Text>
-                {!isDemoBooking && proRating ? (
-                  <Text style={s.ratingCount}>({proRating.count})</Text>
-                ) : isDemoBooking ? (
-                  <Text style={s.ratingCount}>(127)</Text>
-                ) : null}
+                {proRating ? <Text style={s.ratingCount}>({proRating.count})</Text> : null}
               </View>
             </View>
 
@@ -1514,7 +1382,7 @@ export default function LiveTrackingScreen() {
             </TouchableOpacity>
           )}
 
-          {!isDemoBooking && bookingId ? (
+          {bookingId ? (
             <TouchableOpacity
               style={s.reportLink}
               onPress={() => router.push(`/patient/report/${bookingId}`)}

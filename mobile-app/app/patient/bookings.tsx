@@ -260,7 +260,7 @@ export default function PatientBookingsScreen() {
                     }
                     setCancelTarget({
                       id: item.id,
-                      patient_id: user?.id ?? "demo-patient",
+                      patient_id: user?.id ?? "",
                       service_id: null,
                       specialty: item.specialty,
                       professional_id: null,

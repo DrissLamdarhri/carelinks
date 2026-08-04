@@ -772,7 +772,7 @@ export default function ProRegistrationScreen() {
                   <User size={20} color={Colors.primary} />
                 </View>
                 <View>
-                  <Text style={styles.summaryName}>{fullName || "Karim Benali"}</Text>
+                  <Text style={styles.summaryName}>{fullName || "—"}</Text>
                   <Text style={styles.summaryMeta}>{form.email || "karim@email.com"}</Text>
                   <Text style={styles.summaryMeta}>+212 {form.phone || "6 12 34 56 78"}</Text>
                 </View>

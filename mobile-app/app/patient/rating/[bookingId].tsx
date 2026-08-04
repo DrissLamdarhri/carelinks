@@ -11,7 +11,7 @@ import { ThumbsUp } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
-import { buildDemoBooking, buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { RatingForm } from "@/components/RatingForm";
 import type { Booking, Profile } from "@/lib/db/types";
 
@@ -20,7 +20,6 @@ export default function RatingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
   const [professionalId, setProfessionalId] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [professional, setProfessional] = useState<Profile | null>(null);
@@ -34,16 +33,6 @@ export default function RatingScreen() {
       if (!bookingId) {
         setLoading(false);
         setErrorMessage(t("reservation_not_found"));
-        return;
-      }
-
-      if (isDemoBooking) {
-        const nextBooking = buildDemoBooking(bookingId);
-        const nextProfessional = buildDemoProfile(DEMO_PRO_1_ID);
-        setBooking(nextBooking);
-        setProfessionalId(DEMO_PRO_1_ID);
-        setProfessional(nextProfessional);
-        setLoading(false);
         return;
       }
 
@@ -69,7 +58,7 @@ export default function RatingScreen() {
     return () => {
       active = false;
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
   if (submitted) {
     return (

@@ -57,7 +57,7 @@ export function ProAvatarMarker({
   const size = driver ? 52 : selected ? 56 : 46;
   const Container: React.ComponentType<any> = onPress ? Pressable : View;
 
-  // Prefer a REAL photo (bundled demo source, then the pro's uploaded avatar_url).
+  // Prefer a REAL photo (a bundled source, then the pro's uploaded avatar_url).
   // When a pro genuinely has no photo, fall back to a clean initials chip on the
   // specialty colour — honest and legible — rather than a grey silhouette blob.
   // We never paste a stock face onto a real person's identity.

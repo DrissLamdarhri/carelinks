@@ -16,7 +16,7 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
-import { normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
 
