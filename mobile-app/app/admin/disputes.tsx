@@ -120,7 +120,7 @@ export default function AdminDisputesScreen() {
     }
     setActingOn(d.id);
     try {
-      await db.disputes.resolve(d.id, status, note || "Pris en charge.", refund);
+      await db.disputes.resolve(d.id, status, note || t("admin_taken_charge"), refund);
       setExpanded(null);
     } catch (e) {
       showAppAlert(t("error"), e instanceof Error ? e.message : t("action_failed"));

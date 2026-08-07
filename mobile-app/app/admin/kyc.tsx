@@ -11,7 +11,7 @@ import {
 import { Check, CircleUserRound, X } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, trFor } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { showAppAlert } from "@/lib/app-alert";
 import type { ProDocument, Professional, Profile } from "@/lib/db/types";
@@ -145,14 +145,25 @@ export default function KycModerationQueueScreen() {
         }
       } catch (e) {
         console.warn("notify-pro-status failed — falling back to direct notification:", e);
+        // This notification is read by the PRO, not by the admin sitting here,
+        // so it has to be written in the pro's language — `t()` would use the
+        // admin's. Falls back to the app default if they never picked one.
+        const { data: proProfile } = await supabase
+          .from("profiles")
+          .select("language")
+          .eq("id", professionalId)
+          .maybeSingle();
+        const proLang = proProfile?.language ?? null;
         await supabase.from("notifications").insert({
           user_id: professionalId,
           kind: "system",
-          title: decision === "approved" ? "Compte approuvé ✅" : "Dossier à corriger",
-          body:
-            decision === "approved"
-              ? "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes."
-              : "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
+          title: decision === "approved"
+            ? `${trFor(proLang, "admin_account_approved")} \u2705`
+            : trFor(proLang, "kyc_rejected_title"),
+          body: trFor(
+            proLang,
+            decision === "approved" ? "admin_kyc_approved_body" : "admin_kyc_rejected_body",
+          ),
           payload: { decision },
         });
       }

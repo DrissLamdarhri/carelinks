@@ -40,6 +40,7 @@ import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
 import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
 import { showToast } from "@/lib/toast";
+import { careTypeLabel } from "@/lib/care-label";
 
 const professions = ["Psychologue", "Infirmier", "Kinésithérapeute"];
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -56,22 +57,6 @@ const professionLabelKey: Record<string, string> = {
 const dayLabelKey: Record<string, string> = {
   Lun: "day_mon", Mar: "day_tue", Mer: "day_wed", Jeu: "day_thu",
   Ven: "day_fri", Sam: "day_sat", Dim: "day_sun",
-};
-// Services can also arrive from public.services at runtime, which this app cannot
-// translate. Known names are localised; anything unrecognised falls through as-is
-// rather than being dropped.
-const serviceLabelKey: Record<string, string> = {
-  Pansement: "svc_dressing",
-  Injection: "svc_injection",
-  Perfusion: "svc_infusion",
-  "Bilan sanguin": "svc_bloodtest",
-  "Soins post-op": "focus_postop",
-  "Sonde urinaire": "reg_svc_catheter",
-  "Rééducation motrice": "focus_motor",
-  "Traitement anti-douleur": "reg_svc_pain",
-  "Traitement de l'arthrose": "reg_svc_arthrosis",
-  "Drainage lymphatique": "focus_drainage",
-  Traumatologie: "reg_svc_trauma",
 };
 // Shown greyed-out as the example coverage city until the pro types their own.
 const DEFAULT_CITY = "Fès";
@@ -260,9 +245,8 @@ export default function ProRegistrationScreen() {
     return t("reg_diploma_psy");
   };
 
-  // Localises a service name that came from the DB when we recognise it.
-  const serviceLabel = (name: string): string =>
-    serviceLabelKey[name] ? t(serviceLabelKey[name]) : name;
+  // Service names are the same catalogue as the patient care types.
+  const serviceLabel = (name: string): string => careTypeLabel(name, t);
 
   const handleSubmit = async () => {
     if (submitting || !stepValid[3]) return;

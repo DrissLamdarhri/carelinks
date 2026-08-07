@@ -31,6 +31,7 @@ import {
   listAdminSessions,
   listYogaInstructors,
 } from "@/lib/db/yoga";
+import { CANCEL_REASON_ADMIN } from "@/lib/care-label";
 import type { YogaCatalogEntry } from "@/types/yoga";
 
 const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
@@ -226,7 +227,7 @@ export default function AdminYogaSessionsScreen() {
           onPress: async () => {
             setActingOn(session.id);
             try {
-              await cancelYogaSession(session.id, "Annulée par l'administration");
+              await cancelYogaSession(session.id, CANCEL_REASON_ADMIN);
             } catch (e) {
               showAppAlert(t("error"), e instanceof Error ? e.message : t("action_failed"));
             } finally {

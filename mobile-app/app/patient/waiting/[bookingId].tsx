@@ -20,6 +20,7 @@ import { toastError } from "@/lib/toast";
 import type { Booking } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
 import { normalizeRouteParam } from "@/lib/route-params";
+import { CANCEL_REASON_NO_PRO } from "@/lib/care-label";
 import { LiveBidsFeed } from "../../../components/LiveBidsFeed";
 
 export default function WaitingOffersScreen() {
@@ -169,7 +170,7 @@ export default function WaitingOffersScreen() {
       try {
         const fresh = await db.bookings.get(bookingId);
         if (fresh.status !== "open") { setBooking(fresh); return; }
-        await db.bookings.cancelBooking(bookingId, "Aucun professionnel disponible");
+        await db.bookings.cancelBooking(bookingId, CANCEL_REASON_NO_PRO);
         toastError(t("urgent_no_pro_refunded"));
         router.replace("/patient");
       } catch {

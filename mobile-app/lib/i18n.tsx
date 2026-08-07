@@ -1185,6 +1185,17 @@ const DICT: Record<Locale, Record<string, string>> = {
     cmp_yoga_booking_label: "Yoga booking",
     cmp_yoga_class: "Yoga class",
     cmp_yoga_instructor: "Yoga instructor",
+  
+    // --- extracted from hardcoded strings ---
+    admin_account_approved: "Account approved",
+    admin_kyc_approved_body: "Your application has been approved. You can now receive requests.",
+    admin_kyc_rejected_body: "Your application needs changes. Please resubmit your documents.",
+    admin_taken_charge: "Taken in hand.",
+    cancel_reason_admin: "Cancelled by the administration",
+    cancel_reason_no_pro: "No professional available",
+    care_functional_rehab: "Functional rehabilitation",
+    care_injury_prevention: "Injury prevention",
+    cmp_offer_sent: "{n} MAD offer sent ✓",
   },
   ar: {
     confirm_email_title: "أكّد بريدك الإلكتروني",
@@ -1753,6 +1764,17 @@ const DICT: Record<Locale, Record<string, string>> = {
     cmp_yoga_booking_label: "حجز اليوغا",
     cmp_yoga_class: "حصة يوغا",
     cmp_yoga_instructor: "مدرّب يوغا",
+  
+    // --- extracted from hardcoded strings ---
+    admin_account_approved: "تمت الموافقة على الحساب",
+    admin_kyc_approved_body: "تمت الموافقة على ملفك. يمكنك الآن استقبال الطلبات.",
+    admin_kyc_rejected_body: "ملفك يحتاج إلى تصحيحات. يرجى إعادة إرسال مستنداتك.",
+    admin_taken_charge: "تمت المعالجة.",
+    cancel_reason_admin: "أُلغيت من طرف الإدارة",
+    cancel_reason_no_pro: "لا يوجد مهني متاح",
+    care_functional_rehab: "إعادة التأهيل الوظيفي",
+    care_injury_prevention: "الوقاية من الإصابات",
+    cmp_offer_sent: "تم إرسال عرض بقيمة {n} درهم ✓",
   },
   fr: {
     confirm_email_title: "Confirmez votre email",
@@ -2323,6 +2345,17 @@ const DICT: Record<Locale, Record<string, string>> = {
     cmp_yoga_booking_label: "Réservation yoga",
     cmp_yoga_class: "Cours de yoga",
     cmp_yoga_instructor: "Instructeur de yoga",
+  
+    // --- extracted from hardcoded strings ---
+    admin_account_approved: "Compte approuvé",
+    admin_kyc_approved_body: "Votre dossier a été validé. Vous pouvez maintenant recevoir des demandes.",
+    admin_kyc_rejected_body: "Votre dossier nécessite des corrections. Merci de re-soumettre vos documents.",
+    admin_taken_charge: "Pris en charge.",
+    cancel_reason_admin: "Annulée par l'administration",
+    cancel_reason_no_pro: "Aucun professionnel disponible",
+    care_functional_rehab: "Rééducation fonctionnelle",
+    care_injury_prevention: "Prévention des blessures",
+    cmp_offer_sent: "Offre de {n} MAD envoyée ✓",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",
@@ -2366,6 +2399,18 @@ const I18nContext = createContext<Ctx>({
 let activeLocale: Locale = "fr";
 export function tr(k: string): string {
   return DICT[activeLocale]?.[k] ?? DICT.en[k] ?? DICT.fr[k] ?? k;
+}
+
+/**
+ * Translate into SOMEONE ELSE'S language. Needed whenever this device writes
+ * text another user will read — an admin approving a pro, for instance: the
+ * notification lands in the pro's inbox, so it must be in the pro's language,
+ * not the admin's. Pass `profiles.language`; an unknown or null value falls
+ * back to the app default rather than guessing.
+ */
+export function trFor(locale: string | null | undefined, k: string): string {
+  const l = (locale && locale in DICT ? locale : "fr") as Locale;
+  return DICT[l]?.[k] ?? DICT.en[k] ?? DICT.fr[k] ?? k;
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {

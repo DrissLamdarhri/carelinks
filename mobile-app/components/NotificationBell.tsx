@@ -68,7 +68,7 @@
 //       setItems((data ?? []) as AppNotification[]);
 //     } catch (error) {
 //       const message = error instanceof Error ? error.message : t("notifications_unavailable");
-//       Alert.alert(t("error"), message);
+//       Alert.alert("Erreur", message);
 //     } finally {
 //       setLoading(false);
 //     }
@@ -127,7 +127,7 @@
 //     } catch (error) {
 //       const message =
 //         error instanceof Error ? error.message : t("cannot_mark_read");
-//       Alert.alert(t("error"), message);
+//       Alert.alert("Erreur", message);
 //     } finally {
 //       setMarking(false);
 //     }

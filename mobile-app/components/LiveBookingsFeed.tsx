@@ -387,7 +387,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
       Keyboard.dismiss();
       setBidFor(null);
       setAmount("");
-      toastSuccess(`Offre de ${n} MAD envoyée ✓`);
+      toastSuccess(t("cmp_offer_sent").replace("{n}", String(n)));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t("send_failed"));
       toastError(t("offer_not_sent"));
@@ -482,7 +482,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
                 <Text style={styles.priceVal}>
                   {booking.budget_min_mad ?? 0}–{booking.budget_max_mad ?? 0}
                 </Text>
-                <Text style={styles.priceUnit}>MAD</Text>
+                <Text style={styles.priceUnit}>{t("mad")}</Text>
               </View>
             </View>
 
@@ -585,7 +585,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
             <Text style={styles.sheetTitle}>{t("make_offer")}</Text>
             {biddingOn ? (
               <Text style={styles.sheetSub}>
-                {careLabel(biddingOn, t)} · {t("budget")} {biddingOn.budget_min_mad ?? 0}–{biddingOn.budget_max_mad ?? 0} MAD
+                {careLabel(biddingOn, t)} · {t("budget")} {biddingOn.budget_min_mad ?? 0}–{biddingOn.budget_max_mad ?? 0} {t("mad")}
               </Text>
             ) : null}
 
@@ -599,7 +599,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
                     style={[styles.chip, Number(amount) === v && styles.chipOn]}
                     onPress={() => setAmount(String(v))}
                   >
-                    <Text style={[styles.chipTxt, Number(amount) === v && styles.chipTxtOn]}>{v} MAD</Text>
+                    <Text style={[styles.chipTxt, Number(amount) === v && styles.chipTxtOn]}>{v} {t("mad")}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -617,7 +617,7 @@ export function LiveBookingsFeed({ specialty, onNewDemand }: LiveBookingsFeedPro
                 returnKeyType="send"
                 onSubmitEditing={() => biddingOn && submitBid(biddingOn.booking_id)}
               />
-              <Text style={styles.inputUnit}>MAD</Text>
+              <Text style={styles.inputUnit}>{t("mad")}</Text>
             </View>
 
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}

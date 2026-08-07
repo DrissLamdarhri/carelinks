@@ -9,6 +9,7 @@ import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-
 import { CalendarDays, MapPin, Navigation } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n, type Locale } from "@/lib/i18n";
+import { cancelReasonLabel } from "@/lib/care-label";
 import { geo } from "@/lib/db/geo";
 import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
@@ -160,7 +161,7 @@ export function YogaBookingDetails({
       </View>
 
       {details.booking_status === "cancelled" && details.cancel_reason ? (
-        <Text style={s.cancelNote}>{details.cancel_reason}</Text>
+        <Text style={s.cancelNote}>{cancelReasonLabel(details.cancel_reason, t)}</Text>
       ) : null}
 
       {isUnpaid && onResumePayment ? (

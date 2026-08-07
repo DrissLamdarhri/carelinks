@@ -46,6 +46,7 @@ import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkM
 import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
 import { useServiceTypes } from "@/lib/service-types";
+import { careTypeLabel } from "@/lib/care-label";
 import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 // Default map center (Fès) used until the patient's GPS resolves.
@@ -644,7 +645,7 @@ export default function PatientRequestScreen() {
                     style={[styles.kineCareText, active && styles.kineCareTextActive]}
                     numberOfLines={2}
                   >
-                    {item}
+                    {careTypeLabel(item, t)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -657,7 +658,7 @@ export default function PatientRequestScreen() {
               style={styles.selector}
               onPress={() => setShowCareMenu((v) => !v)}
             >
-              <Text style={styles.selectorText}>{careTypes[careType]}</Text>
+              <Text style={styles.selectorText}>{careTypeLabel(careTypes[careType], t)}</Text>
               <ChevronDown size={18} color={Colors.textMuted} />
             </TouchableOpacity>
             {showCareMenu ? (
@@ -682,7 +683,7 @@ export default function PatientRequestScreen() {
                         index === careType && { color: theme.primary },
                       ]}
                     >
-                      {item}
+                      {careTypeLabel(item, t)}
                     </Text>
                   </TouchableOpacity>
                 ))}
