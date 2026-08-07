@@ -18,6 +18,7 @@ import {
 import { Home, Navigation } from "lucide-react-native";
 import { specialtyColor } from "./engine";
 import { useReducedMotion } from "@/lib/a11y";
+import { useI18n } from "@/lib/i18n";
 
 const NAVY = "#0D0870";
 const GREEN = "#22C55E";
@@ -53,6 +54,7 @@ export function ProAvatarMarker({
   bearing?: number;
   onPress?: () => void;
 }) {
+  const { t } = useI18n();
   const accent = driver ? "#0EA5E9" : specialtyColor(pro.specialty);
   const size = driver ? 52 : selected ? 56 : 46;
   const Container: React.ComponentType<any> = onPress ? Pressable : View;
@@ -102,7 +104,7 @@ export function ProAvatarMarker({
             <Text style={styles.cardMeta} numberOfLines={1}>
               {pro.rating != null ? `★ ${pro.rating.toFixed(1)}` : ""}
               {pro.distanceKm != null ? `  ·  ${pro.distanceKm.toFixed(1)} km` : ""}
-              {pro.priceMad ? `  ·  ${pro.priceMad} MAD` : ""}
+              {pro.priceMad ? `  ·  ${pro.priceMad} ${t("mad")}` : ""}
             </Text>
             <View style={styles.cardTail} />
           </View>

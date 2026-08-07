@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 import { supabase } from "@/lib/supabase";
 import type { NearbyPro } from "./types";
+import { tr } from "../i18n";
 
 /** Real approved professional with coordinates, ready to plot on the map. */
 export type NearbyProMapItem = {
@@ -189,7 +190,7 @@ export const geo = {
     let { granted } = await Location.getForegroundPermissionsAsync();
     if (!granted) granted = (await Location.requestForegroundPermissionsAsync()).granted;
     if (!granted) {
-      throw new Error("Permission de localisation refusée.");
+      throw new Error(tr("cmp_location_permission_denied"));
     }
 
     const current = await Location.getCurrentPositionAsync({

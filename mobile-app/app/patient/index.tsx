@@ -212,7 +212,7 @@ export default function PatientHomeScreen() {
               }}
             >
               <Icon size={14} color={qs.color} />
-              <Text style={[styles.quickText, { color: qs.color }]}>{qs.label}</Text>
+              <Text style={[styles.quickText, { color: qs.color }]}>{t(qs.label)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -257,12 +257,12 @@ export default function PatientHomeScreen() {
                   <View style={styles.serviceIconWrap}>
                     <Icon size={18} color="white" />
                   </View>
-                  {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : <View />}
+                  {s.tag ? <Text style={styles.tag}>{t(s.tag)}</Text> : <View />}
                 </View>
 
                 <View>
-                  <Text style={styles.serviceLabel}>{s.label}</Text>
-                  <Text style={styles.serviceSub}>{s.sub}</Text>
+                  <Text style={styles.serviceLabel}>{t(s.label)}</Text>
+                  <Text style={styles.serviceSub}>{t(s.sub)}</Text>
                 </View>
               </TouchableOpacity>
             );

@@ -51,7 +51,7 @@ export function RadiusSlider({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("cannot_update_radius");
-      Alert.alert("Erreur", message);
+      Alert.alert(t("error"), message);
     } finally {
       setSaving(false);
     }

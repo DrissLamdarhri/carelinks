@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import { supabase } from "@/lib/supabase";
+import { tr } from "../i18n";
 
 const MFA_FACTOR_KEY = "carelink_mfa_factor_id";
 
@@ -81,7 +82,7 @@ export async function enrollTotp(): Promise<TotpEnrollResult> {
   const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
   if (error) throw error;
   if (!data?.id || !data.totp?.qr_code || !data.totp?.secret) {
-    throw new Error("Impossible de démarrer l'enrôlement MFA.");
+    throw new Error(tr("cmp_mfa_enroll_failed"));
   }
   await mfaStorage.setFactorId(data.id);
   return {
@@ -96,7 +97,7 @@ export async function challengeTotp(factorId: string): Promise<string> {
   const { data, error } = await supabase.auth.mfa.challenge({ factorId });
   if (error) throw error;
   if (!data?.id) {
-    throw new Error("Challenge MFA indisponible.");
+    throw new Error(tr("cmp_mfa_challenge_unavailable"));
   }
   return data.id;
 }

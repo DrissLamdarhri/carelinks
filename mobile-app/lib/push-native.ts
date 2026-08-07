@@ -121,6 +121,7 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { supabase } from "./supabase";
+import { tr } from "./i18n";
 
 type NotificationsModule = typeof import("expo-notifications");
 type DeviceModule = typeof import("expo-device");
@@ -231,12 +232,19 @@ export function configureNotifications() {
 
 // ─── Professional demand notifications ────────────────────────────────────────
 
-const SPECIALTY_LABELS: Record<string, string> = {
-  nurse: "Infirmier(ère)",
-  physiotherapist: "Kinésithérapeute",
-  psychologist: "Psychologue",
-  yoga_instructor: "Coach Yoga",
+// Both notification builders below run on the PRO's own device for their own
+// user id, so `tr()` resolves to the right person's language. Note the DB row
+// stores the rendered text: a pro who later switches language keeps old
+// notifications in the language they were in when they arrived.
+const SPECIALTY_LABEL_KEYS: Record<string, string> = {
+  nurse: "cmp_spec_nurse_mf",
+  physiotherapist: "physio",
+  psychologist: "psychologist",
+  yoga_instructor: "cmp_spec_yoga_coach",
 };
+
+const specialtyLabel = (s: string): string =>
+  SPECIALTY_LABEL_KEYS[s] ? tr(SPECIALTY_LABEL_KEYS[s]) : s;
 
 /**
  * Fires an immediate local push when a new demand arrives matching the pro's
@@ -254,13 +262,12 @@ export async function scheduleLocalDemandNotification(
 
   const isPriority = urgency === "urgent" || urgency === "emergency";
   const title = urgency === "emergency"
-    ? "🚨 Demande d'urgence"
+    ? `🚨 ${tr("cmp_push_emergency_demand")}`
     : urgency === "urgent"
-      ? "⚡ Demande urgente"
-      : "📋 Nouvelle demande";
-  const body = isPriority
-    ? `Un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} est demandé(e) en priorité — premier arrivé, premier servi`
-    : `Un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} est demandé(e) près de vous`;
+      ? `⚡ ${tr("cmp_push_urgent_demand")}`
+      : `📋 ${tr("cmp_push_new_demand")}`;
+  const body = (isPriority ? tr("cmp_push_wanted_priority") : tr("cmp_push_wanted_nearby"))
+    .replace("%s", specialtyLabel(specialty));
 
   try {
     await Notifications.scheduleNotificationAsync({
@@ -296,11 +303,10 @@ export async function insertProDemandNotification(
       user_id: userId,
       kind: "new_demand",
       title: isPriority
-        ? (urgency === "emergency" ? "🚨 Demande d'urgence" : "⚡ Demande urgente")
-        : "Nouvelle demande",
-      body: isPriority
-        ? `Un patient a besoin d'un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} en priorité — premier arrivé, premier servi`
-        : `Un patient cherche un(e) ${SPECIALTY_LABELS[specialty] ?? specialty} — Répondez maintenant`,
+        ? (urgency === "emergency" ? `🚨 ${tr("cmp_push_emergency_demand")}` : `⚡ ${tr("cmp_push_urgent_demand")}`)
+        : tr("cmp_push_new_demand"),
+      body: (isPriority ? tr("cmp_push_patient_needs_priority") : tr("cmp_push_patient_looking"))
+        .replace("%s", specialtyLabel(specialty)),
       data: { booking_id: bookingId, specialty, urgency: urgency ?? "normal" },
     } as any);
     if (error) console.warn("[push] insertProDemandNotification failed:", error.message);

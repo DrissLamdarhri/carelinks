@@ -104,9 +104,9 @@ export function CancellationDialog({
               </Text>
               {price > 0 ? (
                 <Text style={styles.amountLine}>
-                  {t("refund_label")}: {refund} MAD
-                  {cancelCase === 2 ? `  ·  ${t("fees_retained_label")}: ${retained} MAD` : ""}
-                  {cancelCase === 3 ? `  ·  ${t("pro_comp_label")}: ${comp} MAD` : ""}
+                  {t("refund_label")}: {refund} {t("mad")}
+                  {cancelCase === 2 ? `  ·  ${t("fees_retained_label")}: ${retained} ${t("mad")}` : ""}
+                  {cancelCase === 3 ? `  ·  ${t("pro_comp_label")}: ${comp} ${t("mad")}` : ""}
                 </Text>
               ) : null}
             </View>

@@ -140,7 +140,7 @@ export function RatingForm({
               style={[styles.tip, selectedTip === tip && styles.tipActive]}
               onPress={() => setSelectedTip((prev) => (prev === tip ? null : tip))}
             >
-              <Text style={[styles.tipText, selectedTip === tip && styles.tipTextActive]}>{tip} MAD</Text>
+              <Text style={[styles.tipText, selectedTip === tip && styles.tipTextActive]}>{tip} {t("mad")}</Text>
             </TouchableOpacity>
           ))}
         </View>

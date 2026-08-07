@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { tr } from "@/lib/i18n";
 import type {
   YogaBookingDetails,
   YogaCatalogEntry,
@@ -29,7 +30,7 @@ type UUID = string;
 // (e.g. "Séance complète.") for a generic fallback toast. Wrapping here once
 // means every caller of this module gets the real message for free.
 function throwSupabaseError(error: { message?: string } | null): never {
-  throw new Error(error?.message ?? "Une erreur est survenue.");
+  throw new Error(error?.message ?? tr("cmp_generic_error"));
 }
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
@@ -220,7 +221,7 @@ export async function createYogaReservation(input: {
         yoga_session_id: input.session.id,
         scheduled_at: input.session.startsAtISO,
         address: fullAddress,
-        notes: `Réservation yoga: ${input.session.title} — Instructeur: ${input.session.instructorName}`,
+        notes: `${tr("cmp_yoga_booking_label")}: ${input.session.title} — Instructeur: ${input.session.instructorName}`,
         budget_min_mad: input.session.priceMad,
         budget_max_mad: input.session.priceMad,
         final_price_mad: input.session.priceMad,
@@ -325,7 +326,7 @@ export async function createYogaSession(input: NewYogaSession): Promise<YogaSess
         duration_min: input.duration_min,
         capacity: input.capacity,
         price_mad: input.price_mad,
-        level: input.level ?? "Tous niveaux",
+        level: input.level ?? tr("level_all"),
         image_url: input.image_url ?? null,
         status: "scheduled",
       })

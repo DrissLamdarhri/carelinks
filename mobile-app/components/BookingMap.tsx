@@ -78,7 +78,7 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
               <Text style={list.cardSpec}>{pro.specialty}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={[list.cardPrice, { color }]}>{pro.priceMad}<Text style={list.cardPriceSub}> MAD</Text></Text>
+              <Text style={[list.cardPrice, { color }]}>{pro.priceMad}<Text style={list.cardPriceSub}> {t("mad")}</Text></Text>
               <Text style={list.cardRating}>★{pro.rating} · {pro.distanceKm.toFixed(1)}km</Text>
             </View>
           </View>
@@ -117,7 +117,7 @@ function ProListRow({ pro, isSelected, onPress, tab }: { pro: ProPinData; isSele
         </Text>
       </View>
       <View style={{ alignItems: "flex-end" }}>
-        <Text style={[list.rowPrice, { color }]}>{pro.priceMad} MAD</Text>
+        <Text style={[list.rowPrice, { color }]}>{pro.priceMad} {t("mad")}</Text>
         <Text style={list.rowRating}>★{pro.rating}</Text>
       </View>
     </TouchableOpacity>
@@ -157,7 +157,7 @@ export function BookingMap({
   // "en ligne" is not decoration: the map only plots professionals who are
   // actually available right now (migration 0054), so an empty map means
   // "nobody is working nearby at this moment", not "nobody exists here".
-  emptyText = "Aucun professionnel en ligne à proximité pour le moment.",
+  emptyText,
   showChrome = true,
 }: BookingMapProps) {
   const { t } = useI18n();
@@ -381,7 +381,7 @@ export function BookingMap({
                 style={[styles.modBtn, { borderColor: primaryColor + "30" }]}
                 onPress={() => {}}
                 accessibilityRole="button"
-                accessibilityLabel="Modifier l'adresse"
+                accessibilityLabel={t("cmp_edit_address")}
               >
                 <Text style={[styles.modBtnText, { color: primaryColor }]}>{t("edit")}</Text>
               </TouchableOpacity>
@@ -392,7 +392,7 @@ export function BookingMap({
               onPress={handleGPS}
               disabled={locating}
               accessibilityRole="button"
-              accessibilityLabel="Utiliser ma position actuelle"
+              accessibilityLabel={t("use_my_location")}
             >
               {locating ? <ActivityIndicator size="small" color={primaryColor} /> : <LocateFixed size={16} color={primaryColor} />}
             </TouchableOpacity>
@@ -405,7 +405,7 @@ export function BookingMap({
         {isEmpty && (
           <View style={styles.emptyOverlay} pointerEvents="none">
             <View style={styles.emptyPill}>
-              <Text style={styles.emptyText}>{emptyText}</Text>
+              <Text style={styles.emptyText}>{emptyText ?? t("cmp_no_pros_online")}</Text>
             </View>
           </View>
         )}

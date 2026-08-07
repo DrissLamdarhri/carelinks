@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { getOAuthRedirectUrl } from "@/lib/auth-redirect";
+import { tr } from "../i18n";
 
 let WebBrowser: typeof import("expo-web-browser") | null = null;
 if (Platform.OS !== "web") {
@@ -31,7 +32,7 @@ export function useAppleAuth() {
     if (data.url && WebBrowser) {
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type !== "success") {
-        throw new Error("Connexion Apple annulée.");
+        throw new Error(tr("cmp_apple_cancelled"));
       }
     }
   }, []);

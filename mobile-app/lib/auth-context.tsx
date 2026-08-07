@@ -34,6 +34,7 @@ import {
   verifyTotp,
 } from "@/lib/hooks/useMfa";
 import { useAppleAuth } from "@/lib/hooks/useAppleAuth";
+import { tr } from "./i18n";
 
 // Lazy-import expo packages so this file can still be imported in unit tests
 // without needing the full Expo environment.
@@ -295,7 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         subscription.unsubscribe();
-        reject(new Error("Connexion OAuth expirée."));
+        reject(new Error(tr("cmp_oauth_expired")));
       }, 15000);
       const {
         data: { subscription },
@@ -408,10 +409,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { role: intendedRole, mfaRequired: false };
     }
 
-    if (!data.url || !WebBrowser) throw new Error("Navigateur OAuth indisponible.");
+    if (!data.url || !WebBrowser) throw new Error(tr("cmp_oauth_browser_unavailable"));
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type !== "success") throw new Error("Connexion Google annulée.");
-    if (!result.url) throw new Error("URL de redirection OAuth manquante.");
+    if (result.type !== "success") throw new Error(tr("cmp_google_cancelled"));
+    if (!result.url) throw new Error(tr("cmp_oauth_redirect_missing"));
     const { data: existingSessionData } = await supabase.auth.getSession();
     if (!existingSessionData.session) {
       await exchangeOAuthCodeFromUrl(result.url);
@@ -483,8 +484,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const looksRaw = raw.length > 120 || raw.trim().startsWith("{");
       throw new Error(
         looksRaw
-          ? "Impossible d'envoyer l'e-mail de réinitialisation pour le moment. Merci de réessayer dans quelques minutes."
-          : raw || "Impossible d'envoyer l'e-mail de réinitialisation.",
+          ? tr("cmp_reset_email_rate_limited")
+          : raw || tr("cmp_reset_email_failed"),
       );
     }
   };
@@ -530,7 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: error.status,
         fullError: JSON.stringify(error),
       });
-      throw new Error(error?.message ?? "Erreur serveur lors de l'inscription. Vérifiez la configuration Supabase.");
+      throw new Error(error?.message ?? tr("cmp_signup_server_error"));
     }
     console.log("[Auth] Signup successful, user:", data.user?.id);
 
@@ -623,7 +624,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (stored) return stored;
     const factors = await listTotpFactors();
     const verified = factors.find((factor) => factor.status === "verified") ?? factors[0];
-    if (!verified) throw new Error("Aucun facteur TOTP disponible.");
+    if (!verified) throw new Error(tr("cmp_no_totp_factor"));
     await mfaStorage.setFactorId(verified.id);
     return verified.id;
   };

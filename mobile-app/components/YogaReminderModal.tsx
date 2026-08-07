@@ -11,12 +11,14 @@ import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacit
 import { useRouter } from "expo-router";
 import { AlarmClock, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { getBookingDetails } from "@/lib/db/yoga";
 import { subscribeYogaReminderPopup, hideYogaReminderPopup } from "@/lib/yoga-reminder-popup";
 import { YogaBookingDetails } from "@/components/YogaBookingDetails";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 export function YogaReminderModalHost() {
+  const { t } = useI18n();
   const router = useRouter();
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [details, setDetails] = useState<YogaBookingDetailsT | null>(null);
@@ -46,10 +48,10 @@ export function YogaReminderModalHost() {
               <AlarmClock size={18} color={Colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.headerTitle}>Votre cours commence bientôt</Text>
-              <Text style={s.headerSub}>Pensez à vous préparer et à prévoir le trajet.</Text>
+              <Text style={s.headerTitle}>{t("cmp_class_starts_soon")}</Text>
+              <Text style={s.headerSub}>{t("cmp_class_prepare_hint")}</Text>
             </View>
-            <TouchableOpacity onPress={close} style={s.closeBtn} accessibilityLabel="Fermer">
+            <TouchableOpacity onPress={close} style={s.closeBtn} accessibilityLabel={t("close")}>
               <X size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -60,7 +62,7 @@ export function YogaReminderModalHost() {
             ) : details ? (
               <YogaBookingDetails details={details} />
             ) : (
-              <Text style={s.errorTxt}>Impossible de charger les détails du cours.</Text>
+              <Text style={s.errorTxt}>{t("cmp_class_load_failed")}</Text>
             )}
           </ScrollView>
 
@@ -71,7 +73,7 @@ export function YogaReminderModalHost() {
               router.push("/patient/bookings");
             }}
           >
-            <Text style={s.primaryBtnTxt}>Voir mes réservations</Text>
+            <Text style={s.primaryBtnTxt}>{t("see_my_bookings")}</Text>
           </TouchableOpacity>
         </View>
       </View>

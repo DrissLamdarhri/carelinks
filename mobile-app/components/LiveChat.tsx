@@ -148,7 +148,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
     const body = input.trim();
     setInput("");
     try {
-      if (!user?.id) throw new Error("Utilisateur non connecté.");
+      if (!user?.id) throw new Error(t("user_not_connected"));
       const { error } = await supabase.from("messages").insert({ booking_id: bookingId, sender_id: user.id, body });
       if (error) throw error;
     } catch (error) {
@@ -175,7 +175,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
           <View style={styles.emptyWrap}>
             <BubbleAvatar url={recipientAvatar} name={recipientName} />
             <Text style={styles.emptyTitle}>{t("start_conversation")}</Text>
-            <Text style={styles.emptySub}>Envoyez un message à {recipientName.split(" ")[0]}.</Text>
+            <Text style={styles.emptySub}>{t("cmp_send_message_to").replace("%s", recipientName.split(" ")[0])}</Text>
           </View>
         ) : null}
 

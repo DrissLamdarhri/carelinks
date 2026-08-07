@@ -8,16 +8,19 @@ import { useEffect, useState } from "react";
 import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { CalendarDays, MapPin, Navigation } from "lucide-react-native";
 import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { useI18n, type Locale } from "@/lib/i18n";
 import { geo } from "@/lib/db/geo";
 import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 const NAVY = Colors.primary;
 
-function formatSessionDateTime(startsAtISO: string, durationMin: number): string {
+const DATE_LOCALE: Record<Locale, string> = { fr: "fr-FR", ar: "ar-MA", en: "en-GB", dar: "fr-FR" };
+
+function formatSessionDateTime(startsAtISO: string, durationMin: number, locale: Locale): string {
   const start = new Date(startsAtISO);
   const end = new Date(start.getTime() + durationMin * 60000);
-  const dateLabel = start.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateLabel = start.toLocaleDateString(DATE_LOCALE[locale] ?? "fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const capitalized = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
   const fmtHour = (d: Date) => `${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
   return `${capitalized} · ${fmtHour(start)} - ${fmtHour(end)}`;
@@ -30,28 +33,28 @@ function formatSessionDateTime(startsAtISO: string, durationMin: number): string
 // empty or stale for any reason, a booking that's genuinely 'matched' must
 // never be shown as "waiting for payment" — that's a worse, more confusing
 // failure mode than a badge that's merely slow to reflect a refund.
-function bookingStatusBadge(d: YogaBookingDetailsT): { label: string; color: string; bg: string } {
-  if (d.booking_status === "cancelled") return { label: "Annulée", color: "#E24B4A", bg: "#FDE8E8" };
-  if (d.booking_status === "completed") return { label: "Terminée", color: "#16A34A", bg: "#DCFCE7" };
+function bookingStatusBadge(d: YogaBookingDetailsT): { labelKey: string; color: string; bg: string } {
+  if (d.booking_status === "cancelled") return { labelKey: "cmp_cancelled_f", color: "#E24B4A", bg: "#FDE8E8" };
+  if (d.booking_status === "completed") return { labelKey: "cmp_completed_f", color: "#16A34A", bg: "#DCFCE7" };
   const paid = d.booking_status === "matched" || d.payment?.status === "authorized" || d.payment?.status === "captured";
-  if (paid) return { label: "Confirmée", color: "#16A34A", bg: "#DCFCE7" };
-  return { label: "En attente de paiement", color: "#D97706", bg: "#FFF7E6" };
+  if (paid) return { labelKey: "cmp_confirmed_f", color: "#16A34A", bg: "#DCFCE7" };
+  return { labelKey: "cmp_awaiting_payment", color: "#D97706", bg: "#FFF7E6" };
 }
 
-function paymentStatusBadge(d: YogaBookingDetailsT): { label: string; color: string } | null {
+function paymentStatusBadge(d: YogaBookingDetailsT): { labelKey: string; color: string } | null {
   if (!d.payment || !d.payment.status) {
     // No payment row found, but the booking itself is proof one succeeded —
     // same reasoning as bookingStatusBadge above.
-    return d.booking_status === "matched" ? { label: "Payé", color: "#16A34A" } : null;
+    return d.booking_status === "matched" ? { labelKey: "payout_paid", color: "#16A34A" } : null;
   }
-  if (d.payment.status === "refunded") return { label: "Remboursé", color: "#2563EB" };
+  if (d.payment.status === "refunded") return { labelKey: "cmp_refunded", color: "#2563EB" };
   if (d.payment.status === "authorized" || d.payment.status === "captured") {
     return d.booking_status === "cancelled"
-      ? { label: "Non remboursé", color: "#D97706" }
-      : { label: "Payé", color: "#16A34A" };
+      ? { labelKey: "cmp_not_refunded", color: "#D97706" }
+      : { labelKey: "payout_paid", color: "#16A34A" };
   }
-  if (d.payment.status === "failed") return { label: "Échec du paiement", color: "#E24B4A" };
-  return { label: "En attente", color: "#D97706" };
+  if (d.payment.status === "failed") return { labelKey: "cmp_payment_failed", color: "#E24B4A" };
+  return { labelKey: "pending_status", color: "#D97706" };
 }
 
 export function YogaBookingDetails({
@@ -64,6 +67,7 @@ export function YogaBookingDetails({
    *  treated as reserved/paid just because a booking row exists. */
   onResumePayment?: () => void;
 }) {
+  const { t, locale } = useI18n();
   const { session, instructor, payment } = details;
   const statusBadge = bookingStatusBadge(details);
   const payBadge = paymentStatusBadge(details);
@@ -96,7 +100,7 @@ export function YogaBookingDetails({
   return (
     <View style={s.root}>
       <View style={[s.statusPill, { backgroundColor: statusBadge.bg }]}>
-        <Text style={[s.statusPillTxt, { color: statusBadge.color }]}>{statusBadge.label}</Text>
+        <Text style={[s.statusPillTxt, { color: statusBadge.color }]}>{t(statusBadge.labelKey)}</Text>
       </View>
 
       {instructor ? (
@@ -107,17 +111,17 @@ export function YogaBookingDetails({
           />
           <View style={{ flex: 1 }}>
             <Text style={s.instructorName} numberOfLines={1}>{instructor.full_name}</Text>
-            <Text style={s.instructorSub}>Instructeur de yoga</Text>
+            <Text style={s.instructorSub}>{t("cmp_yoga_instructor")}</Text>
           </View>
         </View>
       ) : null}
 
-      <Text style={s.title} numberOfLines={2}>{session?.title ?? "Cours de yoga"}</Text>
+      <Text style={s.title} numberOfLines={2}>{session?.title ?? t("cmp_yoga_class")}</Text>
 
       {session ? (
         <View style={s.row}>
           <CalendarDays size={16} color={NAVY} />
-          <Text style={s.rowText}>{formatSessionDateTime(session.starts_at, session.duration_min)}</Text>
+          <Text style={s.rowText}>{formatSessionDateTime(session.starts_at, session.duration_min, locale)}</Text>
         </View>
       ) : null}
 
@@ -134,7 +138,7 @@ export function YogaBookingDetails({
           </View>
           <TouchableOpacity style={s.itineraryBtn} onPress={openItinerary}>
             <Navigation size={14} color="#FFFFFF" />
-            <Text style={s.itineraryTxt}>Itinéraire</Text>
+            <Text style={s.itineraryTxt}>{t("directions")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -143,14 +147,14 @@ export function YogaBookingDetails({
 
       <View style={s.paymentRow}>
         <View>
-          <Text style={s.paymentLabel}>Montant</Text>
+          <Text style={s.paymentLabel}>{t("amount")}</Text>
           <Text style={s.paymentAmount}>
-            {details.final_price_mad ?? payment?.amount_mad ?? "—"} MAD
+            {details.final_price_mad ?? payment?.amount_mad ?? "—"} {t("mad")}
           </Text>
         </View>
         {payBadge ? (
           <View style={s.payBadge}>
-            <Text style={[s.payBadgeTxt, { color: payBadge.color }]}>{payBadge.label}</Text>
+            <Text style={[s.payBadgeTxt, { color: payBadge.color }]}>{t(payBadge.labelKey)}</Text>
           </View>
         ) : null}
       </View>
@@ -161,7 +165,7 @@ export function YogaBookingDetails({
 
       {isUnpaid && onResumePayment ? (
         <TouchableOpacity style={s.resumeBtn} onPress={onResumePayment}>
-          <Text style={s.resumeTxt}>Terminer le paiement</Text>
+          <Text style={s.resumeTxt}>{t("cmp_finish_payment")}</Text>
         </TouchableOpacity>
       ) : null}
     </View>

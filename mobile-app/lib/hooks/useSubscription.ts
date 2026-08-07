@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Subscription } from "@/lib/db/types";
 import { supabase } from "@/lib/supabase";
+import { tr } from "../i18n";
 
 type SubscriptionEventPayload = {
   type: "SUBSCRIPTION_UPDATED" | "SUBSCRIPTION_ROLLBACK";
@@ -90,7 +91,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de charger l'abonnement.");
+      setError(err instanceof Error ? err.message : tr("cmp_subscription_load_failed"));
     } finally {
       setLoading(false);
     }

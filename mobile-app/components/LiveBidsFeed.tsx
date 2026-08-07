@@ -110,7 +110,7 @@ export function LiveBidsFeed({ bookingId, onAccepted }: LiveBidsFeedProps) {
           </View>
           <View style={styles.priceWrap}>
             <Text style={styles.price}>{bid.price_mad}</Text>
-            <Text style={styles.priceUnit}>MAD</Text>
+            <Text style={styles.priceUnit}>{t("mad")}</Text>
           </View>
           <TouchableOpacity
             style={styles.acceptBtn}

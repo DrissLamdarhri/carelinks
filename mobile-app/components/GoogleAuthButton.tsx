@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 
 interface GoogleAuthButtonProps {
   label?: string;
@@ -9,11 +10,12 @@ interface GoogleAuthButtonProps {
 }
 
 export function GoogleAuthButton({
-  label = "Continuer avec Google",
+  label,
   loading = false,
   disabled = false,
   onPress,
 }: GoogleAuthButtonProps) {
+  const { t } = useI18n();
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -30,7 +32,7 @@ export function GoogleAuthButton({
             <View style={styles.logoBlueBar} />
             <View style={styles.logoYellow} />
           </View>
-          <Text style={styles.text}>{label}</Text>
+          <Text style={styles.text}>{label ?? t("continue_google")}</Text>
         </>
       )}
     </TouchableOpacity>

@@ -105,7 +105,7 @@ export function LiveTrackingChannel({
         tr("allow_location_title"),
         result.reason === "permission-denied"
           ? tr("allow_location_broadcast")
-          : "Impossible de démarrer le partage de position.",
+          : tr("cmp_location_share_failed"),
       );
     })();
 

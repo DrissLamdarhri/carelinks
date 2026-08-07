@@ -27,6 +27,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { tracking, proStreamTopic } from "@/lib/db/tracking";
+import { tr } from "@/lib/i18n";
 
 export const LIVE_LOCATION_TASK = "carelink-live-location";
 
@@ -343,8 +344,8 @@ export async function startLiveLocation(bookingId: string): Promise<StartResult>
       activityType: Location.ActivityType.AutomotiveNavigation,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: "CareLink — trajet en cours",
-        notificationBody: "Votre position est partagée avec le patient.",
+        notificationTitle: tr("cmp_trip_in_progress"),
+        notificationBody: tr("cmp_position_shared_with_patient"),
         notificationColor: "#0D0870",
         killServiceOnDestroy: false,
       },

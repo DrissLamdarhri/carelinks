@@ -155,7 +155,7 @@ export function ReportProblemScreen({ role, bookingId }: { role: "patient" | "pr
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.root}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel="Retour">
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel={t("back")}>
           <ArrowLeft size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>

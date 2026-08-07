@@ -43,22 +43,24 @@ export const onboardingSlides = [
   },
 ] as const;
 
+// `label`/`sub`/`tag` are i18n KEYS, resolved with t() at the render site —
+// this module is evaluated before any React context exists.
 export const primaryServices = [
   {
     key: "infirmier",
-    label: "Infirmier",
-    sub: "À domicile · Dès 60 MAD",
+    label: "nurse",
+    sub: "cmp_svc_nurse_sub",
     icon: "syringe",
     gradient: "nurse",
     image:
       "https://images.unsplash.com/photo-1706958581603-dffa91fec580?w=400&q=80",
     route: "/patient",
-    tag: "Populaire",
+    tag: "cmp_tag_popular",
   },
   {
     key: "psy",
-    label: "Psychologue",
-    sub: "En ligne ou à domicile",
+    label: "psychologist",
+    sub: "cmp_svc_psy_sub",
     icon: "brain",
     gradient: "psy",
     image:
@@ -68,8 +70,8 @@ export const primaryServices = [
   },
   {
     key: "yoga",
-    label: "Yoga",
-    sub: "Séances individuelles",
+    label: "yoga",
+    sub: "cmp_svc_yoga_sub",
     icon: "flower2",
     gradient: "yoga",
     image:
@@ -79,8 +81,8 @@ export const primaryServices = [
   },
   {
     key: "kine",
-    label: "Kiné",
-    sub: "Rééducation à domicile",
+    label: "pro_kine_short",
+    sub: "home_rehab",
     icon: "activity",
     gradient: "kine",
     image:
@@ -93,21 +95,21 @@ export const primaryServices = [
 export const quickServices = [
   {
     id: "q1",
-    label: "Urgence",
+    label: "urgency",
     icon: "zap",
     color: "#E24B4A",
     background: "#FDE8E8",
   },
   {
     id: "q2",
-    label: "Pansement",
+    label: "svc_dressing",
     icon: "syringe",
     color: "#0D0870",
     background: "#EDE5CC",
   },
   {
     id: "q3",
-    label: "Injection",
+    label: "svc_injection",
     icon: "syringe",
     color: "#5BB8D4",
     background: "#D8F0F4",
