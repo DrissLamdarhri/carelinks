@@ -522,7 +522,7 @@ export default function ProTrackingScreen() {
     ]);
   }, [bookingId, busy, router, t]);
 
-  const patientName = patient?.full_name ?? "Patient";
+  const patientName = patient?.full_name ?? t("patient");
   const distanceKm = nurse && dest ? haversineKm(nurse, dest) : null;
   const etaMin = distanceKm != null ? Math.max(1, Math.round((distanceKm / 30) * 60)) : null;
   const status = booking?.status;
@@ -570,7 +570,7 @@ export default function ProTrackingScreen() {
   if (!loading && !paymentSettled && status !== "completed" && status !== "cancelled") {
     return (
       <View style={s.waitRoot}>
-        <TouchableOpacity style={[s.iconBtn, s.waitBack]} onPress={() => router.back()} accessibilityLabel="Retour">
+        <TouchableOpacity style={[s.iconBtn, s.waitBack]} onPress={() => router.back()} accessibilityLabel={t("back")}>
           <ArrowLeft size={20} color="#1F2937" strokeWidth={2.4} />
         </TouchableOpacity>
         <View style={s.waitCard}>
@@ -583,7 +583,7 @@ export default function ProTrackingScreen() {
               <Text style={s.name} numberOfLines={1}>{patientName}</Text>
               <Text style={s.care} numberOfLines={1}>{(booking?.specialty ?? "").replaceAll("_", " ")}</Text>
             </View>
-            <Text style={s.price}>{booking?.final_price_mad ?? booking?.budget_max_mad ?? "—"} MAD</Text>
+            <Text style={s.price}>{booking?.final_price_mad ?? booking?.budget_max_mad ?? "—"} {t("mad")}</Text>
           </View>
           {/* The automatic paths above should always win. This is here so that
               a nurse who KNOWS the patient has paid is never reduced to force-
@@ -639,7 +639,7 @@ export default function ProTrackingScreen() {
 
         {/* Turn-by-turn banner (our own map — no external app) */}
         <View style={s.navBar} pointerEvents="box-none">
-          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()} accessibilityLabel="Retour">
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()} accessibilityLabel={t("back")}>
             <ArrowLeft size={20} color="#1F2937" strokeWidth={2.4} />
           </TouchableOpacity>
           <View style={s.navCard}>
@@ -652,7 +652,9 @@ export default function ProTrackingScreen() {
               </Text>
               <Text style={s.navSub}>
                 {stepDistKm != null ? `${fmtDist(stepDistKm)} · ` : ""}
-                {distanceKm != null ? `${distanceKm.toFixed(1)} km au total · ~${etaMin} min` : ""}
+                {distanceKm != null
+                  ? t("pro_distance_eta").replace("%s", distanceKm.toFixed(1)).replace("%d", String(etaMin))
+                  : ""}
               </Text>
             </View>
           </View>
@@ -679,7 +681,7 @@ export default function ProTrackingScreen() {
           </View>
           <View style={s.priceCol}>
             <Text style={s.price}>{booking?.final_price_mad ?? booking?.budget_max_mad ?? "—"}</Text>
-            <Text style={s.priceUnit}>MAD</Text>
+            <Text style={s.priceUnit}>{t("mad")}</Text>
           </View>
         </View>
 

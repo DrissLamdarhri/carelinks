@@ -16,12 +16,13 @@ const KINE = "#059669";
 const KINE_DARK = "#065F46";
 const PRICE = 150; // MAD per rééducation session
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+
 function buildDates() {
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
   const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
   return Array.from({ length: 60 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i);
-    return { day: days[d.getDay()], num: String(d.getDate()).padStart(2, "0"), month: months[d.getMonth()], iso: d.toISOString().split("T")[0] };
+    return { dayKey: DAY_KEYS[d.getDay()], num: String(d.getDate()).padStart(2, "0"), month: months[d.getMonth()], iso: d.toISOString().split("T")[0] };
   });
 }
 const dates = buildDates();
@@ -106,7 +107,7 @@ export default function KineScreen() {
         {
           patient_id: user.id, specialty: "physiotherapist", status: "matched",
           professional_id: realId, address: "Meknès, Maroc",
-          notes: `${chosen?.name ?? "Kiné"} · ${t(FOCUS[focus])}`,
+          notes: `${chosen?.name ?? t("spec_physio")} · ${t(FOCUS[focus])}`,
           budget_min_mad: PRICE, budget_max_mad: PRICE, final_price_mad: PRICE,
           session_mode: "in_person", plan_type: "subscription", recurrence: freq,
         },
@@ -228,7 +229,7 @@ export default function KineScreen() {
               const on = i === startDay;
               return (
                 <TouchableOpacity key={d.iso} onPress={() => setStartDay(i)} style={[s.dayChip, on && { backgroundColor: KINE, borderColor: KINE }]}>
-                  <Text style={[s.dayTxt, on && { color: "#fff" }]}>{d.day}</Text>
+                  <Text style={[s.dayTxt, on && { color: "#fff" }]}>{t(d.dayKey)}</Text>
                   <Text style={[s.dayNum, on && { color: "#fff" }]}>{d.num}</Text>
                 </TouchableOpacity>
               );
@@ -238,7 +239,7 @@ export default function KineScreen() {
           {/* Summary */}
           <View style={s.summary}>
             <Text style={s.summaryTitle}>{t("program_summary")}</Text>
-            <View style={s.summaryRow}><Text style={s.summaryK}>{sessions} × {PRICE} MAD</Text><Text style={s.summaryV}>{total} MAD</Text></View>
+            <View style={s.summaryRow}><Text style={s.summaryK}>{sessions} × {PRICE} {t("mad")}</Text><Text style={s.summaryV}>{total} {t("mad")}</Text></View>
             <Text style={s.summaryNote}>{t("first_session_charged")}</Text>
           </View>
 
@@ -246,7 +247,7 @@ export default function KineScreen() {
             {submitting ? <ActivityIndicator color="#fff" /> : (
               <>
                 <Text style={s.ctaTxt}>{t("reserve_program")}</Text>
-                <Text style={s.ctaSub}>{PRICE} MAD · {t("session_short")} 1/{sessions}</Text>
+                <Text style={s.ctaSub}>{PRICE} {t("mad")} · {t("session_short")} 1/{sessions}</Text>
               </>
             )}
           </TouchableOpacity>

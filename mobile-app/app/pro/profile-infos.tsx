@@ -20,11 +20,11 @@ import { storage } from "@/lib/db/storage";
 import type { ProSpecialty } from "@/lib/db/types";
 import { showToast } from "@/lib/toast";
 
-const specialtyOptions: Array<{ label: string; value: ProSpecialty }> = [
-  { label: "Infirmier", value: "nurse" },
-  { label: "Psychologue", value: "psychologist" },
-  { label: "Yoga", value: "yoga_instructor" },
-  { label: "Kinésithérapeute", value: "physiotherapist" },
+const specialtyOptions: Array<{ labelKey: string; value: ProSpecialty }> = [
+  { labelKey: "nurse", value: "nurse" },
+  { labelKey: "psychologist", value: "psychologist" },
+  { labelKey: "yoga", value: "yoga_instructor" },
+  { labelKey: "physio", value: "physiotherapist" },
 ];
 
 export default function ProProfileInfosScreen() {
@@ -204,17 +204,17 @@ export default function ProProfileInfosScreen() {
             <TextInput
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Driss"
+              placeholder={t("pro_first_name_ph")}
               placeholderTextColor={Colors.textSubtle}
               style={styles.input}
             />
           </View>
 
-          <Text style={styles.label}>Nom</Text>
+          <Text style={styles.label}>{t("last_name")}</Text>
           <TextInput
             value={lastName}
             onChangeText={setLastName}
-            placeholder="Alaoui"
+            placeholder={t("pro_last_name_ph")}
             placeholderTextColor={Colors.textSubtle}
             style={styles.simpleInput}
           />
@@ -257,7 +257,7 @@ export default function ProProfileInfosScreen() {
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setSpecialty(option.value)}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{option.label}</Text>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{t(option.labelKey)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -274,7 +274,7 @@ export default function ProProfileInfosScreen() {
           />
           {!isExperienceValid ? <Text style={styles.errorText}>{t("enter_valid_number")}</Text> : null}
 
-          <Text style={styles.label}>Bio</Text>
+          <Text style={styles.label}>{t("pro_bio_label")}</Text>
           <TextInput
             value={bio}
             onChangeText={setBio}

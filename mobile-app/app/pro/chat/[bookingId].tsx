@@ -65,7 +65,7 @@ export default function ProChatScreen() {
     return () => { active = false; };
   }, [bookingId]);
 
-  const name = recipient?.full_name ?? "Patient";
+  const name = recipient?.full_name ?? t("patient");
   const initials = name.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 
   return (

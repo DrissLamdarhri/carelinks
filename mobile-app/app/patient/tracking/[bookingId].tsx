@@ -1140,7 +1140,7 @@ export default function LiveTrackingScreen() {
     trackingStore?.setRoute(null);
   }, [arrived, trackingStore]);
 
-  const proName      = proProfile?.full_name ?? trackProMeta.name ?? "Professionnel";
+  const proName      = proProfile?.full_name ?? trackProMeta.name ?? t("professional");
   const proPhone     = proProfile?.phone     ?? null;
   const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? null;
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -1218,7 +1218,7 @@ export default function LiveTrackingScreen() {
           style={s.recenterFab}
           onPress={() => setRecenterKey((k) => k + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Recentrer la carte"
+          accessibilityLabel={t("pay_recenter_map")}
         >
           <Crosshair size={20} color="#0D0870" strokeWidth={2.2} />
         </TouchableOpacity>
@@ -1230,7 +1230,7 @@ export default function LiveTrackingScreen() {
             style={s.closeBtn}
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/patient/bookings"))}
             accessibilityRole="button"
-            accessibilityLabel="Fermer le suivi"
+            accessibilityLabel={t("pay_close_tracking")}
           >
             <X size={20} color="#1F2937" strokeWidth={2.5} />
           </TouchableOpacity>
@@ -1322,7 +1322,7 @@ export default function LiveTrackingScreen() {
             {/* Price */}
             <View style={s.priceBlock}>
               <Text style={s.priceVal}>{proPrice}</Text>
-              <Text style={s.priceUnit}>MAD</Text>
+              <Text style={s.priceUnit}>{t("mad")}</Text>
             </View>
           </View>
 
@@ -1332,7 +1332,7 @@ export default function LiveTrackingScreen() {
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Appeler le professionnel"
+              accessibilityLabel={t("pay_call_professional")}
               onPress={() => {
                 if (proPhone) void Linking.openURL(`tel:${proPhone}`);
                 else showToast(t("number_unavailable_chat"));
@@ -1346,13 +1346,13 @@ export default function LiveTrackingScreen() {
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Partager le suivi"
+              accessibilityLabel={t("pay_share_tracking")}
               onPress={() =>
                 void Share.share({
                   message:
                     eta != null
-                      ? `Mon infirmier arrive dans ${eta} min — CareLinks`
-                      : `Suivi en direct de mon infirmier — CareLinks`,
+                      ? t("pay_share_eta_msg").replace("{n}", String(eta))
+                      : t("pay_share_live_msg"),
                 })
               }
             >
@@ -1364,7 +1364,7 @@ export default function LiveTrackingScreen() {
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Envoyer un message"
+              accessibilityLabel={t("pay_send_message")}
               onPress={() => { if (bookingId) router.push(`/patient/chat/${bookingId}`); }}
             >
               <MessageCircle size={18} color="#1F2937" strokeWidth={2} />

@@ -8,11 +8,13 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CheckCircle2 } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { getBookingDetails } from "@/lib/db/yoga";
 import { YogaBookingDetails } from "@/components/YogaBookingDetails";
 import type { YogaBookingDetails as YogaBookingDetailsT } from "@/types/yoga";
 
 export default function YogaConfirmationScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = Array.isArray(params.bookingId) ? params.bookingId[0] : params.bookingId;
@@ -37,8 +39,8 @@ export default function YogaConfirmationScreen() {
           <View style={s.heroIcon}>
             <CheckCircle2 size={32} color="#16A34A" />
           </View>
-          <Text style={s.heroTitle}>Réservation confirmée</Text>
-          <Text style={s.heroSub}>Votre place pour ce cours de yoga est réservée.</Text>
+          <Text style={s.heroTitle}>{t("pay_reservation_confirmed")}</Text>
+          <Text style={s.heroSub}>{t("pay_yoga_seat_reserved")}</Text>
         </View>
 
         {loading ? (
@@ -46,13 +48,13 @@ export default function YogaConfirmationScreen() {
         ) : details ? (
           <YogaBookingDetails details={details} />
         ) : (
-          <Text style={s.errorTxt}>Impossible de charger le récapitulatif.</Text>
+          <Text style={s.errorTxt}>{t("pay_summary_load_failed")}</Text>
         )}
       </ScrollView>
 
       <View style={s.footer}>
         <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace("/patient/bookings")}>
-          <Text style={s.primaryBtnTxt}>Voir mes réservations</Text>
+          <Text style={s.primaryBtnTxt}>{t("see_my_bookings")}</Text>
         </TouchableOpacity>
       </View>
     </View>

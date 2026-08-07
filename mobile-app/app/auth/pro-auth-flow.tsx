@@ -98,8 +98,8 @@ export default function ProAuthFlowScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "pro") return;
     const label =
-      nextRole === "patient" ? "patient" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "patient" ? t("auth_role_patient") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const handleEmailSignIn = async () => {
@@ -280,7 +280,7 @@ export default function ProAuthFlowScreen() {
 
           <View style={styles.sepRow}>
             <View style={styles.sepLine} />
-            <Text style={styles.sepText}>ou avec email</Text>
+            <Text style={styles.sepText}>{t("or_with_email")}</Text>
             <View style={styles.sepLine} />
           </View>
 
@@ -292,7 +292,7 @@ export default function ProAuthFlowScreen() {
                 value={loginEmail}
                 onChangeText={setLoginEmail}
                 style={styles.input}
-                placeholder="contact@cabinet.com"
+                placeholder={t("auth_ph_pro_email")}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholderTextColor={Colors.textSubtle}
@@ -344,7 +344,7 @@ export default function ProAuthFlowScreen() {
           {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>💡 Pas encore enregistré ? Créez un compte via l'onglet "Inscription".</Text>
+            <Text style={styles.hintText}>💡 {t("auth_not_registered_hint")}</Text>
           </View>
         </ScrollView>
 
@@ -364,7 +364,7 @@ export default function ProAuthFlowScreen() {
 
           <View style={styles.sepRow}>
             <View style={styles.sepLine} />
-            <Text style={styles.sepText}>ou avec email</Text>
+            <Text style={styles.sepText}>{t("or_with_email")}</Text>
             <View style={styles.sepLine} />
           </View>
 
@@ -378,20 +378,20 @@ export default function ProAuthFlowScreen() {
                   value={firstName}
                   onChangeText={setFirstName}
                   style={styles.input}
-                  placeholder="Jean"
+                  placeholder={t("auth_ph_first_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
             </View>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={styles.label}>Nom</Text>
+              <Text style={styles.label}>{t("last_name")}</Text>
               <View style={styles.inputWrap}>
                 <User size={18} color={Colors.textMuted} />
                 <TextInput
                   value={lastName}
                   onChangeText={setLastName}
                   style={styles.input}
-                  placeholder="Dupont"
+                  placeholder={t("auth_ph_last_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -407,7 +407,7 @@ export default function ProAuthFlowScreen() {
                 value={phone}
                 onChangeText={setPhone}
                 style={styles.input}
-                placeholder="+212 6XX XXX XXX"
+                placeholder={t("auth_ph_phone")}
                 keyboardType="phone-pad"
                 placeholderTextColor={Colors.textSubtle}
               />
@@ -423,7 +423,7 @@ export default function ProAuthFlowScreen() {
                 value={regEmail}
                 onChangeText={setRegEmail}
                 style={styles.input}
-                placeholder="contact@cabinet.com"
+                placeholder={t("auth_ph_pro_email")}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholderTextColor={Colors.textSubtle}
@@ -474,7 +474,7 @@ export default function ProAuthFlowScreen() {
                 value={license}
                 onChangeText={setLicense}
                 style={styles.input}
-                placeholder="ex: ML123456"
+                placeholder={t("auth_ph_license")}
                 placeholderTextColor={Colors.textSubtle}
               />
             </View>
@@ -541,9 +541,9 @@ export default function ProAuthFlowScreen() {
               {agreed && <View style={styles.checkboxMark} />}
             </TouchableOpacity>
             <Text style={styles.agreeText}>
-              J'accepte les{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>conditions d'utilisation</Text> et la{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>politique de confidentialité</Text>
+              {t("accept_terms_prefix")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("terms_of_use")}</Text> {t("and_the_f")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("privacy_policy")}</Text>
             </Text>
           </View>
 
@@ -565,7 +565,7 @@ export default function ProAuthFlowScreen() {
           {regError ? <Text style={styles.errorText}>{regError}</Text> : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>🔒 Votre compte sera vérifié et sécurisé par authentification multi-facteurs.</Text>
+            <Text style={styles.hintText}>🔒 {t("auth_account_verified_mfa_secured")}</Text>
           </View>
         </ScrollView>
       </ScrollView>

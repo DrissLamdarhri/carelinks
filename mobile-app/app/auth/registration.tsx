@@ -34,8 +34,8 @@ export default function RegistrationScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "patient") return;
     const label =
-      nextRole === "pro" ? "professionnel" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "pro" ? t("auth_role_pro") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const [firstName, setFirstName] = useState("");
@@ -187,7 +187,7 @@ export default function RegistrationScreen() {
 
         <View style={styles.sepRow}>
           <View style={styles.sepLine} />
-          <Text style={styles.sepText}>ou avec email</Text>
+          <Text style={styles.sepText}>{t("or_with_email")}</Text>
           <View style={styles.sepLine} />
         </View>
 
@@ -200,18 +200,18 @@ export default function RegistrationScreen() {
                 value={firstName}
                 onChangeText={setFirstName}
                 style={styles.input}
-                placeholder="Driss"
+                placeholder={t("auth_ph_first_name_patient")}
                 placeholderTextColor={Colors.textSubtle}
               />
             </View>
           </View>
           <View style={styles.col}>
-            <Text style={styles.label}>Nom</Text>
+            <Text style={styles.label}>{t("last_name")}</Text>
             <TextInput
               value={lastName}
               onChangeText={setLastName}
               style={styles.simpleInput}
-              placeholder="Alaoui"
+              placeholder={t("auth_ph_last_name_patient")}
               placeholderTextColor={Colors.textSubtle}
             />
           </View>
@@ -224,7 +224,7 @@ export default function RegistrationScreen() {
             value={phone}
             onChangeText={setPhone}
             style={styles.phoneInput}
-            placeholder="6 12 34 56 78"
+            placeholder={t("auth_ph_phone_local")}
             keyboardType="phone-pad"
             placeholderTextColor={Colors.textSubtle}
           />
@@ -237,7 +237,7 @@ export default function RegistrationScreen() {
             value={email}
             onChangeText={setEmail}
             style={styles.input}
-            placeholder="driss@email.com"
+            placeholder={t("auth_ph_email_patient")}
             autoCapitalize="none"
             keyboardType="email-address"
             placeholderTextColor={Colors.textSubtle}

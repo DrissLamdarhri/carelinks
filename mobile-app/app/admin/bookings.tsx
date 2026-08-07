@@ -143,7 +143,7 @@ export default function AdminBookingsScreen() {
             <Text style={styles.bookingSpecialty}>{item.specialty.toUpperCase()}</Text>
             {item.is_psychologist && (
               <View style={[styles.badge, { backgroundColor: "#F472B6", borderColor: "#EC4899" }]}>
-                <Text style={[styles.badgeText, { color: "#BE185D" }]}>🧠 PSY</Text>
+                <Text style={[styles.badgeText, { color: "#BE185D" }]}>🧠 {t("admin_badge_psy")}</Text>
               </View>
             )}
           </View>
@@ -159,7 +159,7 @@ export default function AdminBookingsScreen() {
             {item.alert_level === "critical" && <AlertTriangle size={12} color={alertColor.color} />}
             {item.alert_level === "high" && <AlertCircle size={12} color={alertColor.color} />}
             <Text style={[styles.alertBadgeText, { color: alertColor.color }]}>
-              {item.alert_level === "critical" ? "CRITIQUE" : item.alert_level === "high" ? "ÉLEVÉE" : "NORMALE"}
+              {item.alert_level === "critical" ? t("admin_alert_critical") : item.alert_level === "high" ? t("admin_alert_high") : t("admin_alert_normal")}
             </Text>
           </View>
         </View>
@@ -205,7 +205,7 @@ export default function AdminBookingsScreen() {
 
           {item.price && (
             <Text style={styles.price}>
-              {item.price.toLocaleString("fr-MA")} MAD
+              {item.price.toLocaleString("fr-MA")} {t("mad")}
             </Text>
           )}
 
@@ -269,7 +269,7 @@ export default function AdminBookingsScreen() {
           onPress={() => setFilter("all")}
         >
           <Text style={[styles.filterBtnText, filter === "all" && styles.filterBtnTextActive]}>
-            Tous ({bookings.length})
+            {t("admin_filter_all_n").replace("{n}", String(bookings.length))}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -277,7 +277,7 @@ export default function AdminBookingsScreen() {
           onPress={() => setFilter("psychologist")}
         >
           <Text style={[styles.filterBtnText, filter === "psychologist" && styles.filterBtnTextActive]}>
-            🧠 Psy ({stats.psychologist})
+            🧠 {t("admin_filter_psy_n").replace("{n}", String(stats.psychologist))}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -285,7 +285,7 @@ export default function AdminBookingsScreen() {
           onPress={() => setFilter("critical")}
         >
           <Text style={[styles.filterBtnText, filter === "critical" && styles.filterBtnTextActive]}>
-            ⚠️ Critique ({stats.critical})
+            ⚠️ {t("admin_filter_critical_n").replace("{n}", String(stats.critical))}
           </Text>
         </TouchableOpacity>
       </View>
@@ -293,7 +293,7 @@ export default function AdminBookingsScreen() {
       {/* Réservations prioritaires */}
       {priorityBookings.length > 0 && (
         <View style={styles.prioritySection}>
-          <Text style={styles.sectionTitle}>🚨 Priorité immédiate</Text>
+          <Text style={styles.sectionTitle}>🚨 {t("admin_immediate_priority")}</Text>
           {priorityBookings.map((booking) => (
             <View key={booking.id} style={styles.priorityCard}>
               <AlertTriangle size={16} color="#DC2626" />

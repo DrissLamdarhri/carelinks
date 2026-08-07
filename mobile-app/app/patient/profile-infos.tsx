@@ -21,10 +21,11 @@ import { showToast } from "@/lib/toast";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
+// `label` is an i18n key resolved with t() at render.
 const genderOptions = [
-  { label: "Femme", value: "female" },
-  { label: "Homme", value: "male" },
-  { label: "Autre", value: "other" },
+  { label: "pay_gender_female", value: "female" },
+  { label: "pay_gender_male", value: "male" },
+  { label: "pay_gender_other", value: "other" },
 ];
 
 export default function PatientProfileInfosScreen() {
@@ -59,7 +60,7 @@ export default function PatientProfileInfosScreen() {
         setUploadingAvatar(true);
         setErrorMessage(null);
         try {
-          if (!user?.id) throw new Error("User not authenticated");
+          if (!user?.id) throw new Error(t("user_not_connected"));
           const publicUrl = await storage.uploadAvatar(user.id, asset.uri, asset.mimeType || "image/jpeg");
           await db.profiles.update(user.id, { avatar_url: publicUrl });
           setAvatarUri(publicUrl);
@@ -219,17 +220,17 @@ export default function PatientProfileInfosScreen() {
             <TextInput
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Driss"
+              placeholder={t("pay_first_name_ph")}
               placeholderTextColor={Colors.textSubtle}
               style={styles.input}
             />
           </View>
 
-          <Text style={styles.label}>Nom</Text>
+          <Text style={styles.label}>{t("last_name")}</Text>
           <TextInput
             value={lastName}
             onChangeText={setLastName}
-            placeholder="Alaoui"
+            placeholder={t("pay_last_name_ph")}
             placeholderTextColor={Colors.textSubtle}
             style={styles.simpleInput}
           />
@@ -285,7 +286,7 @@ export default function PatientProfileInfosScreen() {
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setGender(option.value)}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{option.label}</Text>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{t(option.label)}</Text>
                 </TouchableOpacity>
               );
             })}

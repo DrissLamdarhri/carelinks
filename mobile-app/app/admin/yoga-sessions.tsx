@@ -19,6 +19,7 @@ import {
 import { useFocusEffect } from "expo-router";
 import { Calendar, CheckCircle2, ChevronDown, MapPin, Navigation, Plus, Users, X } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { showAppAlert } from "@/lib/app-alert";
 import { geo } from "@/lib/db/geo";
@@ -33,6 +34,14 @@ import {
 import type { YogaCatalogEntry } from "@/types/yoga";
 
 const LEVELS = ["Tous niveaux", "Débutant", "Intermédiaire", "Avancé"];
+// LEVELS are the values persisted on yoga_sessions.level — keep them French.
+// This maps each stored value to the key used to display it.
+const LEVEL_KEY: Record<string, string> = {
+  "Tous niveaux": "level_all",
+  "Débutant": "level_beginner",
+  "Intermédiaire": "level_intermediate",
+  "Avancé": "level_advanced",
+};
 const DEFAULT_MAP_CENTER: LatLng = { lat: 34.037, lng: -5.004 }; // Fès
 
 function toIsoFromParts(dateStr: string, timeStr: string): string | null {
@@ -48,6 +57,7 @@ function toIsoFromParts(dateStr: string, timeStr: string): string | null {
 }
 
 export default function AdminYogaSessionsScreen() {
+  const { t } = useI18n();
   const [sessions, setSessions] = useState<YogaCatalogEntry[]>([]);
   const [instructors, setInstructors] = useState<{ id: string; full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +87,7 @@ export default function AdminYogaSessionsScreen() {
       setSessions(s);
       setInstructors(i);
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Impossible de charger les séances.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("sessions_load_error"));
     } finally {
       setLoading(false);
     }
@@ -126,7 +136,7 @@ export default function AdminYogaSessionsScreen() {
         }
       }
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Position GPS indisponible.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("admin_gps_unavailable"));
     } finally {
       setLocating(false);
     }
@@ -135,28 +145,28 @@ export default function AdminYogaSessionsScreen() {
   const submit = async () => {
     if (submitting) return;
     if (!title.trim() || !instructorId || !address.trim() || !city.trim()) {
-      showAppAlert("Champs manquants", "Titre, instructeur, adresse et ville sont obligatoires.");
+      showAppAlert(t("admin_missing_fields_title"), t("admin_yoga_required_fields"));
       return;
     }
     const capacityNum = Number(capacity);
     const priceNum = Number(price);
     if (!Number.isFinite(capacityNum) || capacityNum <= 0) {
-      showAppAlert("Capacité invalide", "La capacité doit être un nombre supérieur à 0.");
+      showAppAlert(t("admin_invalid_capacity_title"), t("admin_capacity_must_be_positive"));
       return;
     }
     if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      showAppAlert("Prix invalide", "Le prix doit être un nombre supérieur à 0.");
+      showAppAlert(t("admin_invalid_price_title"), t("admin_price_must_be_positive"));
       return;
     }
     const startIso = toIsoFromParts(dateStr, startTime);
     const endIso = toIsoFromParts(dateStr, endTime);
     if (!startIso || !endIso) {
-      showAppAlert("Date/heure invalide", "Utilisez les formats JJ/MM/AAAA et HH:MM.");
+      showAppAlert(t("admin_invalid_datetime_title"), t("admin_datetime_format_hint"));
       return;
     }
     const durationMin = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
     if (durationMin <= 0) {
-      showAppAlert("Heures invalides", "L'heure de fin doit être après l'heure de début.");
+      showAppAlert(t("admin_invalid_hours_title"), t("admin_end_after_start"));
       return;
     }
 
@@ -174,28 +184,28 @@ export default function AdminYogaSessionsScreen() {
         level,
         coords,
       });
-      showAppAlert("Séance créée", "La séance est maintenant visible dans le catalogue patient.");
+      showAppAlert(t("admin_session_created_title"), t("admin_session_created_msg"));
       resetForm();
       setFormOpen(false);
       void load();
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Création impossible.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("admin_create_failed"));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleComplete = (session: YogaCatalogEntry) => {
-    showAppAlert("Terminer la séance ?", `"${session.title}" sera marquée terminée et les réservations liées seront clôturées (paiement libéré).`, [
-      { text: "Annuler", style: "cancel" },
+    showAppAlert(t("admin_complete_session_title"), t("admin_complete_session_msg").replace("%s", session.title), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Terminer",
+        text: t("finish"),
         onPress: async () => {
           setActingOn(session.id);
           try {
             await completeYogaSession(session.id);
           } catch (e) {
-            showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+            showAppAlert(t("error"), e instanceof Error ? e.message : t("action_failed"));
           } finally {
             setActingOn(null);
           }
@@ -206,19 +216,19 @@ export default function AdminYogaSessionsScreen() {
 
   const handleCancelClass = (session: YogaCatalogEntry) => {
     showAppAlert(
-      "Annuler toute la séance ?",
-      `Tous les élèves inscrits à "${session.title}" seront notifiés et leurs réservations annulées.`,
+      t("admin_cancel_session_title"),
+      t("admin_cancel_session_msg").replace("%s", session.title),
       [
-        { text: "Garder la séance", style: "cancel" },
+        { text: t("admin_keep_session"), style: "cancel" },
         {
-          text: "Annuler la séance",
+          text: t("admin_cancel_session_action"),
           style: "destructive",
           onPress: async () => {
             setActingOn(session.id);
             try {
               await cancelYogaSession(session.id, "Annulée par l'administration");
             } catch (e) {
-              showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+              showAppAlert(t("error"), e instanceof Error ? e.message : t("action_failed"));
             } finally {
               setActingOn(null);
             }
@@ -232,30 +242,30 @@ export default function AdminYogaSessionsScreen() {
 
   return (
     <ScrollView style={s.root} contentContainerStyle={s.content}>
-      <Text style={s.title}>Séances de yoga</Text>
-      <Text style={s.subtitle}>Création et gestion des cours proposés au catalogue.</Text>
+      <Text style={s.title}>{t("yoga_sessions")}</Text>
+      <Text style={s.subtitle}>{t("admin_yoga_subtitle")}</Text>
 
       <TouchableOpacity style={s.newBtn} onPress={() => setFormOpen((v) => !v)}>
         {formOpen ? <X size={16} color="#FFFFFF" /> : <Plus size={16} color="#FFFFFF" />}
-        <Text style={s.newBtnTxt}>{formOpen ? "Fermer" : "Nouvelle séance"}</Text>
+        <Text style={s.newBtnTxt}>{formOpen ? t("close") : t("admin_new_session")}</Text>
       </TouchableOpacity>
 
       {formOpen ? (
         <View style={s.form}>
-          <Text style={s.label}>Titre</Text>
-          <TextInput style={s.input} value={title} onChangeText={setTitle} placeholder="Ex: Vinyasa Dynamique" placeholderTextColor={Colors.textSubtle} />
+          <Text style={s.label}>{t("admin_title_label")}</Text>
+          <TextInput style={s.input} value={title} onChangeText={setTitle} placeholder={t("admin_title_ph")} placeholderTextColor={Colors.textSubtle} />
 
-          <Text style={s.label}>Instructeur</Text>
+          <Text style={s.label}>{t("admin_instructor")}</Text>
           <TouchableOpacity style={s.selector} onPress={() => setInstructorPickerOpen((v) => !v)}>
             <Text style={selectedInstructorName ? s.selectorTxt : s.selectorPlaceholder}>
-              {selectedInstructorName ?? "Choisir un instructeur"}
+              {selectedInstructorName ?? t("admin_choose_instructor")}
             </Text>
             <ChevronDown size={16} color={Colors.textMuted} />
           </TouchableOpacity>
           {instructorPickerOpen ? (
             <View style={s.pickerList}>
               {instructors.length === 0 ? (
-                <Text style={s.emptyPickerTxt}>Aucun instructeur de yoga approuvé pour le moment.</Text>
+                <Text style={s.emptyPickerTxt}>{t("admin_no_yoga_instructors")}</Text>
               ) : (
                 instructors.map((i) => (
                   <TouchableOpacity
@@ -270,36 +280,36 @@ export default function AdminYogaSessionsScreen() {
             </View>
           ) : null}
 
-          <Text style={s.label}>Niveau</Text>
+          <Text style={s.label}>{t("admin_level")}</Text>
           <TouchableOpacity style={s.selector} onPress={() => setLevelPickerOpen((v) => !v)}>
-            <Text style={s.selectorTxt}>{level}</Text>
+            <Text style={s.selectorTxt}>{LEVEL_KEY[level] ? t(LEVEL_KEY[level]) : level}</Text>
             <ChevronDown size={16} color={Colors.textMuted} />
           </TouchableOpacity>
           {levelPickerOpen ? (
             <View style={s.pickerList}>
               {LEVELS.map((l) => (
                 <TouchableOpacity key={l} style={s.pickerItem} onPress={() => { setLevel(l); setLevelPickerOpen(false); }}>
-                  <Text style={s.pickerItemTxt}>{l}</Text>
+                  <Text style={s.pickerItemTxt}>{LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           ) : null}
 
-          <Text style={s.label}>Adresse du centre</Text>
-          <TextInput style={s.input} value={address} onChangeText={setAddress} placeholder="Ex: Studio CareLink, Agdal" placeholderTextColor={Colors.textSubtle} />
+          <Text style={s.label}>{t("admin_center_address")}</Text>
+          <TextInput style={s.input} value={address} onChangeText={setAddress} placeholder={t("admin_center_address_ph")} placeholderTextColor={Colors.textSubtle} />
 
-          <Text style={s.label}>Ville</Text>
-          <TextInput style={s.input} value={city} onChangeText={setCity} placeholder="Ex: Fès" placeholderTextColor={Colors.textSubtle} />
+          <Text style={s.label}>{t("city")}</Text>
+          <TextInput style={s.input} value={city} onChangeText={setCity} placeholder={t("admin_city_ph")} placeholderTextColor={Colors.textSubtle} />
 
           <View style={s.mapLabelRow}>
-            <Text style={[s.label, { marginTop: 0 }]}>Localiser sur la carte (optionnel)</Text>
+            <Text style={[s.label, { marginTop: 0 }]}>{t("admin_locate_on_map")}</Text>
             <TouchableOpacity style={s.locateBtn} onPress={locateOnMap} disabled={locating}>
               {locating ? (
                 <ActivityIndicator size="small" color={Colors.primary} />
               ) : (
                 <Navigation size={13} color={Colors.primary} />
               )}
-              <Text style={s.locateBtnTxt}>Ma position</Text>
+              <Text style={s.locateBtnTxt}>{t("admin_my_position")}</Text>
             </TouchableOpacity>
           </View>
           <View style={s.mapPicker}>
@@ -314,49 +324,49 @@ export default function AdminYogaSessionsScreen() {
             <View style={s.coordsRow}>
               <MapPin size={12} color={Colors.textMuted} />
               <Text style={s.coordsTxt}>
-                {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)} — touchez la carte pour ajuster
+                {t("admin_coords_adjust_hint").replace("%s", `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`)}
               </Text>
             </View>
           ) : (
-            <Text style={s.coordsHint}>Touchez la carte pour placer le point exact du studio.</Text>
+            <Text style={s.coordsHint}>{t("admin_map_tap_hint")}</Text>
           )}
 
-          <Text style={s.label}>Date (JJ/MM/AAAA)</Text>
+          <Text style={s.label}>{t("admin_date_label")}</Text>
           <TextInput style={s.input} value={dateStr} onChangeText={setDateStr} placeholder="12/08/2026" placeholderTextColor={Colors.textSubtle} keyboardType="numbers-and-punctuation" />
 
           <View style={s.row2}>
             <View style={{ flex: 1 }}>
-              <Text style={s.label}>Heure de début</Text>
+              <Text style={s.label}>{t("admin_start_time")}</Text>
               <TextInput style={s.input} value={startTime} onChangeText={setStartTime} placeholder="18:00" placeholderTextColor={Colors.textSubtle} keyboardType="numbers-and-punctuation" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.label}>Heure de fin</Text>
+              <Text style={s.label}>{t("admin_end_time")}</Text>
               <TextInput style={s.input} value={endTime} onChangeText={setEndTime} placeholder="19:00" placeholderTextColor={Colors.textSubtle} keyboardType="numbers-and-punctuation" />
             </View>
           </View>
 
           <View style={s.row2}>
             <View style={{ flex: 1 }}>
-              <Text style={s.label}>Capacité</Text>
+              <Text style={s.label}>{t("admin_capacity")}</Text>
               <TextInput style={s.input} value={capacity} onChangeText={setCapacity} placeholder="12" placeholderTextColor={Colors.textSubtle} keyboardType="number-pad" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.label}>Prix (MAD)</Text>
+              <Text style={s.label}>{t("admin_price_mad")}</Text>
               <TextInput style={s.input} value={price} onChangeText={setPrice} placeholder="120" placeholderTextColor={Colors.textSubtle} keyboardType="number-pad" />
             </View>
           </View>
 
           <TouchableOpacity style={[s.submitBtn, submitting && { opacity: 0.6 }]} disabled={submitting} onPress={submit}>
-            {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.submitTxt}>Publier la séance</Text>}
+            {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.submitTxt}>{t("admin_publish_session")}</Text>}
           </TouchableOpacity>
         </View>
       ) : null}
 
-      <Text style={s.sectionTitle}>Séances existantes</Text>
+      <Text style={s.sectionTitle}>{t("admin_existing_sessions")}</Text>
       {loading ? (
         <ActivityIndicator color={Colors.primary} style={{ marginTop: 20 }} />
       ) : sessions.length === 0 ? (
-        <Text style={s.emptyTxt}>Aucune séance créée pour le moment.</Text>
+        <Text style={s.emptyTxt}>{t("admin_no_sessions_yet")}</Text>
       ) : (
         sessions.map((sess) => {
           const dt = new Date(sess.starts_at);
@@ -368,7 +378,7 @@ export default function AdminYogaSessionsScreen() {
                 <Text style={s.sessionTitle} numberOfLines={1}>{sess.title}</Text>
                 <View style={[s.statusPill, sess.status === "scheduled" ? s.statusScheduled : sess.status === "completed" ? s.statusCompleted : s.statusCancelled]}>
                   <Text style={s.statusPillTxt}>
-                    {sess.status === "scheduled" ? "Programmée" : sess.status === "completed" ? "Terminée" : "Annulée"}
+                    {sess.status === "scheduled" ? t("admin_session_scheduled") : sess.status === "completed" ? t("admin_session_completed") : t("admin_session_cancelled")}
                   </Text>
                 </View>
               </View>
@@ -380,20 +390,20 @@ export default function AdminYogaSessionsScreen() {
                 </View>
                 <View style={s.sessionMetaItem}>
                   <Users size={12} color={Colors.textMuted} />
-                  <Text style={s.sessionMetaTxt}>{sess.enrolledCount}/{sess.capacity} inscrits</Text>
+                  <Text style={s.sessionMetaTxt}>{t("admin_enrolled_ratio").replace("%s", `${sess.enrolledCount}/${sess.capacity}`)}</Text>
                 </View>
-                <Text style={s.sessionPrice}>{sess.price_mad} MAD</Text>
+                <Text style={s.sessionPrice}>{sess.price_mad} {t("mad")}</Text>
               </View>
 
               {sess.status === "scheduled" ? (
                 <View style={s.sessionActions}>
                   <TouchableOpacity style={[s.actionBtn, s.actionComplete]} disabled={busy} onPress={() => handleComplete(sess)}>
                     {busy ? <ActivityIndicator size="small" color="#16A34A" /> : <CheckCircle2 size={14} color="#16A34A" />}
-                    <Text style={[s.actionTxt, { color: "#16A34A" }]}>Terminer</Text>
+                    <Text style={[s.actionTxt, { color: "#16A34A" }]}>{t("finish")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.actionBtn, s.actionCancel]} disabled={busy} onPress={() => handleCancelClass(sess)}>
                     <X size={14} color={Colors.danger} />
-                    <Text style={[s.actionTxt, { color: Colors.danger }]}>Annuler</Text>
+                    <Text style={[s.actionTxt, { color: Colors.danger }]}>{t("cancel")}</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}

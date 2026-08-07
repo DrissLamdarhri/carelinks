@@ -15,13 +15,14 @@ const DEFAULT_PRICE = 200; // MAD per session
 const DEFAULT_MEET = "https://meet.google.com/new";
 const DEFAULT_ZOOM = "https://zoom.us/join";
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+
 function buildDates() {
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
   const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
   return Array.from({ length: 90 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() + i);
-    return { day: days[date.getDay()], num: String(date.getDate()).padStart(2, "0"), month: months[date.getMonth()], isoDate: date.toISOString().split("T")[0] };
+    return { dayKey: DAY_KEYS[date.getDay()], num: String(date.getDate()).padStart(2, "0"), month: months[date.getMonth()], isoDate: date.toISOString().split("T")[0] };
   });
 }
 const dates = buildDates();
@@ -168,7 +169,7 @@ export default function PsychologistBookingScreen() {
             </View>
             <View style={styles.priceTag}>
               <Text style={styles.priceTagVal}>{PRICE}</Text>
-              <Text style={styles.priceTagUnit}>MAD/{t("per_session")}</Text>
+              <Text style={styles.priceTagUnit}>{t("mad_per_session")}</Text>
             </View>
           </View>
         </View>
@@ -210,7 +211,7 @@ export default function PsychologistBookingScreen() {
               <TouchableOpacity style={styles.counterBtn} onPress={() => setSessionCount((n) => Math.min(12, n + 1))}>
                 <Text style={styles.counterBtnTxt}>+</Text>
               </TouchableOpacity>
-              <Text style={styles.counterHint}>{sessionCount} × {PRICE} = {sessionCount * PRICE} MAD</Text>
+              <Text style={styles.counterHint}>{sessionCount} × {PRICE} = {sessionCount * PRICE} {t("mad")}</Text>
             </View>
           </>
         ) : null}
@@ -253,7 +254,7 @@ export default function PsychologistBookingScreen() {
                 const active = selectedDay === gi;
                 return (
                   <TouchableOpacity key={date.isoDate} style={[styles.dayChip, active && styles.dayChipActive]} onPress={() => setSelectedDay(gi)}>
-                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{date.day}</Text>
+                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{t(date.dayKey)}</Text>
                     <Text style={[styles.dayNum, active && styles.dayTextActive]}>{date.num}</Text>
                   </TouchableOpacity>
                 );
@@ -281,7 +282,7 @@ export default function PsychologistBookingScreen() {
           style={[styles.confirmBtn, (!canConfirm || confirming) && styles.confirmBtnDisabled]}>
           {confirming ? <ActivityIndicator size="small" color="white" /> : (
             <Text style={[styles.confirmBtnText, (!canConfirm || confirming) && styles.confirmBtnTextDisabled]}>
-              {t("pay_and_book")} — {PRICE} MAD{isSeries ? ` · ${t("session_short")} 1/${count}` : ""}
+              {t("pay_and_book")} — {PRICE} {t("mad")}{isSeries ? ` · ${t("session_short")} 1/${count}` : ""}
             </Text>
           )}
         </TouchableOpacity>

@@ -198,8 +198,8 @@ export default function MfaChallengeScreen() {
             {mode === "sms"
               ? t("confirm_identity_sms")
               : mode === "backup"
-              ? "Saisissez un code de secours à usage unique."
-              : "Saisissez le code de votre application d'authentification."}
+              ? t("auth_enter_backup_code_hint")
+              : t("auth_enter_totp_hint")}
           </Text>
         </View>
 
@@ -225,7 +225,7 @@ export default function MfaChallengeScreen() {
         {mode === "sms" ? (
           <View style={styles.smsRow}>
             <Text style={styles.smsHint}>
-              {smsSent ? "Code SMS envoyé." : "Envoi du code en cours…"}
+              {smsSent ? t("auth_sms_code_sent") : t("auth_sending_code")}
             </Text>
             <TouchableOpacity disabled={loading} onPress={handleResendSms}>
               <Text style={styles.smsResend}>{t("resend")}</Text>
@@ -234,7 +234,9 @@ export default function MfaChallengeScreen() {
         ) : null}
 
         {mode === "sms" && smsAttempts > 0 ? (
-          <Text style={styles.attemptsText}>Tentatives restantes: {Math.max(0, 5 - smsAttempts)}</Text>
+          <Text style={styles.attemptsText}>
+            {t("auth_attempts_left").replace("{n}", String(Math.max(0, 5 - smsAttempts)))}
+          </Text>
         ) : null}
 
         <TouchableOpacity

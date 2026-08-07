@@ -68,7 +68,7 @@ export default function RatingScreen() {
         </View>
         <Text style={styles.successTitle}>{t("rating_thanks")}</Text>
         <Text style={styles.successSubtitle}>
-          Votre évaluation aide à améliorer la qualité des soins sur CareLink.
+          {t("pay_rating_helps")}
         </Text>
         <TouchableOpacity style={styles.successBtn} onPress={() => router.replace("/patient")}>
           <Text style={styles.successBtnText}>{t("back_home")}</Text>
@@ -90,7 +90,7 @@ export default function RatingScreen() {
           <RatingForm
             bookingId={bookingId}
             professionalId={professionalId}
-            professionalName={professional?.full_name ?? "Professionnel"}
+            professionalName={professional?.full_name ?? t("professional")}
             professionalAvatar={professional?.avatar_url ?? null}
             subtitle={booking.specialty.replaceAll("_", " ")}
             onSubmitted={() => setSubmitted(true)}

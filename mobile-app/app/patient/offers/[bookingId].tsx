@@ -190,7 +190,7 @@ export default function NurseOffersScreen() {
             </Text>
             <Text style={styles.requestMetaText}>·</Text>
             <Text style={styles.requestMetaText} numberOfLines={1}>
-              {booking.address ?? "Adresse non renseignée"}
+              {booking.address ?? t("pat_address_not_provided")}
             </Text>
           </View>
         ) : null}
@@ -204,10 +204,10 @@ export default function NurseOffersScreen() {
           </View>
         ) : (
           <Text style={styles.countText}>
-            <Text style={styles.countStrong}>
-              {visibleOffers.length} professionnel{visibleOffers.length === 1 ? "" : "s"}
-            </Text>{" "}
-            {visibleOffers.length === 1 ? "a répondu" : "ont répondu"}
+            {t(visibleOffers.length === 1 ? "pat_pros_responded_one" : "pat_pros_responded_many").replace(
+              "{n}",
+              String(visibleOffers.length),
+            )}
           </Text>
         )}
       </View>
@@ -240,8 +240,10 @@ export default function NurseOffersScreen() {
                   </>
                 ) : (
                   <Text style={styles.bannerCounterText}>
-                    Contre-offre : {counterDelta > 0 ? "+" : ""}
-                    {counterDelta} MAD
+                    {t("pat_counter_offer").replace(
+                      "%s",
+                      `${counterDelta > 0 ? "+" : ""}${counterDelta}`,
+                    )}
                   </Text>
                 )}
               </View>
@@ -268,23 +270,27 @@ export default function NurseOffersScreen() {
                     <View style={styles.ratingRow}>
                       <Star size={12} color="#FBBF24" fill="#FBBF24" />
                       <Text style={styles.ratingText}>
-                        {pro.rating > 0 ? pro.rating.toFixed(1) : "Nouveau"}
+                        {pro.rating > 0 ? pro.rating.toFixed(1) : t("new_badge")}
                       </Text>
                       {pro.reviewCount > 0 ? (
-                        <Text style={styles.reviewsText}>({pro.reviewCount} avis)</Text>
+                        <Text style={styles.reviewsText}>
+                          {t("pat_reviews_count").replace("{n}", String(pro.reviewCount))}
+                        </Text>
                       ) : null}
                     </View>
                     <View style={styles.specialtyRow}>
                       <Text style={styles.specialtyText}>{pro.specialtyLabel}</Text>
                       {pro.yearsExperience ? (
-                        <Text style={styles.specialtyText}>· {pro.yearsExperience} ans exp.</Text>
+                        <Text style={styles.specialtyText}>
+                          · {t("pat_years_exp").replace("{n}", String(pro.yearsExperience))}
+                        </Text>
                       ) : null}
                     </View>
                   </View>
 
                   <View style={styles.priceWrap}>
                     <Text style={styles.priceValue}>{offer.price_mad}</Text>
-                    <Text style={styles.priceUnit}>MAD</Text>
+                    <Text style={styles.priceUnit}>{t("mad")}</Text>
                   </View>
                 </View>
 
@@ -297,7 +303,9 @@ export default function NurseOffersScreen() {
                 {typeof offer.eta_min === "number" && offer.eta_min > 0 ? (
                   <View style={styles.metaRow}>
                     <Clock3 size={12} color={Colors.textMuted} />
-                    <Text style={styles.metaText}>Arrive en ~{offer.eta_min} min</Text>
+                    <Text style={styles.metaText}>
+                      {t("pat_arrives_in").replace("{n}", String(offer.eta_min))}
+                    </Text>
                   </View>
                 ) : null}
 

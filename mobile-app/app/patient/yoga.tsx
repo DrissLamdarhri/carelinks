@@ -17,7 +17,16 @@ import { useAuth } from "@/lib/auth-context";
 import { useYogaCatalog, createYogaReservation, findExistingYogaReservation } from "@/lib/db/yoga";
 import { showAppAlert } from "@/lib/app-alert";
 
+// Values stay the French labels stored on the yoga session rows (they are
+// compared against `session.level`); only the rendered label is translated.
 const filters = ["Tous", "Débutant", "Intermédiaire", "Avancé"] as const;
+const LEVEL_KEY: Record<string, string> = {
+  "Tous": "pat_filter_all",
+  "Débutant": "level_beginner",
+  "Intermédiaire": "level_intermediate",
+  "Avancé": "level_advanced",
+  "Tous niveaux": "level_all",
+};
 
 export default function YogaCatalogScreen() {
   const { t } = useI18n();
@@ -61,7 +70,7 @@ export default function YogaCatalogScreen() {
 
   const handleReserveYoga = async (session: typeof sessions[0]) => {
     if (!user?.id) {
-      showAppAlert("Erreur", t("please_login_book"));
+      showAppAlert(t("error"), t("please_login_book"));
       return;
     }
 
@@ -151,7 +160,9 @@ export default function YogaCatalogScreen() {
                 onPress={() => setActiveFilter(filter)}
                 style={[styles.filterChip, active && styles.filterChipActive]}
               >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{filter}</Text>
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                  {LEVEL_KEY[filter] ? t(LEVEL_KEY[filter]) : filter}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -194,7 +205,9 @@ export default function YogaCatalogScreen() {
                 </View>
               )}
               <View style={styles.imageOverlay} />
-              <Text style={styles.levelBadge}>{session.level}</Text>
+              <Text style={styles.levelBadge}>
+                {LEVEL_KEY[session.level] ? t(LEVEL_KEY[session.level]) : session.level}
+              </Text>
               <TouchableOpacity
                 onPress={() =>
                   setLikes((prev) => ({ ...prev, [session.id]: !prev[session.id] }))

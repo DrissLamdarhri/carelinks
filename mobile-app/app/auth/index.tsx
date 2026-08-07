@@ -21,7 +21,7 @@ import {
 } from "lucide-react-native";
 import { Colors, Gradients } from "@/lib/colors";
 import { onboardingSlides } from "@/lib/mock-data";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, LOCALE_LABELS } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
 const iconMap = {
@@ -77,7 +77,7 @@ export default function OnboardingScreen() {
           {/* Language switcher available from the very first screen */}
           <TouchableOpacity style={styles.langBtn} onPress={() => setLangOpen(true)}>
             <Globe size={15} color="white" />
-            <Text style={styles.langTxt}>{locale === "ar" ? "العربية" : "Français"}</Text>
+            <Text style={styles.langTxt}>{LOCALE_LABELS[locale]}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/auth/patient-login")}>
             <Text style={styles.skip}>{t("skip")}</Text>

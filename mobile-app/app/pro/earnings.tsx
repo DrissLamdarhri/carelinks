@@ -100,7 +100,7 @@ export default function ProEarningsScreen() {
         continue;
       }
       list.push({ id: `${p.id}-p`, kind: "prestation", label: t("home_service"), sub: fmtDate(p.created_at), amount: Number(p.amount_mad), date: p.created_at });
-      list.push({ id: `${p.id}-c`, kind: "commission", label: `Commission CareLink (${COMMISSION_PCT}%)`, sub: `sur ${p.amount_mad} MAD`, amount: -Number(p.commission_mad), date: p.created_at });
+      list.push({ id: `${p.id}-c`, kind: "commission", label: t("pro_commission_carelink").replace("{n}", String(COMMISSION_PCT)), sub: `${t("pro_commission_on").replace("{n}", String(p.amount_mad))} ${t("mad")}`, amount: -Number(p.commission_mad), date: p.created_at });
     }
     for (const po of activePayouts) {
       list.push({ id: po.id, kind: "payout", label: t("withdrawal"), sub: payoutLabel(po.status, t), amount: -Number(po.amount_mad), date: po.created_at });
@@ -154,11 +154,11 @@ export default function ProEarningsScreen() {
           <Wallet size={16} color="rgba(255,255,255,0.7)" />
           <Text style={s.walletLbl}>{t("wallet_balance")}</Text>
         </View>
-        <Text style={s.walletVal}>{available.toLocaleString("fr-MA")} <Text style={s.walletUnit}>MAD</Text></Text>
+        <Text style={s.walletVal}>{available.toLocaleString("fr-MA")} <Text style={s.walletUnit}>{t("mad")}</Text></Text>
         <View style={s.walletRow}>
           <View style={s.walletBox}>
             <Text style={s.walletBoxLbl}>{t("pending_capture")}</Text>
-            <Text style={s.walletBoxVal}>{pendingNet} MAD</Text>
+            <Text style={s.walletBoxVal}>{pendingNet} {t("mad")}</Text>
           </View>
           <TouchableOpacity style={[s.walletBox, s.walletAction, available < 50 && { opacity: 0.55 }]} onPress={requestPayout} disabled={available < 50 || requesting}>
             {requesting ? (
@@ -201,7 +201,7 @@ export default function ProEarningsScreen() {
         </View>
         <View style={s.statCard}>
           <ArrowUpRight size={17} color={GREEN} />
-          <Text style={s.statVal}>{earned} MAD</Text>
+          <Text style={s.statVal}>{earned} {t("mad")}</Text>
           <Text style={s.statLbl}>{t("total_earned_net")}</Text>
         </View>
       </View>
@@ -226,7 +226,7 @@ export default function ProEarningsScreen() {
                 <Text style={s.moveSub}>{m.sub}</Text>
               </View>
               <Text style={[s.moveAmt, { color: credit ? GREEN : RED }]}>
-                {credit ? "+" : "−"}{Math.abs(m.amount)} MAD
+                {credit ? "+" : "−"}{Math.abs(m.amount)} {t("mad")}
               </Text>
             </View>
           );

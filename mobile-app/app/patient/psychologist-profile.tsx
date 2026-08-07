@@ -94,8 +94,8 @@ export default function PsychologistProfileScreen() {
           {/* Specialties */}
           <Text style={s.h}>{t("specialties_label")}</Text>
           <View style={s.chips}>
-            {["Anxiété", "Dépression", "TCC", "Stress", "Confiance en soi"].map((c) => (
-              <View key={c} style={s.chip}><Text style={s.chipTxt}>{c}</Text></View>
+            {["pat_topic_anxiety", "pat_topic_depression", "pat_topic_cbt", "pat_topic_stress", "pat_topic_self_confidence"].map((c) => (
+              <View key={c} style={s.chip}><Text style={s.chipTxt}>{t(c)}</Text></View>
             ))}
           </View>
 
@@ -109,7 +109,7 @@ export default function PsychologistProfileScreen() {
           {/* Price */}
           <View style={s.priceCard}>
             <View><Text style={s.priceLbl}>{t("consultation")}</Text><Text style={s.priceSub}>{t("per_session")}</Text></View>
-            <Text style={s.priceVal}>{price} MAD</Text>
+            <Text style={s.priceVal}>{price} {t("mad")}</Text>
           </View>
 
           {/* Reviews — real data only. Fabricated testimonials were being shown
@@ -121,7 +121,7 @@ export default function PsychologistProfileScreen() {
 
       {/* Sticky CTA */}
       <View style={s.footer}>
-        <View style={s.footerPrice}><Text style={s.footerPriceVal}>{price} MAD</Text><Text style={s.footerPriceUnit}>/{t("per_session")}</Text></View>
+        <View style={s.footerPrice}><Text style={s.footerPriceVal}>{price} {t("mad")}</Text><Text style={s.footerPriceUnit}>/{t("per_session")}</Text></View>
         <TouchableOpacity style={s.cta} onPress={book} activeOpacity={0.9}>
           <CalendarClock size={17} color="#fff" />
           <Text style={s.ctaTxt}>{t("book_appointment_short")}</Text>

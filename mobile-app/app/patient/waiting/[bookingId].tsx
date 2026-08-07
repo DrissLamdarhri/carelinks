@@ -322,7 +322,7 @@ export default function WaitingOffersScreen() {
               <View>
                 <Text style={styles.summaryLabel}>{t("your_budget")}</Text>
                 <Text style={[styles.summaryPrice, { color: theme.primary }]}>
-                  {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} MAD
+                  {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} {t("mad")}
                 </Text>
               </View>
             </View>

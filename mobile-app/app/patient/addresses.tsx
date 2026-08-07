@@ -137,10 +137,10 @@ export default function PatientAddressesScreen() {
   };
 
   const handleDelete = (addressId: string) => {
-    Alert.alert("Supprimer", t("confirm_delete_address"), [
-      { text: "Annuler", style: "cancel" },
+    Alert.alert(t("delete"), t("confirm_delete_address"), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Supprimer",
+        text: t("delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -179,7 +179,7 @@ export default function PatientAddressesScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>{isEditing ? "Modifier l'adresse" : "Ajouter une adresse"}</Text>
+        <Text style={styles.sectionTitle}>{isEditing ? t("pay_edit_address") : t("pay_add_address")}</Text>
         <TextInput
           value={form.label}
           onChangeText={(value) => setForm((prev) => ({ ...prev, label: value }))}
@@ -213,7 +213,7 @@ export default function PatientAddressesScreen() {
         <TextInput
           value={form.country}
           onChangeText={(value) => setForm((prev) => ({ ...prev, country: value }))}
-          placeholder="Pays"
+          placeholder={t("pay_country")}
           placeholderTextColor={Colors.textSubtle}
           style={styles.simpleInput}
         />
@@ -264,7 +264,7 @@ export default function PatientAddressesScreen() {
                 <MapPin size={14} color={Colors.primary} />
               </View>
               <View style={styles.addressMeta}>
-                <Text style={styles.addressTitle}>{address.label || "Adresse"}</Text>
+                <Text style={styles.addressTitle}>{address.label || t("address")}</Text>
                 <Text style={styles.addressText}>
                   {address.street}, {address.city}
                 </Text>

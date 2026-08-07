@@ -3,15 +3,15 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, Touc
 import { useRouter } from "expo-router";
 import { MessageCircle, Search } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, tr } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
 
 const NAVY = "#0D0870";
-const specialtyLabels: Record<string, string> = {
-  nurse: "Infirmier", psychologist: "Psychologue", yoga_instructor: "Yoga", physiotherapist: "Kiné",
+const specialtyLabelKeys: Record<string, string> = {
+  nurse: "nurse", psychologist: "psychologist", yoga_instructor: "yoga", physiotherapist: "pay_kine_short",
 };
 
 type Convo = {
@@ -33,7 +33,7 @@ const timeAgo = (iso: string) => {
   const sameDay = d.toDateString() === now.toDateString();
   if (sameDay) return d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" });
   const yest = new Date(); yest.setDate(now.getDate() - 1);
-  if (d.toDateString() === yest.toDateString()) return "Hier";
+  if (d.toDateString() === yest.toDateString()) return tr("yesterday");
   return d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
 };
 
@@ -93,9 +93,9 @@ export default function PatientMessagesScreen() {
           unread = (count ?? 0) > 0;
           return {
             bookingId: rep.id,
-            name: profile?.full_name ?? "Professionnel",
+            name: profile?.full_name ?? tr("professional"),
             avatar: profile?.avatar_url ?? null,
-            specialty: specialtyLabels[rep.specialty] ?? rep.specialty.replaceAll("_", " "),
+            specialty: specialtyLabelKeys[rep.specialty] ? tr(specialtyLabelKeys[rep.specialty]) : rep.specialty.replaceAll("_", " "),
             active: bs.some((b) => b.status === "matched" || b.status === "in_progress"),
             lastBody, lastMine, lastTime, unread,
           };

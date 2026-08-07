@@ -91,13 +91,13 @@ export default function AdminMetricsScreen() {
 
       if (paymentsRes.error) {
         showAppAlert(
-          "Info",
+          t("admin_info"),
           t("payments_unavailable")
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_metrics");
-      showAppAlert("Erreur", message);
+      showAppAlert(t("error"), message);
     }
   }, []);
 
@@ -116,16 +116,16 @@ export default function AdminMetricsScreen() {
 
   const cards = useMemo(
     () => [
-      { key: "gmv", label: "GMV (30j)", value: `${metrics.gmv.toLocaleString("fr-MA")} MAD` },
+      { key: "gmv", label: t("admin_gmv_30d"), value: `${metrics.gmv.toLocaleString("fr-MA")} ${t("mad")}` },
       {
         key: "commission",
         label: t("commission"),
-        value: `${metrics.commission.toLocaleString("fr-MA")} MAD`,
+        value: `${metrics.commission.toLocaleString("fr-MA")} ${t("mad")}`,
       },
       { key: "bookings", label: t("bookings_lbl"), value: String(metrics.totalBookings) },
       { key: "activePros", label: t("active_pros"), value: String(metrics.activePros) },
       { key: "disputes", label: t("open_disputes"), value: String(metrics.openDisputes) },
-      { key: "pendingKyc", label: "KYC en attente", value: String(metrics.pendingKyc) },
+      { key: "pendingKyc", label: t("admin_pending_kyc"), value: String(metrics.pendingKyc) },
     ],
     [metrics]
   );

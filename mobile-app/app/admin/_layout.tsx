@@ -12,14 +12,16 @@
 import { useEffect } from "react";
 import { Stack, useRouter } from "expo-router";
 import { showToast } from "@/lib/toast";
+import { useI18n } from "@/lib/i18n";
 
 export default function AdminLayout() {
   const router = useRouter();
+  const { t } = useI18n();
 
   useEffect(() => {
-    showToast("L'accès administrateur mobile est temporairement désactivé.");
+    showToast(t("admin_mobile_disabled"));
     router.replace("/auth");
-  }, [router]);
+  }, [router, t]);
 
   return (
     <Stack

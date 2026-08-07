@@ -51,8 +51,8 @@ export default function ProLoginScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "pro") return;
     const label =
-      nextRole === "patient" ? "patient" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "patient" ? t("auth_role_patient") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const handleEmailSignIn = async () => {
@@ -73,7 +73,7 @@ export default function ProLoginScreen() {
         setUnconfirmed(true);
         setErrorMessage(t("email_not_confirmed"));
       } else {
-        setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
+        setErrorMessage(error instanceof Error ? error.message : t("wrong_credentials"));
       }
     } finally {
       setSubmitting(false);
@@ -114,7 +114,7 @@ export default function ProLoginScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("google_auth_failed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -133,7 +133,7 @@ export default function ProLoginScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Connexion Apple impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("apple_auth_failed"));
     } finally {
       setAppleLoading(false);
     }
@@ -172,7 +172,7 @@ export default function ProLoginScreen() {
               value={email}
               onChangeText={setEmail}
               style={styles.input}
-              placeholder="karim@carelink.ma"
+              placeholder={t("auth_ph_carelink_email")}
               autoCapitalize="none"
               keyboardType="email-address"
               placeholderTextColor={Colors.textSubtle}
@@ -208,7 +208,7 @@ export default function ProLoginScreen() {
               await sendPasswordReset(email);
               showToast(t("reset_sent"));
             } catch (e) {
-              showToast(e instanceof Error ? e.message : "Envoi impossible");
+              showToast(e instanceof Error ? e.message : t("send_failed"));
             }
           }}
         >

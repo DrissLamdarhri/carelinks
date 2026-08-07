@@ -384,9 +384,9 @@ export default function ProHomeScreen() {
           <View style={[styles.onlineDot, { backgroundColor: isOnline ? "#4ADE80" : "rgba(255,255,255,0.4)" }]} />
           {isOnline ? <Wifi size={18} color="#4ADE80" /> : <WifiOff size={18} color="rgba(255,255,255,0.7)" />}
           <View style={{ flex: 1 }}>
-            <Text style={styles.onlineTitle}>{isOnline ? "En ligne" : "Hors ligne"}</Text>
+            <Text style={styles.onlineTitle}>{isOnline ? t("online") : t("offline")}</Text>
             <Text style={styles.onlineSub}>
-              {isOnline ? t("you_receive_nearby") : "Activez pour recevoir des demandes"}
+              {isOnline ? t("you_receive_nearby") : t("pro_activate_to_receive")}
             </Text>
           </View>
           <View style={[styles.switchTrack, isOnline && styles.switchTrackOn]}>
@@ -407,8 +407,8 @@ export default function ProHomeScreen() {
           >
             {syncLabel ? <Text style={styles.syncLabel}>{syncLabel}</Text> : null}
             <View style={styles.statsRow}>
-              <Stat icon={Banknote} value={`${todayEarnings}`} unit="MAD" label={t("today")} />
-              <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} avis` : "Note"} />
+              <Stat icon={Banknote} value={`${todayEarnings}`} unit={t("mad")} label={t("today")} />
+              <Stat icon={Star} value={rating.avg > 0 ? rating.avg.toFixed(1) : "—"} label={rating.count > 0 ? `${rating.count} ${t("reviews_word")}` : t("pro_rating_short")} />
               <Stat icon={Activity} value={`${monthMissions}`} label={t("this_month")} />
             </View>
           </View>
@@ -439,10 +439,10 @@ export default function ProHomeScreen() {
                 <Navigation size={12} color="#FFFFFF" strokeWidth={2.6} />
                 <Text style={styles.missionBadgeTxt}>
                   {activeMission.status === "in_progress"
-                    ? "Mission en cours"
+                    ? t("mission_in_progress")
                     : activeMission.status === "en_route"
-                    ? "En route vers le patient"
-                    : "Mission acceptée"}
+                    ? t("en_route_to_patient")
+                    : t("pro_mission_accepted")}
                 </Text>
               </View>
               <View style={styles.missionGo}>
@@ -450,7 +450,9 @@ export default function ProHomeScreen() {
                 <ChevronRight size={16} color="#FFFFFF" />
               </View>
             </View>
-            <Text style={styles.missionPatient}>Patient · {careLabel(activeMission, t)}</Text>
+            <Text style={styles.missionPatient}>
+              {t("pro_mission_patient_care").replace("%s", careLabel(activeMission, t))}
+            </Text>
             {activeMission.address ? (
               <View style={styles.missionAddrRow}>
                 <MapPin size={13} color="rgba(255,255,255,0.85)" />
@@ -462,7 +464,7 @@ export default function ProHomeScreen() {
                 <Navigation size={14} color={NAVY} strokeWidth={2.4} />
                 <Text style={styles.missionBtnTxt}>{t("directions")}</Text>
               </View>
-              <Text style={styles.missionPrice}>{activeMission.final_price_mad ?? activeMission.budget_max_mad ?? "—"} MAD</Text>
+              <Text style={styles.missionPrice}>{activeMission.final_price_mad ?? activeMission.budget_max_mad ?? "—"} {t("mad")}</Text>
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -500,10 +502,14 @@ export default function ProHomeScreen() {
       {/* Tabs */}
       <View style={styles.tabs}>
         <TouchableOpacity style={[styles.tabBtn, tab === "requests" && styles.tabBtnActive]} onPress={() => goTab("requests")}>
-          <Text style={[styles.tabTxt, tab === "requests" && styles.tabTxtActive]}>Demandes ({openReqs.length})</Text>
+          <Text style={[styles.tabTxt, tab === "requests" && styles.tabTxtActive]}>
+            {t("pro_tab_requests_count").replace("{n}", String(openReqs.length))}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tabBtn, tab === "schedule" && styles.tabBtnActive]} onPress={() => goTab("schedule")}>
-          <Text style={[styles.tabTxt, tab === "schedule" && styles.tabTxtActive]}>Mon planning ({appointments.length})</Text>
+          <Text style={[styles.tabTxt, tab === "schedule" && styles.tabTxtActive]}>
+            {t("pro_tab_schedule_count").replace("{n}", String(appointments.length))}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -580,7 +586,7 @@ export default function ProHomeScreen() {
                       <Text style={[styles.pill, done ? styles.pillDone : styles.pillLive]}>
                         {label}
                       </Text>
-                      <Text style={styles.jobPrice}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
+                      <Text style={styles.jobPrice}>{b.final_price_mad ?? b.budget_max_mad ?? 0} {t("mad")}</Text>
                     </View>
                   </View>
                   {!done ? (

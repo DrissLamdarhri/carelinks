@@ -111,18 +111,22 @@ const fallbackKineCareTypes = [
   "Prévention des blessures",
 ];
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+const MONTH_KEYS = [
+  "pat_mon_jan", "pat_mon_feb", "pat_mon_mar", "pat_mon_apr", "pat_mon_may", "pat_mon_jun",
+  "pat_mon_jul", "pat_mon_aug", "pat_mon_sep", "pat_mon_oct", "pat_mon_nov", "pat_mon_dec",
+];
+
 function buildDates() {
-  const result: { day: string; num: string; month: string; isoDate: string }[] = [];
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+  const result: { dayKey: string; num: string; monthKey: string; isoDate: string }[] = [];
   // Générer plusieurs jours pour permettre la réservation sur plusieurs mois (ex: 90 jours)
   for (let i = 0; i < 90; i += 1) {
     const date = new Date();
     date.setDate(date.getDate() + i);
     result.push({
-      day: days[date.getDay()],
+      dayKey: DAY_KEYS[date.getDay()],
       num: String(date.getDate()).padStart(2, "0"),
-      month: months[date.getMonth()],
+      monthKey: MONTH_KEYS[date.getMonth()],
       isoDate: date.toISOString().split("T")[0],
     });
   }
@@ -241,7 +245,7 @@ export default function PatientRequestScreen() {
                 .join("")
                 .slice(0, 2)
                 .toUpperCase() || "Pr",
-            name: r.full_name ?? "Professionnel",
+            name: r.full_name ?? t("professional"),
             shortName: (r.full_name ?? "Pro").split(" ")[0],
             specialty: r.specialty,
             distanceKm: r.distanceKm,
@@ -265,7 +269,7 @@ export default function PatientRequestScreen() {
   // Reverse-geocode a coordinate and reflect it in the address field.
   const syncAddressFromCoords = async (lat: number, lng: number) => {
     const label = await geo.reverseGeocodeAddress(lat, lng);
-    setAddress(label ?? "Ma position");
+    setAddress(label ?? t("pat_my_position"));
   };
 
   const handleLocate = async () => {
@@ -304,7 +308,7 @@ export default function PatientRequestScreen() {
       setCoords(current);
       await syncAddressFromCoords(current.lat, current.lng);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Position GPS indisponible.");
+      setErrorMessage(error instanceof Error ? error.message : t("pat_gps_unavailable"));
     } finally {
       setLocating(false);
     }
@@ -320,7 +324,7 @@ export default function PatientRequestScreen() {
       // Block suspended patients (too many late cancellations).
       const profile = await db.profiles.get(user.id).catch(() => null);
       if (profile?.is_suspended) {
-        setErrorMessage("Votre compte est suspendu suite à des annulations tardives. Contactez le support.");
+        setErrorMessage(t("pat_suspended_late_cancels"));
         setSubmitting(false);
         return;
       }
@@ -389,7 +393,7 @@ export default function PatientRequestScreen() {
       // already paid straight back into a blank "new request" screen.
       router.replace(`/patient/waiting/${booking.id}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "La demande n'a pas pu être créée.");
+      setErrorMessage(error instanceof Error ? error.message : t("request_create_failed"));
       toastError(t("request_create_failed"));
     } finally {
       setSubmitting(false);
@@ -515,7 +519,7 @@ export default function PatientRequestScreen() {
           style={styles.fitAllBtn}
           onPress={() => setFitAllKey((k) => k + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Voir tous les professionnels"
+          accessibilityLabel={t("pat_see_all_pros")}
         >
           <Users size={18} color={theme.primary} />
         </TouchableOpacity>
@@ -576,13 +580,13 @@ export default function PatientRequestScreen() {
             </View>
             <View style={styles.proCardPrice}>
               <Text style={[styles.proCardPriceVal, { color: theme.primary }]}>{selectedPro.priceMad}</Text>
-              <Text style={styles.proCardPriceUnit}>MAD</Text>
+              <Text style={styles.proCardPriceUnit}>{t("mad")}</Text>
             </View>
             <TouchableOpacity
               onPress={() => setSelectedProId(null)}
               style={styles.proCardClose}
               accessibilityRole="button"
-              accessibilityLabel="Fermer"
+              accessibilityLabel={t("close")}
             >
               <X size={16} color="#6B7280" />
             </TouchableOpacity>
@@ -741,13 +745,13 @@ export default function PatientRequestScreen() {
                       onPress={() => setSelectedDate(globalIndex)}
                     >
                       <Text style={[styles.dateDay, selectedDate === globalIndex && styles.dateTextActive]}>
-                        {date.day}
+                        {t(date.dayKey)}
                       </Text>
                       <Text style={[styles.dateNum, selectedDate === globalIndex && styles.dateTextActive]}>
                         {date.num}
                       </Text>
                       <Text style={[styles.dateMonth, selectedDate === globalIndex && styles.dateTextActive]}>
-                        {date.month}
+                        {t(date.monthKey)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -787,19 +791,14 @@ export default function PatientRequestScreen() {
           style={styles.notesInput}
           multiline
           numberOfLines={2}
-          placeholder={
-            isKine
-              ? "Ex: ordonnance disponible, zone douloureuse, allergie…"
-              : "Ex: ordonnance disponible, allergie…"
-          }
+          placeholder={t(isKine ? "pat_notes_ph_kine" : "pat_notes_ph_nurse")}
           placeholderTextColor={Colors.textSubtle}
         />
 
         {/* ── Prix ── */}
-        <Text style={styles.label}>
-          Votre prix proposé{" "}
-          <Text style={{ color: theme.primary }}>(enchère inversée)</Text>
-        </Text>
+        {/* One key, not two sibling <Text> nodes: the parenthetical is part of
+            the sentence and Arabic reverses the visual order. */}
+        <Text style={styles.label}>{t("pat_your_proposed_price")}</Text>
         <View style={styles.priceCard}>
           <TouchableOpacity
             style={styles.priceBtn}
@@ -809,7 +808,7 @@ export default function PatientRequestScreen() {
           </TouchableOpacity>
           <View style={styles.priceCenter}>
             <Text style={[styles.priceValue, { color: theme.primary }]}>{price}</Text>
-            <Text style={styles.priceUnit}>MAD</Text>
+            <Text style={styles.priceUnit}>{t("mad")}</Text>
           </View>
           <TouchableOpacity
             style={styles.priceBtn}
@@ -835,9 +834,7 @@ export default function PatientRequestScreen() {
         </View>
 
         <Text style={styles.priceHint}>
-          {isKine
-            ? "Prix moyen dans votre zone : 100–150 MAD"
-            : "Prix moyen dans votre zone : 60–120 MAD"}
+          {t("pat_avg_price_zone").replace("%s", isKine ? "100–150" : "60–120")}
         </Text>
 
         {/* ── GPS locate ── */}
@@ -848,16 +845,14 @@ export default function PatientRequestScreen() {
         >
           <LocateFixed size={14} color={Colors.primary} />
           <Text style={styles.locateText}>
-            {coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}
+            {coords ? t("pat_gps_detected") : t("use_my_location")}
           </Text>
         </TouchableOpacity>
 
         {/* ── Info hint (kiné only) ── */}
         {isKine && (
           <View style={styles.kineInfoStrip}>
-            <Text style={styles.kineInfoText}>
-              💡 Les kinés certifiés de votre zone verront votre offre et pourront répondre en moins de 5 min.
-            </Text>
+            <Text style={styles.kineInfoText}>💡 {t("pat_kine_offer_hint")}</Text>
           </View>
         )}
 
@@ -884,9 +879,7 @@ export default function PatientRequestScreen() {
         </TouchableOpacity>
 
         <Text style={styles.submitHint}>
-          {isKine
-            ? "Les kinésithérapeutes de votre zone verront votre offre et pourront répondre."
-            : "Les professionnels de votre zone verront votre offre et pourront répondre."}
+          {t(isKine ? "pat_submit_hint_kine" : "pat_submit_hint_pros")}
         </Text>
         </ScrollView>
       </Animated.View>

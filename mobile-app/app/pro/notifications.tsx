@@ -25,7 +25,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { Colors } from "@/lib/colors";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, tr } from "@/lib/i18n";
 
 type Notif = {
   id: string;
@@ -55,10 +55,10 @@ function iconFor(kind: Notif["kind"]) {
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "à l'instant";
-  if (m < 60) return `il y a ${m} min`;
+  if (m < 1) return tr("pro_just_now");
+  if (m < 60) return tr("pro_mins_ago").replace("%d", String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `il y a ${h} h`;
+  if (h < 24) return tr("pro_hours_ago").replace("%d", String(h));
   return new Date(iso).toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
 }
 
@@ -126,7 +126,11 @@ export default function ProNotificationsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.title}>{t("notifications")}</Text>
-          {unread > 0 ? <Text style={s.sub}>{unread} non lue{unread > 1 ? "s" : ""}</Text> : null}
+          {unread > 0 ? (
+            <Text style={s.sub}>
+              {t(unread > 1 ? "pro_unread_many" : "pro_unread_one").replace("{n}", String(unread))}
+            </Text>
+          ) : null}
         </View>
         {unread > 0 ? (
           <TouchableOpacity style={s.markAll} onPress={markAllRead}>

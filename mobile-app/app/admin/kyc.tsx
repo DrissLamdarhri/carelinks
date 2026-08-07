@@ -75,7 +75,7 @@ export default function KycModerationQueueScreen() {
       setItems(queue);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_kyc_queue");
-      showAppAlert("Erreur", message);
+      showAppAlert(t("error"), message);
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function KycModerationQueueScreen() {
       // Rollback to previous state on error
       setItems(previousItems);
       const message = error instanceof Error ? error.message : t("action_failed");
-      showAppAlert("Erreur", message);
+      showAppAlert(t("error"), message);
     } finally {
       setActingOn(null);
     }
@@ -198,11 +198,11 @@ export default function KycModerationQueueScreen() {
         .from("pro-documents")
         .createSignedUrl(storagePath, 60 * 10);
       if (error) throw error;
-      if (!data?.signedUrl) throw new Error("URL indisponible.");
+      if (!data?.signedUrl) throw new Error(t("admin_url_unavailable"));
       await Linking.openURL(data.signedUrl);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("preview_failed");
-      showAppAlert("Erreur", message);
+      showAppAlert(t("error"), message);
     }
   };
 
@@ -227,7 +227,7 @@ export default function KycModerationQueueScreen() {
             <View style={styles.proHead}>
               <CircleUserRound size={18} color={Colors.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.proName}>{item.profile?.full_name ?? "Professionnel"}</Text>
+                <Text style={styles.proName}>{item.profile?.full_name ?? t("professional")}</Text>
                 <Text style={styles.proMeta}>
                   {item.professional.specialty} · {item.profile?.city ?? t("city_undefined")}
                 </Text>

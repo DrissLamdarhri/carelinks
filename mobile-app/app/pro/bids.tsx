@@ -11,10 +11,10 @@ import { toDbSpecialty } from "@/lib/db/types";
 import { LiveBookingsFeed } from "../../components/LiveBookingsFeed";
 
 const specialtyChoices = [
-  { key: "infirmier", label: "Infirmier" },
-  { key: "psy", label: "Psychologue" },
-  { key: "kine", label: "Kiné" },
-  { key: "yoga", label: "Yoga" },
+  { key: "infirmier", labelKey: "nurse" },
+  { key: "psy", labelKey: "psychologist" },
+  { key: "kine", labelKey: "pro_kine_short" },
+  { key: "yoga", labelKey: "yoga" },
 ];
 
 export default function ProBidsScreen() {
@@ -62,7 +62,7 @@ export default function ProBidsScreen() {
               onPress={() => setSpecialtyKey(choice.key)}
               style={[styles.specialtyChip, active && styles.specialtyChipActive]}
             >
-              <Text style={[styles.specialtyText, active && styles.specialtyTextActive]}>{choice.label}</Text>
+              <Text style={[styles.specialtyText, active && styles.specialtyTextActive]}>{t(choice.labelKey)}</Text>
             </TouchableOpacity>
           );
         })}

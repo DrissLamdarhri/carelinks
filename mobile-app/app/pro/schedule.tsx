@@ -108,7 +108,7 @@ export default function ProScheduleScreen() {
             </View>
           ) : null}
           <View style={s.foot}>
-            <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
+            <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} {t("mad")}</Text>
             {!done_ && !cancelled ? (
               <View style={s.openRow}>
                 <Text style={s.openTxt}>{t("open_action")}</Text>

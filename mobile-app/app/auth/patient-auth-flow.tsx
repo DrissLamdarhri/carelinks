@@ -101,8 +101,8 @@ export default function PatientAuthFlowScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "patient") return;
     const label =
-      nextRole === "pro" ? "professionnel" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "pro" ? t("auth_role_pro") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const handleEmailSignIn = async () => {
@@ -123,7 +123,7 @@ export default function PatientAuthFlowScreen() {
         setLoginUnconfirmed(true);
         setLoginError(t("email_not_confirmed"));
       } else {
-        setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+        setLoginError(error instanceof Error ? error.message : t("wrong_credentials"));
       }
     } finally {
       setLoginSubmitting(false);
@@ -148,7 +148,7 @@ export default function PatientAuthFlowScreen() {
       }
       goAfterSignUp();
     } catch (error) {
-      setRegError(error instanceof Error ? error.message : "Inscription échouée.");
+      setRegError(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setRegSubmitting(false);
     }
@@ -172,7 +172,7 @@ export default function PatientAuthFlowScreen() {
         goAfterSignUp();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Google impossible.";
+      const msg = error instanceof Error ? error.message : t("google_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -198,7 +198,7 @@ export default function PatientAuthFlowScreen() {
         goAfterSignUp();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Apple impossible.";
+      const msg = error instanceof Error ? error.message : t("apple_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -352,7 +352,7 @@ export default function PatientAuthFlowScreen() {
                 await sendPasswordReset(loginEmail.trim());
                 showToast(t("reset_sent"));
               } catch (e) {
-                showToast(e instanceof Error ? e.message : "Envoi impossible");
+                showToast(e instanceof Error ? e.message : t("send_failed"));
               }
             }}
           >
@@ -398,7 +398,7 @@ export default function PatientAuthFlowScreen() {
           ) : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>💡 Première visite ? Créez un compte via l'onglet "Inscription".</Text>
+            <Text style={styles.hintText}>{t("first_visit_hint")}</Text>
           </View>
         </ScrollView>
 
@@ -429,7 +429,7 @@ export default function PatientAuthFlowScreen() {
                   value={firstName}
                   onChangeText={setFirstName}
                   style={styles.input}
-                  placeholder="Jean"
+                  placeholder={t("auth_ph_first_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -442,7 +442,7 @@ export default function PatientAuthFlowScreen() {
                   value={lastName}
                   onChangeText={setLastName}
                   style={styles.input}
-                  placeholder="Dupont"
+                  placeholder={t("auth_ph_last_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -458,7 +458,7 @@ export default function PatientAuthFlowScreen() {
                 value={phone}
                 onChangeText={setPhone}
                 style={styles.input}
-                placeholder="+212 6XX XXX XXX"
+                placeholder={t("auth_ph_phone")}
                 keyboardType="phone-pad"
                 placeholderTextColor={Colors.textSubtle}
               />
@@ -562,9 +562,9 @@ export default function PatientAuthFlowScreen() {
               {agreed && <View style={styles.checkboxMark} />}
             </TouchableOpacity>
             <Text style={styles.agreeText}>
-              J'accepte les{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>conditions d'utilisation</Text> et la{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>politique de confidentialité</Text>
+              {t("accept_terms_prefix")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("terms_of_use")}</Text> {t("and_the_f")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("privacy_policy")}</Text>
             </Text>
           </View>
 
@@ -586,7 +586,7 @@ export default function PatientAuthFlowScreen() {
           {regError ? <Text style={styles.errorText}>{regError}</Text> : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>🔒 Votre compte sera sécurisé par authentification multi-facteurs.</Text>
+            <Text style={styles.hintText}>🔒 {t("auth_account_mfa_secured")}</Text>
           </View>
         </ScrollView>
       </ScrollView>

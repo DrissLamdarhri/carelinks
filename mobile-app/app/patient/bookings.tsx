@@ -157,14 +157,14 @@ export default function PatientBookingsScreen() {
   const handleYogaCancel = (item: CardItem) => {
     const eligible = item.scheduledAt ? isRefundEligible(item.scheduledAt) : true;
     showAppAlert(
-      "Annuler cette réservation ?",
+      t("pay_cancel_booking_q"),
       eligible
-        ? "Vous serez remboursé intégralement (annulation à plus de 24h de la séance)."
-        : "Aucun remboursement ne sera effectué (annulation à moins de 24h de la séance).",
+        ? t("pay_yoga_refund_full")
+        : t("pay_yoga_refund_none"),
       [
-        { text: "Garder ma réservation", style: "cancel" },
+        { text: t("pay_keep_booking"), style: "cancel" },
         {
-          text: "Annuler la réservation",
+          text: t("cancel_reservation"),
           style: "destructive",
           onPress: async () => {
             if (yogaCancelBusy) return;
@@ -173,12 +173,12 @@ export default function PatientBookingsScreen() {
               const res = await cancelYogaBooking(item.id);
               showToast(
                 res.eligible && res.refund_mad > 0
-                  ? `Réservation annulée — ${res.refund_mad} MAD remboursés.`
-                  : "Réservation annulée — aucun remboursement (moins de 24h avant le cours).",
+                  ? t("pay_booking_cancelled_refund").replace("{n}", String(res.refund_mad))
+                  : t("pay_booking_cancelled_no_refund"),
               );
               void refresh();
             } catch (e) {
-              showAppAlert("Erreur", e instanceof Error ? e.message : "Annulation impossible.");
+              showAppAlert(t("error"), e instanceof Error ? e.message : t("cancel_impossible"));
             } finally {
               setYogaCancelBusy(false);
             }
@@ -234,7 +234,7 @@ export default function PatientBookingsScreen() {
               ) : (
                 <>
                   <Text style={styles.priceLbl}>{t("total_to_pay")}</Text>
-                  <Text style={styles.price}>{item.price} MAD</Text>
+                  <Text style={styles.price}>{item.price} {t("mad")}</Text>
                 </>
               )}
             </View>
@@ -244,7 +244,7 @@ export default function PatientBookingsScreen() {
                 <TouchableOpacity
                   style={styles.secondaryBtn}
                   onPress={() => router.push(`/patient/report/${item.id}`)}
-                  accessibilityLabel="Signaler un problème"
+                  accessibilityLabel={t("report_problem_title")}
                 >
                   <AlertTriangle size={13} color={Colors.danger} />
                   <Text style={styles.secondaryBtnText}>{t("report_problem_short")}</Text>
@@ -313,7 +313,7 @@ export default function PatientBookingsScreen() {
                 }}
               >
                 <Text style={styles.primaryBtnText}>
-                  {isYoga ? "Voir détails" : item.isCompleted ? t("book_again") : t("see_details")}
+                  {isYoga ? t("pay_view_details") : item.isCompleted ? t("book_again") : t("see_details")}
                 </Text>
                 {!item.isCompleted && !isYoga ? <ChevronRight size={14} color="white" /> : null}
               </TouchableOpacity>
@@ -435,7 +435,7 @@ export default function PatientBookingsScreen() {
         <View style={styles.yogaModalBackdrop}>
           <View style={styles.yogaModalCard}>
             <View style={styles.yogaModalHeader}>
-              <Text style={styles.yogaModalTitle}>Détails de la réservation</Text>
+              <Text style={styles.yogaModalTitle}>{t("pay_booking_details_title")}</Text>
               <TouchableOpacity onPress={() => setYogaModalBookingId(null)} style={styles.yogaModalClose}>
                 <X size={18} color={Colors.textMuted} />
               </TouchableOpacity>
@@ -453,7 +453,7 @@ export default function PatientBookingsScreen() {
                   }}
                 />
               ) : (
-                <Text style={styles.errorText}>Impossible de charger les détails.</Text>
+                <Text style={styles.errorText}>{t("pay_details_load_failed")}</Text>
               )}
             </ScrollView>
           </View>

@@ -99,7 +99,7 @@ export default function BookingChatScreen() {
           )}
           <View style={styles.headerTextWrap}>
             <Text style={styles.title} numberOfLines={1}>
-              {recipientProfile?.full_name ?? "Professionnel"}
+              {recipientProfile?.full_name ?? t("professional")}
             </Text>
             <Text style={styles.subtitle}>{t("online")}</Text>
           </View>
@@ -130,7 +130,7 @@ export default function BookingChatScreen() {
           bookingId={bookingId}
           bookingIds={threadIds.length ? threadIds : [bookingId]}
           recipientId={recipientId}
-          recipientName={recipientProfile?.full_name ?? "Professionnel"}
+          recipientName={recipientProfile?.full_name ?? t("professional")}
           recipientAvatar={recipientProfile?.avatar_url ?? null}
         />
       ) : (

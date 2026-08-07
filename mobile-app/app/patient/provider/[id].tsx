@@ -94,9 +94,9 @@ export default function ProviderProfileScreen() {
   // No mock fallback. Showing an invented name, photo, city and rating for an
   // unknown id was bad enough; `isVerified` was ALSO true whenever the fallback
   // matched, so a fabricated professional carried a verification badge.
-  const displayName = profile?.full_name || "Professionnel";
+  const displayName = profile?.full_name || t("professional");
   const avatar = profile?.avatar_url || null;
-  const city = profile?.city || "Maroc";
+  const city = profile?.city || t("pat_morocco");
   const rating = professional?.rating_avg ?? 0;
   const reviewCount = professional?.rating_count ?? 0;
   const isVerified = professional?.verification_status === "approved";
@@ -183,7 +183,7 @@ export default function ProviderProfileScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
             <Text style={[styles.statValue, { color: Colors.primary }]}>{price ?? "—"}</Text>
-            <Text style={styles.statLabel}>MAD / {t("care_unit")}</Text>
+            <Text style={styles.statLabel}>{t("mad")} / {t("care_unit")}</Text>
           </View>
         </View>
 

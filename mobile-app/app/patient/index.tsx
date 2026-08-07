@@ -278,7 +278,7 @@ export default function PatientHomeScreen() {
           <Text style={styles.ctaText}>{t("request_care_now")}</Text>
           <ChevronRight size={18} color="white" />
         </TouchableOpacity>
-        <Text style={styles.ctaHint}>⚡ Réponse en moins de 5 minutes</Text>
+        <Text style={styles.ctaHint}>⚡ {t("pat_reply_under_5min")}</Text>
       </View>
 
       <View style={styles.section}>
@@ -287,7 +287,7 @@ export default function PatientHomeScreen() {
             geo.findNearbyProsForMap), but saying so out loud is the difference
             between a patient trusting the list and guessing at it. */}
         <View style={styles.sectionHeadRow}>
-          <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
+          <Text style={styles.sectionTitle}>{t("pat_near_you").replace("%s", city)}</Text>
           {!prosLoading && nearbyPros.length > 0 ? (
             <View style={styles.onlineCount}>
               <View style={styles.onlineDot} />
@@ -350,7 +350,9 @@ export default function PatientHomeScreen() {
 
                 <View style={{ alignItems: "flex-end" }}>
                   {n.hourly_rate_mad ? (
-                    <Text style={styles.proPrice}>Dès {n.hourly_rate_mad} MAD</Text>
+                    <Text style={styles.proPrice}>
+                      {t("pat_from_price").replace("{n}", String(n.hourly_rate_mad))}
+                    </Text>
                   ) : null}
                   <View style={styles.actionsRow}>
                     {/* Both actions stay inside the app: contact happens through a

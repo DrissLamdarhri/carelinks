@@ -85,9 +85,9 @@ export default function PatientPolicyScreen() {
   };
 
   const acceptedLabel = acceptedAt
-    ? `Acceptée le ${new Date(acceptedAt).toLocaleDateString("fr-MA")}`
+    ? t("pay_accepted_on").replace("%s", new Date(acceptedAt).toLocaleDateString("fr-MA"))
     : t("not_accepted");
-  const versionLabel = acceptedVersion ? `Version ${acceptedVersion}` : `Version ${POLICY_VERSION}`;
+  const versionLabel = t("pay_version").replace("%s", acceptedVersion ?? POLICY_VERSION);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>

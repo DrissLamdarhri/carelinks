@@ -81,7 +81,7 @@ export default function AppointmentConfirmedScreen() {
         <View style={s.divider} />
         <View style={s.rowBetween}>
           <Text style={s.muted}>{t("total_to_pay")}</Text>
-          <Text style={s.price}>{booking.final_price_mad ?? 0} MAD</Text>
+          <Text style={s.price}>{booking.final_price_mad ?? 0} {t("mad")}</Text>
         </View>
       </View>
 

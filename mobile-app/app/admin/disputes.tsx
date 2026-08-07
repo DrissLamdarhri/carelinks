@@ -25,26 +25,26 @@ import { db, type Dispute, type DisputeStatus } from "@/lib/db/dal";
 import { showAppAlert } from "@/lib/app-alert";
 import type { Profile } from "@/lib/db/types";
 
-const STATUS_META: Record<DisputeStatus, { label: string; color: string; bg: string }> = {
-  open: { label: "Ouvert", color: "#D97706", bg: "#FFF7E6" },
-  under_review: { label: "En cours", color: "#2563EB", bg: "#DBEAFE" },
-  resolved_refund: { label: "Remboursé", color: "#16A34A", bg: "#DCFCE7" },
-  resolved_warning: { label: "Averti", color: "#7C3AED", bg: "#F3EEFE" },
-  resolved_dismissed: { label: "Rejeté", color: "#6B7280", bg: "#F3F4F6" },
+const STATUS_META: Record<DisputeStatus, { labelKey: string; color: string; bg: string }> = {
+  open: { labelKey: "admin_dispute_open", color: "#D97706", bg: "#FFF7E6" },
+  under_review: { labelKey: "status_in_progress", color: "#2563EB", bg: "#DBEAFE" },
+  resolved_refund: { labelKey: "admin_dispute_refunded", color: "#16A34A", bg: "#DCFCE7" },
+  resolved_warning: { labelKey: "admin_dispute_warned", color: "#7C3AED", bg: "#F3EEFE" },
+  resolved_dismissed: { labelKey: "admin_dispute_dismissed", color: "#6B7280", bg: "#F3F4F6" },
 };
 
-const CATEGORY_LABEL: Record<string, string> = {
-  late_arrival: "Retard",
-  no_show: "Absence",
-  safety_incident: "Incident de sécurité",
-  poor_conduct: "Comportement",
-  quality_issue: "Qualité du service",
-  price_dispute: "Litige de prix",
-  property_damage: "Dommage matériel",
-  harassment: "Harcèlement",
-  identity_mismatch: "Identité non conforme",
-  payment_issue: "Problème de paiement",
-  other: "Autre",
+const CATEGORY_KEY: Record<string, string> = {
+  late_arrival: "dispute_cat_late_arrival",
+  no_show: "dispute_cat_no_show",
+  safety_incident: "dispute_cat_safety_incident",
+  poor_conduct: "dispute_cat_poor_conduct",
+  quality_issue: "dispute_cat_quality_issue",
+  price_dispute: "dispute_cat_price_dispute",
+  property_damage: "dispute_cat_property_damage",
+  harassment: "dispute_cat_harassment",
+  identity_mismatch: "dispute_cat_identity_mismatch",
+  payment_issue: "dispute_cat_payment_issue",
+  other: "dispute_cat_other",
 };
 
 export default function AdminDisputesScreen() {
@@ -71,7 +71,7 @@ export default function AdminDisputesScreen() {
         setProfiles(new Map((data ?? []).map((p: Profile) => [p.id, p])));
       }
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Impossible de charger les litiges.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("admin_disputes_load_failed"));
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function AdminDisputesScreen() {
       if (error) throw error;
       if (data?.signedUrl) await Linking.openURL(data.signedUrl);
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Aperçu impossible.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("preview_failed"));
     }
   };
 
@@ -109,13 +109,13 @@ export default function AdminDisputesScreen() {
     if (actingOn) return;
     const note = (notes[d.id] ?? "").trim();
     if (status !== "under_review" && !note) {
-      showAppAlert("Note requise", "Ajoutez une courte note expliquant la décision avant de résoudre ce litige.");
+      showAppAlert(t("admin_note_required_title"), t("admin_note_required_msg"));
       return;
     }
     const refundStr = refunds[d.id];
     const refund = status === "resolved_refund" && refundStr ? Number(refundStr) : null;
     if (status === "resolved_refund" && refundStr && Number.isNaN(refund)) {
-      showAppAlert("Montant invalide", "Le montant du remboursement doit être un nombre.");
+      showAppAlert(t("admin_invalid_amount_title"), t("admin_refund_must_be_number"));
       return;
     }
     setActingOn(d.id);
@@ -123,7 +123,7 @@ export default function AdminDisputesScreen() {
       await db.disputes.resolve(d.id, status, note || "Pris en charge.", refund);
       setExpanded(null);
     } catch (e) {
-      showAppAlert("Erreur", e instanceof Error ? e.message : "Action impossible.");
+      showAppAlert(t("error"), e instanceof Error ? e.message : t("action_failed"));
     } finally {
       setActingOn(null);
     }
@@ -131,15 +131,15 @@ export default function AdminDisputesScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Litiges</Text>
-      <Text style={styles.subtitle}>Signalements des patients et des professionnels.</Text>
+      <Text style={styles.title}>{t("admin_disputes")}</Text>
+      <Text style={styles.subtitle}>{t("admin_disputes_subtitle")}</Text>
 
       <View style={styles.tabs}>
         <TouchableOpacity style={[styles.tabBtn, tab === "pending" && styles.tabBtnActive]} onPress={() => setTab("pending")}>
-          <Text style={[styles.tabTxt, tab === "pending" && styles.tabTxtActive]}>À traiter ({pending.length})</Text>
+          <Text style={[styles.tabTxt, tab === "pending" && styles.tabTxtActive]}>{t("admin_tab_to_handle_n").replace("{n}", String(pending.length))}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tabBtn, tab === "resolved" && styles.tabBtnActive]} onPress={() => setTab("resolved")}>
-          <Text style={[styles.tabTxt, tab === "resolved" && styles.tabTxtActive]}>Résolus ({resolved.length})</Text>
+          <Text style={[styles.tabTxt, tab === "resolved" && styles.tabTxtActive]}>{t("admin_tab_resolved_n").replace("{n}", String(resolved.length))}</Text>
         </TouchableOpacity>
       </View>
 
@@ -148,7 +148,7 @@ export default function AdminDisputesScreen() {
       ) : visible.length === 0 ? (
         <View style={styles.emptyCard}>
           <ShieldAlert size={20} color={Colors.textMuted} />
-          <Text style={styles.emptyText}>{tab === "pending" ? "Aucun litige en attente." : "Aucun litige résolu pour l'instant."}</Text>
+          <Text style={styles.emptyText}>{tab === "pending" ? t("admin_no_pending_disputes") : t("admin_no_resolved_disputes")}</Text>
         </View>
       ) : (
         visible.map((d) => {
@@ -162,14 +162,14 @@ export default function AdminDisputesScreen() {
               <TouchableOpacity style={styles.cardHead} onPress={() => setExpanded(isOpen ? null : d.id)}>
                 <View style={[styles.statusDot, { backgroundColor: sm.color }]} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{CATEGORY_LABEL[d.category] ?? d.category}</Text>
+                  <Text style={styles.cardTitle}>{CATEGORY_KEY[d.category] ? t(CATEGORY_KEY[d.category]) : d.category}</Text>
                   <Text style={styles.cardMeta} numberOfLines={1}>
-                    {d.reporter_role === "patient" ? "Patient" : "Pro"} {reporter?.full_name ?? "?"}
+                    {d.reporter_role === "patient" ? t("patient") : t("admin_role_pro")} {reporter?.full_name ?? "?"}
                     {against ? ` → ${against.full_name}` : ""}
                   </Text>
                 </View>
                 <View style={[styles.statusPill, { backgroundColor: sm.bg }]}>
-                  <Text style={[styles.statusPillTxt, { color: sm.color }]}>{sm.label}</Text>
+                  <Text style={[styles.statusPillTxt, { color: sm.color }]}>{t(sm.labelKey)}</Text>
                 </View>
                 {isOpen ? <ChevronUp size={16} color={Colors.textMuted} /> : <ChevronDown size={16} color={Colors.textMuted} />}
               </TouchableOpacity>
@@ -182,7 +182,7 @@ export default function AdminDisputesScreen() {
                     <View style={styles.evidenceRow}>
                       {d.evidence_paths.map((p) => (
                         <TouchableOpacity key={p} style={styles.evidenceChip} onPress={() => openEvidence(p)}>
-                          <Text style={styles.evidenceChipTxt}>Photo</Text>
+                          <Text style={styles.evidenceChipTxt}>{t("admin_photo")}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -190,17 +190,17 @@ export default function AdminDisputesScreen() {
 
                   {d.resolution_note ? (
                     <View style={styles.resolutionBox}>
-                      <Text style={styles.resolutionLabel}>Résolution</Text>
+                      <Text style={styles.resolutionLabel}>{t("admin_resolution")}</Text>
                       <Text style={styles.resolutionTxt}>{d.resolution_note}</Text>
                       {d.refund_amount_mad ? (
-                        <Text style={styles.resolutionTxt}>Remboursement : {d.refund_amount_mad} MAD</Text>
+                        <Text style={styles.resolutionTxt}>{t("admin_refund_amount").replace("{n}", String(d.refund_amount_mad))}</Text>
                       ) : null}
                     </View>
                   ) : (
                     <>
                       <TextInput
                         style={styles.noteInput}
-                        placeholder="Note de résolution (visible par le déclarant)"
+                        placeholder={t("admin_resolution_note_ph")}
                         placeholderTextColor={Colors.textSubtle}
                         multiline
                         value={notes[d.id] ?? ""}
@@ -208,7 +208,7 @@ export default function AdminDisputesScreen() {
                       />
                       <TextInput
                         style={styles.refundInput}
-                        placeholder="Montant du remboursement (MAD, optionnel)"
+                        placeholder={t("admin_refund_amount_ph")}
                         placeholderTextColor={Colors.textSubtle}
                         keyboardType="numeric"
                         value={refunds[d.id] ?? ""}
@@ -222,7 +222,7 @@ export default function AdminDisputesScreen() {
                           onPress={() => act(d, "under_review")}
                         >
                           <Clock3 size={14} color={Colors.textPrimary} />
-                          <Text style={styles.actBtnTxt}>Prendre en charge</Text>
+                          <Text style={styles.actBtnTxt}>{t("admin_take_charge")}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={styles.actionsRow}>
@@ -232,7 +232,7 @@ export default function AdminDisputesScreen() {
                           onPress={() => act(d, "resolved_refund")}
                         >
                           {busy ? <ActivityIndicator size="small" color="#16A34A" /> : <Check size={14} color="#16A34A" />}
-                          <Text style={[styles.actBtnTxt, { color: "#16A34A" }]}>Rembourser</Text>
+                          <Text style={[styles.actBtnTxt, { color: "#16A34A" }]}>{t("admin_refund_action")}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.actBtn, styles.actBtnWarn]}
@@ -240,7 +240,7 @@ export default function AdminDisputesScreen() {
                           onPress={() => act(d, "resolved_warning")}
                         >
                           <AlertTriangle size={14} color="#7C3AED" />
-                          <Text style={[styles.actBtnTxt, { color: "#7C3AED" }]}>Avertir</Text>
+                          <Text style={[styles.actBtnTxt, { color: "#7C3AED" }]}>{t("admin_warn_action")}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.actBtn, styles.actBtnDismiss]}
@@ -248,7 +248,7 @@ export default function AdminDisputesScreen() {
                           onPress={() => act(d, "resolved_dismissed")}
                         >
                           <X size={14} color={Colors.danger} />
-                          <Text style={[styles.actBtnTxt, { color: Colors.danger }]}>Rejeter</Text>
+                          <Text style={[styles.actBtnTxt, { color: Colors.danger }]}>{t("admin_dismiss_action")}</Text>
                         </TouchableOpacity>
                       </View>
                     </>

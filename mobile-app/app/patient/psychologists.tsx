@@ -148,7 +148,7 @@ export default function PsychologistsMapScreen() {
               </View>
               <View style={s.cardRight}>
                 <Text style={s.price}>{p.price}</Text>
-                <Text style={s.priceUnit}>MAD/{t("per_session")}</Text>
+                <Text style={s.priceUnit}>{t("mad_per_session")}</Text>
                 <View style={s.viewChip}>
                   <Text style={s.viewChipTxt}>{t("about_label")}</Text>
                   <ChevronRight size={13} color="#fff" />
