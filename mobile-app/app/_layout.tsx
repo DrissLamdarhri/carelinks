@@ -29,6 +29,9 @@ import { useAuth } from "@/lib/auth-context";
 import { YogaReminderModalHost } from "@/components/YogaReminderModal";
 import { showYogaReminderPopup } from "@/lib/yoga-reminder-popup";
 import { AppAlertHost } from "@/components/AppAlertHost";
+import { TermsGate } from "@/components/TermsGate";
+import { syncPendingAcceptance } from "@/lib/terms";
+import { useI18n } from "@/lib/i18n";
 import { reconcileLiveLocationOnStartup } from "@/lib/live-location";
 import { DevBenchLauncher } from "@/components/DevBenchLauncher";
 
@@ -58,6 +61,22 @@ function DeepLinkHandler() {
     return () => subscription.remove();
   }, [router]);
 
+  return null;
+}
+
+/**
+ * The launch gate runs before anyone is signed in, so acceptance can only be
+ * written to the device at that point. This carries it into the database the
+ * moment a session exists — otherwise the only proof of consent would live on
+ * the user's phone, which is exactly where it is no use in a dispute.
+ */
+function TermsSync() {
+  const { user, role } = useAuth();
+  const { locale } = useI18n();
+  useEffect(() => {
+    if (!user?.id) return;
+    void syncPendingAcceptance(locale, role);
+  }, [user?.id, role, locale]);
   return null;
 }
 
@@ -107,14 +126,19 @@ export default function RootLayout() {
         <SafeAreaProvider>
           {fontsLoaded ? (
             <LocaleGate>
-              <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="auth" options={{ headerShown: false }} />
-                  <Stack.Screen name="patient" options={{ headerShown: false }} />
-                  <Stack.Screen name="pro" options={{ headerShown: false }} />
-                  <Stack.Screen name="admin" options={{ headerShown: false }} />
-                </Stack>
-              </SafeAreaView>
+              {/* Inside LocaleGate so the terms render RTL in Arabic, and above
+                  the Stack so there is no route that reaches around them. */}
+              <TermsGate>
+                <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="auth" options={{ headerShown: false }} />
+                    <Stack.Screen name="patient" options={{ headerShown: false }} />
+                    <Stack.Screen name="pro" options={{ headerShown: false }} />
+                    <Stack.Screen name="admin" options={{ headerShown: false }} />
+                  </Stack>
+                </SafeAreaView>
+                <TermsSync />
+              </TermsGate>
             </LocaleGate>
           ) : (
             <View
