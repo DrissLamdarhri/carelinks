@@ -21,15 +21,13 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-na
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowUp,
   CheckCircle2,
-  CornerUpLeft,
-  CornerUpRight,
-  Flag,
+  Crosshair,
   MapPin,
   Phone,
 } from "lucide-react-native";
 import { CareLinkMapView, type LatLng } from "@/components/map/CareLinkMapView";
+import { ManeuverBanner, TripStrip, type NavStatus } from "@/components/nav/ManeuverBanner";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
@@ -40,8 +38,10 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useDeviceHeading } from "@/lib/hooks/useDeviceHeading";
 import { useForegroundPosition } from "@/lib/hooks/useForegroundPosition";
-import { fetchRoute } from "@/lib/routing";
+import { fetchRoute, type RouteStep } from "@/lib/routing";
 import { TrackingStore } from "@/lib/tracking/store";
+import { Route } from "@/lib/tracking/route";
+import { GuidanceRoute, arrivalClock } from "@/lib/tracking/guidance";
 import { simulateTrip, syntheticLoop, type SimulationHandle } from "@/lib/tracking/simulate";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
@@ -60,26 +60,27 @@ function haversineKm(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-// ── In-app turn-by-turn (OSRM maneuvers → French instructions) ───────────────
-type NavStep = { instruction: string; loc: LatLng; dir: "left" | "right" | "straight" | "arrive" };
-
-function parseManeuver(m: { type?: string; modifier?: string }, name: string, t: (k: string) => string): { instruction: string; dir: NavStep["dir"] } {
-  const type = m?.type ?? "";
-  const mod = m?.modifier ?? "";
-  const on = name ? ` ${t("nav_on")} ${name}` : "";
-  if (type === "arrive") return { instruction: t("you_arrived"), dir: "arrive" };
-  if (type === "depart") return { instruction: name ? `${t("nav_take")} ${name}` : t("nav_start"), dir: "straight" };
-  if (type === "roundabout" || type === "rotary") return { instruction: `${t("nav_roundabout")}${on}`, dir: "straight" };
-  if (mod.includes("left")) return { instruction: `${t("nav_turn_left")}${on}`, dir: "left" };
-  if (mod.includes("right")) return { instruction: `${t("nav_turn_right")}${on}`, dir: "right" };
-  return { instruction: `${t("nav_straight")}${on}`, dir: "straight" };
-}
-
-function fmtDist(km: number): string {
-  const m = km * 1000;
-  if (m < 1000) return `${Math.max(10, Math.round(m / 10) * 10)} m`;
-  return `${km.toFixed(1)} km`;
-}
+/**
+ * Lateral distance from the road that counts as genuinely off-route.
+ *
+ * Comfortably wider than urban GPS error (5-15 m) and than the motion
+ * pipeline's own 25 m snap radius, so ordinary noise and a lane-level wander
+ * never trigger a recompute — only actually taking a different street does.
+ */
+const OFF_ROUTE_M = 45;
+/** Three consecutive fixes take ~4.5s to accumulate, so this never gates. */
+const REROUTE_COOLDOWN_MS = 4000;
+/** Standing at the door: nothing left to route. */
+const ARRIVAL_RADIUS_KM = 0.06;
+/**
+ * Hard cap on automatic recomputes for one trip.
+ *
+ * A phone bouncing between two parallel streets — which is what the Fès medina
+ * does to GPS — can otherwise loop forever, and every iteration is a request to
+ * a routing server we do not own. Past the cap the last good route stays on
+ * screen and the professional gets an explicit retry instead.
+ */
+const MAX_AUTO_REROUTES = 25;
 
 export default function ProTrackingScreen() {
   const { t } = useI18n();
@@ -92,8 +93,13 @@ export default function ProTrackingScreen() {
   const [dest, setDest] = useState<LatLng | null>(null);
   const [nurse, setNurse] = useState<LatLng | null>(null);
   const [route, setRoute] = useState<LatLng[] | null>(null);
-  const [navSteps, setNavSteps] = useState<NavStep[]>([]);
-  const [navIdx, setNavIdx] = useState(0);
+  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
+  /** Metres travelled along `route`, map-matched. Drives guidance AND the map. */
+  const [routeProgressM, setRouteProgressM] = useState<number | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [rerouteBudgetSpent, setRerouteBudgetSpent] = useState(false);
+  /** Bumped to ask the map to re-frame on the professional. */
+  const [recenterKey, setRecenterKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   // Safety gate: the patient accepting a bid only sets the booking to
@@ -257,6 +263,12 @@ export default function ProTrackingScreen() {
   useEffect(() => () => trackingStore.destroy(), [trackingStore]);
   useEffect(() => {
     trackingStore.setRoute(route ?? null);
+    // `setRoute` re-matches every buffered fix against the new geometry, so the
+    // offset is already correct for it. Reading it here rather than waiting for
+    // the next fix matters after a re-route: otherwise the banner spends up to
+    // a second measuring the OLD offset against the NEW maneuvers, which is a
+    // countdown to the wrong junction.
+    setRouteProgressM(trackingStore.routeOffsetM ?? null);
   }, [trackingStore, route]);
 
   const onNursePosition = useCallback(
@@ -271,6 +283,10 @@ export default function ProTrackingScreen() {
         seq: p.seq ?? Date.now(),
         receivedAt: Date.now(),
       });
+      // Read straight back out: `push` matches the fix to the route
+      // synchronously, so this is the offset for the fix we just accepted.
+      // Everything the banner says is derived from it.
+      setRouteProgressM(trackingStore.routeOffsetM ?? null);
     },
     [trackingStore],
   );
@@ -287,6 +303,7 @@ export default function ProTrackingScreen() {
         heading: null, speed: null, accuracy: null,
         seq: Date.now(), receivedAt: Date.now(),
       });
+      setRouteProgressM(trackingStore.routeOffsetM ?? null);
     }
   }, [broadcasting, ownPosition, trackingStore]);
 
@@ -303,58 +320,99 @@ export default function ProTrackingScreen() {
   // re-routes whenever the live position strays ~75m from the drawn path.
   const reroutingRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
-  const routeOriginRef = useRef<LatLng | null>(null);
   const hasRouteRef = useRef(false);
+  const rerouteCountRef = useRef(0);
+
+  const computeRoute = useCallback(
+    async (origin: LatLng, destination: LatLng) => {
+      reroutingRef.current = true;
+      lastRerouteAtRef.current = Date.now();
+      setRecalculating(true);
+      try {
+        const { coords, steps, fromRouter } = await fetchRoute(origin, destination, { steps: true });
+        // OSRM snaps the endpoint to the nearest road, which can leave the line
+        // stopping 10-20m short of the actual door — the route visibly ending
+        // beside the destination pin instead of inside it. Walking the last leg
+        // is both what navigation apps draw and what the nurse will physically
+        // do. The patient's screen has always done this; the pro's did not, so
+        // the two sides drew subtly different roads for the same journey.
+        const last = coords[coords.length - 1];
+        const withFinalLeg =
+          last && haversineKm(last, destination) > 0.003 ? [...coords, destination] : coords;
+
+        setRoute(withFinalLeg);
+        setRouteSteps(steps);
+        // A straight-line fallback is not a route. Leaving the flag false lets
+        // the next fix retry immediately instead of waiting out the cooldown.
+        hasRouteRef.current = fromRouter && coords.length >= 2;
+      } finally {
+        reroutingRef.current = false;
+        setRecalculating(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!nurse || !dest) return;
 
     // Standing at the door: nothing to route. Clearing beats drawing a residual
     // squiggle between two points that are the same place.
-    if (haversineKm(nurse, dest) <= 0.06) {
-      routeOriginRef.current = null;
+    if (haversineKm(nurse, dest) <= ARRIVAL_RADIUS_KM) {
       hasRouteRef.current = false;
       setRoute(null);
-      setNavSteps([]);
+      setRouteSteps([]);
+      setRouteProgressM(null);
       return;
     }
 
-    // The line must start where the nurse IS. Anchoring on the origin it was
-    // computed from (rather than on distance to the nearest point of the line)
-    // is what makes it redraw instead of hanging around stale.
-    const anchor = routeOriginRef.current;
-    if (anchor && haversineKm(nurse, anchor) < 0.06) return;
-    if (reroutingRef.current) return;
-    // The 10s cooldown protects the router from a jittering GPS mid-trip. It
-    // must NOT delay the first line: the seed fix and the first accurate fix
-    // often arrive seconds apart and hundreds of metres apart, and swallowing
-    // the second one leaves the route anchored to a cached position.
-    if (hasRouteRef.current && Date.now() - lastRerouteAtRef.current < 10000) return;
-    reroutingRef.current = true;
-    lastRerouteAtRef.current = Date.now();
-    routeOriginRef.current = nurse;
+    // RE-ROUTE ON LATERAL DEVIATION, NOT ON DISTANCE TRAVELLED.
+    //
+    // This previously refetched whenever the nurse moved 60m from the point the
+    // route was computed FROM — which, for someone correctly FOLLOWING the
+    // route, meant a fresh route every 60m: roughly every five seconds at
+    // 40 km/h, throttled only by a 10s cooldown. Every one of those rebuilt the
+    // instruction list from scratch and reset it to the first step, and every
+    // one was a request to a routing server we do not own.
+    //
+    // Travelling along a road is not a reason to recompute it. Being off it is.
+    // REALITY WINS OVER THE PLAN — but only once reality has said so more than
+    // once: a single 60m outlier is a multipath bounce off a building, and
+    // re-routing on it would discard a perfectly good road.
+    const haveRoute = !!route && route.length >= 2 && hasRouteRef.current;
+    const offRoute = haveRoute && trackingStore.isOffRoute(OFF_ROUTE_M, 3);
 
-    void (async () => {
-      const { coords, steps, fromRouter } = await fetchRoute(nurse, dest, { steps: true });
-      setRoute(coords);
-      // A straight-line fallback is not a route. Leaving the flag false lets
-      // the next fix retry immediately instead of waiting out the cooldown.
-      hasRouteRef.current = fromRouter && coords.length >= 2;
-      // Turn-by-turn steps → localised instructions
-      const parsed: NavStep[] = steps.map((st) => {
-        const p = parseManeuver(st.maneuver, st.name ?? "", t);
-        return {
-          instruction: p.instruction,
-          dir: p.dir,
-          loc: { lat: st.maneuver.location[1], lng: st.maneuver.location[0] },
-        };
-      });
-      if (parsed.length) {
-        setNavSteps(parsed);
-        setNavIdx(parsed.length > 1 && parsed[0].dir !== "arrive" ? 1 : 0); // skip "depart"
+    if (haveRoute && !offRoute) return;
+    if (reroutingRef.current) return;
+    // The cooldown is applied to every ATTEMPT, not only to successful ones.
+    //
+    // Gating it on `haveRoute` looked right and was a hot loop: a failed route
+    // returns the straight-line fallback, which leaves `hasRouteRef` false, so
+    // `haveRoute` stayed false, so the cooldown was skipped and the effect
+    // refetched on every single render for as long as the router was down.
+    // The very first request is still immediate — the timestamp starts at 0.
+    if (Date.now() - lastRerouteAtRef.current < REROUTE_COOLDOWN_MS) return;
+
+    // Only deviations count against the budget. The first route of a trip, and
+    // a retry after a routing failure, must never be rationed.
+    if (haveRoute) {
+      rerouteCountRef.current += 1;
+      if (rerouteCountRef.current > MAX_AUTO_REROUTES) {
+        setRerouteBudgetSpent(true);
+        return;
       }
-      reroutingRef.current = false;
-    })();
-  }, [nurse, dest, t]);
+    }
+
+    void computeRoute(nurse, dest);
+  }, [nurse, dest, route, trackingStore, computeRoute]);
+
+  /** Manual recompute, offered once the automatic budget is exhausted. */
+  const retryRoute = useCallback(() => {
+    rerouteCountRef.current = 0;
+    lastRerouteAtRef.current = 0; // an explicit tap should not wait out a cooldown
+    setRerouteBudgetSpent(false);
+    if (nurse && dest) void computeRoute(nurse, dest);
+  }, [nurse, dest, computeRoute]);
 
   // Compass heading for the pre-departure marker. Smoothing is NOT done here:
   // useGlidingPosition called setState every animation frame from this screen,
@@ -369,7 +427,8 @@ export default function ProTrackingScreen() {
     if (booking?.status !== "in_progress") return;
     hasRouteRef.current = false;
     setRoute(null);
-    setNavSteps([]);
+    setRouteSteps([]);
+    setRouteProgressM(null);
     trackingStore.setRoute(null);
   }, [booking?.status, trackingStore]);
 
@@ -456,15 +515,6 @@ export default function ProTrackingScreen() {
     });
   }, [bookingId, nurse, dest]);
 
-  // Advance the turn instruction as the nurse reaches each maneuver point.
-  useEffect(() => {
-    if (!nurse || navSteps.length === 0) return;
-    const cur = navSteps[Math.min(navIdx, navSteps.length - 1)];
-    if (navIdx < navSteps.length - 1 && haversineKm(nurse, cur.loc) < 0.035) {
-      setNavIdx((i) => Math.min(i + 1, navSteps.length - 1));
-    }
-  }, [nurse, navSteps, navIdx]);
-
   const advance = useCallback(
     async (status: BookingStatus, doneMsg: string) => {
       if (!bookingId || busy) return;
@@ -523,10 +573,58 @@ export default function ProTrackingScreen() {
   }, [bookingId, busy, router, t]);
 
   const patientName = patient?.full_name ?? t("patient");
+  // Straight-line, and deliberately so: this is the ~200m courtesy gate on the
+  // "I have arrived" button, which is a question about physical proximity, not
+  // about how far there is left to drive.
   const distanceKm = nurse && dest ? haversineKm(nurse, dest) : null;
-  const etaMin = distanceKm != null ? Math.max(1, Math.round((distanceKm / 30) * 60)) : null;
   const status = booking?.status;
   const farFromPatient = distanceKm != null && distanceKm > 0.2;
+
+  // ── Guidance ───────────────────────────────────────────────────────────────
+  // Built from the SAME coordinate array handed to the tracking store, so the
+  // offsets the store map-matches and the offsets the maneuvers sit at are
+  // measured along one geometry. Two `Route` instances over one array are
+  // deterministic, so they agree by construction rather than by luck.
+  const guidanceRoute = useMemo(
+    () => (route && route.length >= 2 ? new GuidanceRoute(route, routeSteps) : null),
+    [route, routeSteps],
+  );
+
+  /**
+   * The polyline to DRAW — sampled along the same curve the marker walks.
+   *
+   * Derived synchronously here rather than read back off the store: `setRoute`
+   * runs in an effect AFTER render, so reading `store.renderRoute` during
+   * render draws the PREVIOUS curve for one frame, and because a store getter
+   * cannot trigger a re-render it can keep drawing the stale line indefinitely.
+   */
+  const drawnRoute = useMemo(
+    () => (route && route.length >= 2 ? new Route(route).renderPath() : route),
+    [route],
+  );
+
+  const guidance = useMemo(
+    () => (guidanceRoute && routeProgressM != null ? guidanceRoute.at(routeProgressM) : null),
+    [guidanceRoute, routeProgressM],
+  );
+
+  const navigating = status === "matched" || status === "en_route";
+  const navStatus: NavStatus = !nurse
+    ? "locating"
+    : recalculating
+      ? "recalculating"
+      : !route
+        ? "calculating"
+        : !guidanceRoute?.usable
+          ? "unavailable"
+          : guidance
+            ? "guiding"
+            : "calculating";
+
+  // Clock time beats a duration for someone planning a day — "am I making my
+  // 15:00?" is answered directly instead of by mental arithmetic.
+  const arrivalAt =
+    guidance?.remainingS != null && guidance.remainingS > 0 ? arrivalClock(guidance.remainingS) : null;
 
   // A booking that has moved past `matched` was, by construction, already past
   // this gate once — `en_route` is only reachable by pressing "Je pars" on the
@@ -538,8 +636,6 @@ export default function ProTrackingScreen() {
     paymentReady || status === "en_route" || status === "in_progress";
 
   const fit = nurse && dest ? [nurse, dest] : undefined;
-  const curStep = navSteps.length ? navSteps[Math.min(navIdx, navSteps.length - 1)] : null;
-  const stepDistKm = curStep && nurse ? haversineKm(nurse, curStep.loc) : null;
 
   // Sheet drag: pull the handle down to see the full map, back up to restore
   // the mission card. Measured on layout since its content height varies
@@ -628,12 +724,19 @@ export default function ProTrackingScreen() {
             center={nurse ?? dest ?? MAP_CENTER}
             meHeading={meHeading}
             destination={dest ?? undefined}
-            route={route ?? undefined}
+            // The SMOOTHED curve — exactly the path the marker walks.
+            route={drawnRoute ?? undefined}
+            // Metres travelled, so the map can dim the road already covered.
+            // Without this the split index falls back to 0 and the pro's own
+            // map draws the WHOLE route as "remaining" for the entire trip —
+            // she had no visual sense of progress at all.
+            trackingProgressM={routeProgressM}
             fitCoords={fit}
             trackingStore={trackingStore}
             trackingVariant="self"
             radiusKm={0}
             nightAuto
+            recenterKey={recenterKey}
           />
         )}
 
@@ -642,23 +745,45 @@ export default function ProTrackingScreen() {
           <TouchableOpacity style={s.iconBtn} onPress={() => router.back()} accessibilityLabel={t("back")}>
             <ArrowLeft size={20} color="#1F2937" strokeWidth={2.4} />
           </TouchableOpacity>
-          <View style={s.navCard}>
-            <View style={s.navIcon}>
-              <StepIcon dir={curStep?.dir ?? "straight"} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.navInstruction} numberOfLines={2}>
-                {curStep ? curStep.instruction : nurse ? t("calculating_route") : t("locating")}
-              </Text>
-              <Text style={s.navSub}>
-                {stepDistKm != null ? `${fmtDist(stepDistKm)} · ` : ""}
-                {distanceKm != null
-                  ? t("pro_distance_eta").replace("%s", distanceKm.toFixed(1)).replace("%d", String(etaMin))
-                  : ""}
-              </Text>
-            </View>
-          </View>
+          {/* Retired at arrival: the nurse is standing at the door, and "in
+              200m, turn left" is noise at exactly the moment she needs the
+              mission controls instead. */}
+          {navigating ? (
+            <ManeuverBanner status={navStatus} guidance={guidance} t={t} />
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
         </View>
+
+        {/* Floating controls sit just above the sheet and ride down with it, so
+            dragging the sheet away reveals more map instead of stranding the
+            buttons underneath it. */}
+        {navigating ? (
+          <Animated.View
+            style={[s.mapControls, { bottom: sheetHeight + 12 }, sheetAnimatedStyle]}
+            pointerEvents="box-none"
+          >
+            {/* Automatic recomputes are capped so a GPS-hostile street cannot
+                loop against the routing server. Past the cap she asks. */}
+            {rerouteBudgetSpent ? (
+              <TouchableOpacity style={s.retryRoute} onPress={retryRoute} accessibilityRole="button">
+                <Text style={s.retryRouteTxt}>{t("retry")}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View />
+            )}
+            {/* The camera stops following the moment she pans, by design, so
+                there has to be one tap back. */}
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => setRecenterKey((k) => k + 1)}
+              accessibilityLabel={t("nav_recenter")}
+              accessibilityRole="button"
+            >
+              <Crosshair size={20} color={NAVY} strokeWidth={2.4} />
+            </TouchableOpacity>
+          </Animated.View>
+        ) : null}
       </View>
 
       {/* Bottom card — draggable: pull down to see the full map. */}
@@ -671,7 +796,21 @@ export default function ProTrackingScreen() {
             <View style={s.handle} />
           </View>
         </GestureDetector>
-        <Text style={s.title}>{t("en_route_to_patient")}</Text>
+        {/* Sits in the peek strip on purpose: dragging the sheet down to see
+            the map must never hide how much journey is left or when she gets
+            there. Falls back to the title before there is a route to measure. */}
+        {navigating && guidance ? (
+          <View style={s.tripRow}>
+            <TripStrip
+              remainingM={guidance.remainingM}
+              remainingS={guidance.remainingS}
+              arrivalAt={arrivalAt}
+              t={t}
+            />
+          </View>
+        ) : (
+          <Text style={s.title}>{t("en_route_to_patient")}</Text>
+        )}
 
         <View style={s.row}>
           <View style={s.avatar}><Text style={s.avatarTxt}>{patientName.slice(0, 1).toUpperCase()}</Text></View>
@@ -790,14 +929,6 @@ export default function ProTrackingScreen() {
   );
 }
 
-function StepIcon({ dir }: { dir: NavStep["dir"] }) {
-  const c = "#FFFFFF";
-  if (dir === "left") return <CornerUpLeft size={24} color={c} strokeWidth={2.6} />;
-  if (dir === "right") return <CornerUpRight size={24} color={c} strokeWidth={2.6} />;
-  if (dir === "arrive") return <Flag size={22} color={c} strokeWidth={2.6} />;
-  return <ArrowUp size={24} color={c} strokeWidth={2.6} />;
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#FFFFFF" },
   mapWrap: { flex: 1, position: "relative", backgroundColor: "#EDE5CC" },
@@ -821,14 +952,17 @@ const s = StyleSheet.create({
   pillTxt: { fontSize: 14, fontWeight: "700", color: "#111827" },
 
   navBar: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 50, paddingHorizontal: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  navCard: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: NAVY, borderRadius: 18, padding: 12, minHeight: 64,
-    shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 8,
+  mapControls: {
+    position: "absolute", left: 14, right: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
   },
-  navIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
-  navInstruction: { color: "#FFFFFF", fontSize: 16, fontWeight: "800", lineHeight: 20 },
-  navSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 },
+  retryRoute: {
+    height: 40, paddingHorizontal: 22, borderRadius: 20, backgroundColor: "#FFFFFF",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 6,
+  },
+  retryRouteTxt: { color: NAVY, fontSize: 14, fontWeight: "700" },
+  tripRow: { marginBottom: 14, minHeight: 26, justifyContent: "center" },
 
   sheet: {
     position: "absolute", left: 0, right: 0, bottom: 0,

@@ -21,16 +21,28 @@ export function DevBenchLauncher() {
   if (!__DEV__ || hidden) return null;
 
   return (
-    <TouchableOpacity
-      style={s.pill}
-      onPress={() => router.push("/dev/bench")}
-      onLongPress={() => setHidden(true)}
-      accessibilityRole="button"
-      accessibilityLabel="Open the tracking benchmark (development only)"
-      accessibilityHint="Long press to hide for this session"
-    >
-      <Text style={s.text}>BENCH</Text>
-    </TouchableOpacity>
+    <>
+      <TouchableOpacity
+        style={s.pill}
+        onPress={() => router.push("/dev/bench")}
+        onLongPress={() => setHidden(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Open the tracking benchmark (development only)"
+        accessibilityHint="Long press to hide for this session"
+      >
+        <Text style={s.text}>BENCH</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[s.pill, s.pillNav]}
+        onPress={() => router.push("/dev/nav")}
+        onLongPress={() => setHidden(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Open the navigation banner preview (development only)"
+        accessibilityHint="Long press to hide for this session"
+      >
+        <Text style={s.text}>NAV</Text>
+      </TouchableOpacity>
+    </>
   );
 }
 
@@ -45,5 +57,6 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(13,8,112,0.72)",
     zIndex: 9999,
   },
+  pillNav: { bottom: 52 },
   text: { color: "#FFFFFF", fontSize: 9, fontWeight: "800", letterSpacing: 1 },
 });

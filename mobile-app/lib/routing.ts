@@ -26,9 +26,38 @@ export const usingDemoRoutingServer = BASE_URL === DEFAULT_BASE;
 
 const TIMEOUT_MS = 5000;
 
+/**
+ * One OSRM maneuver.
+ *
+ * `steps[i].maneuver` describes the maneuver at the START of step i, and
+ * `steps[i].distance` is the length of the road AFTER it, up to the next one.
+ * Getting that relationship backwards is the classic way to build a turn
+ * banner that announces the wrong junction, so it is spelled out here rather
+ * than left to the reader.
+ *
+ * Everything below is returned by OSRM whenever `steps=true` is requested. It
+ * used to be parsed and dropped on the floor, which is why the professional's
+ * banner could not say "3rd exit", "in 250 m", or "N6".
+ */
 export type RouteStep = {
-  maneuver: { type?: string; modifier?: string; location: [number, number] };
+  maneuver: {
+    type?: string;
+    modifier?: string;
+    location: [number, number];
+    /** Roundabout/rotary exit number, 1-based. Only present on those types. */
+    exit?: number;
+    /** Compass bearing (deg) of travel before and after the maneuver. */
+    bearing_before?: number;
+    bearing_after?: number;
+  };
+  /** Street name. Empty string on unnamed roads — very common in Morocco. */
   name: string;
+  /** Road reference as signposted: "N6", "R503". Often absent in cities. */
+  ref?: string;
+  /** Length of this step in metres — the road distance to the NEXT maneuver. */
+  distance?: number;
+  /** Routed duration of this step in seconds. */
+  duration?: number;
 };
 
 export type RouteResult = {
@@ -42,6 +71,49 @@ export type RouteResult = {
   /** False when routing failed and `coords` is the straight-line fallback. */
   fromRouter: boolean;
 };
+
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
+
+/**
+ * Flatten every leg's steps into one list.
+ *
+ * Only leg 0 was read before. That is correct for a plain origin→destination
+ * request, but `fetchRoute` also accepts a `via` waypoint — and with one, OSRM
+ * splits the journey into two legs. Reading only the first silently truncated
+ * the instructions halfway. Concatenating costs nothing and removes a trap for
+ * whoever next passes `via`.
+ */
+function parseSteps(legs: unknown): RouteStep[] {
+  if (!Array.isArray(legs)) return [];
+  const out: RouteStep[] = [];
+  for (const leg of legs) {
+    const raw = (leg as { steps?: unknown })?.steps;
+    if (!Array.isArray(raw)) continue;
+    for (const st of raw) {
+      const m = (st as { maneuver?: Record<string, unknown> })?.maneuver;
+      const loc = m?.location;
+      if (!Array.isArray(loc) || loc.length < 2) continue;
+      if (typeof loc[0] !== "number" || typeof loc[1] !== "number") continue;
+      const s = st as Record<string, unknown>;
+      out.push({
+        maneuver: {
+          type: str(m?.type),
+          modifier: str(m?.modifier),
+          location: [loc[0], loc[1]],
+          exit: num(m?.exit),
+          bearing_before: num(m?.bearing_before),
+          bearing_after: num(m?.bearing_after),
+        },
+        name: str(s.name) ?? "",
+        ref: str(s.ref),
+        distance: num(s.distance),
+        duration: num(s.duration),
+      });
+    }
+  }
+  return out;
+}
 
 /**
  * Fetch a driving route. Never throws and never returns null: on any failure
@@ -95,11 +167,10 @@ export async function fetchRoute(
       .map((c) => ({ lat: c[1], lng: c[0] }));
     if (coords.length < 2) return fallback;
 
-    const steps: RouteStep[] = opts.steps
-      ? (route?.legs?.[0]?.steps ?? []).filter(
-          (st: RouteStep) => Array.isArray(st?.maneuver?.location) && st.maneuver.location.length >= 2,
-        )
-      : [];
+    // Normalised rather than passed through raw: the guidance engine reads
+    // these on every frame and must not have to defend against a router that
+    // omits a field or hands back a string where a number is expected.
+    const steps: RouteStep[] = opts.steps ? parseSteps(route?.legs) : [];
 
     return {
       coords,
