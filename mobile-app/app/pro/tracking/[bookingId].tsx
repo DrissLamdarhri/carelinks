@@ -281,8 +281,32 @@ export default function ProTrackingScreen() {
    */
   const simOwnsPositionRef = useRef(false);
 
+  /**
+   * ONE sequence number for every fix this screen pushes, whatever produced it.
+   *
+   * `MotionTrack` drops any fix whose seq is not strictly greater than the last
+   * accepted one. That gate exists for the PATIENT, whose fixes arrive over
+   * realtime with no ordering guarantee. On this screen every fix comes from
+   * one device in arrival order, so the gate has no work to do — but it was
+   * being fed from two incompatible numbering schemes:
+   *
+   *   before "Je pars"  the foreground watch pushed `Date.now()` (~1.79e12)
+   *   after  "Je pars"  the background service pushed 1, 2, 3 …
+   *                     (`live-location.ts` resets its counter to 0 on start)
+   *
+   * So from the instant of departure every real GPS fix was `1 <= 1.79e12` and
+   * was rejected as stale-seq — permanently, because nothing on the real path
+   * ever clears `lastSeq`. The marker froze for the whole trip while `setNurse`
+   * kept updating, which is why the route and camera still moved and made the
+   * failure look like a rendering problem rather than a dropped stream.
+   *
+   * Numbering here, at the single point of entry, makes the collision
+   * impossible to reintroduce from any future source.
+   */
+  const localSeqRef = useRef(0);
+
   const pushPosition = useCallback(
-    (p: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null; seq?: number | null }) => {
+    (p: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null }) => {
       setNurse({ lat: p.lat, lng: p.lng });
       trackingStore.push({
         lat: p.lat,
@@ -290,7 +314,8 @@ export default function ProTrackingScreen() {
         heading: p.heading ?? null,
         speed: p.speed ?? null,
         accuracy: p.accuracy ?? null,
-        seq: p.seq ?? Date.now(),
+        // Deliberately NOT the sender's seq — see above.
+        seq: ++localSeqRef.current,
         receivedAt: Date.now(),
       });
       // The RENDER offset, not the raw one. The banner has to agree with the
@@ -325,16 +350,30 @@ export default function ProTrackingScreen() {
   // incidental and the hook stays silent.
   const ownPosition = useForegroundPosition(!broadcasting, { request: true });
   useEffect(() => {
-    if (!broadcasting && ownPosition) {
-      setNurse(ownPosition);
-      trackingStore.push({
-        lat: ownPosition.lat, lng: ownPosition.lng,
-        heading: null, speed: null, accuracy: null,
-        seq: Date.now(), receivedAt: Date.now(),
-      });
-      setRouteProgressM(trackingStore.routeOffsetM ?? null);
-    }
-  }, [broadcasting, ownPosition, trackingStore]);
+    // Same entry point as the live stream, so both share the one counter.
+    if (!broadcasting && ownPosition) pushPosition(ownPosition);
+  }, [broadcasting, ownPosition, pushPosition]);
+
+  /**
+   * Clear the pipeline when the position SOURCE changes.
+   *
+   * "Je pars" swaps the foreground watch for the background service. The fixes
+   * either side of that are seconds and metres apart, but the buffer they land
+   * in is shared — so without this the trip begins by interpolating through
+   * samples taken while the professional was still standing still, and any
+   * future divergence between the two sources contaminates the whole journey.
+   * Resetting also returns `lastSeq` to -1, which is the belt to the braces of
+   * the single counter above.
+   */
+  const prevBroadcastingRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = prevBroadcastingRef.current;
+    prevBroadcastingRef.current = broadcasting;
+    if (prev === null || prev === broadcasting) return;
+    trackingStore.reset();
+    localSeqRef.current = 0;
+    setRouteProgressM(null);
+  }, [broadcasting, trackingStore]);
 
   // Arrival is NEVER inferred from GPS proximity. It used to auto-advance
   // `en_route → in_progress` within 80 m of `dest`, which fired on a coarse
@@ -587,7 +626,7 @@ export default function ProTrackingScreen() {
       // than the last one it accepted, so a simulator started after even one
       // real fix had every single sample rejected as stale-seq and the marker
       // sat still. Wall-clock keeps it monotonic against both sources.
-      onFix: (f) => pushPosition({ ...f, seq: Date.now() }),
+      onFix: (f) => pushPosition(f),
       // A 10s dropout partway, so dead reckoning and the staleness banner are
       // exercised in the same run rather than needing a separate tunnel test.
       outage: wrongTurn ? undefined : [30_000, 40_000],
@@ -859,6 +898,8 @@ export default function ProTrackingScreen() {
           )}
         </View>
 
+        {navigating ? <TrackingDiagnostics store={trackingStore} /> : null}
+
         {/* Floating controls sit just above the sheet and ride down with it, so
             dragging the sheet away reveals more map instead of stranding the
             buttons underneath it. */}
@@ -1044,6 +1085,47 @@ export default function ProTrackingScreen() {
   );
 }
 
+/**
+ * Development-only readout of what the motion pipeline is DOING with the fixes
+ * it receives.
+ *
+ * The whole point is `stale-seq`. A pro-side stream that is being silently
+ * discarded looks identical to one that is simply not arriving — the marker
+ * sits still either way — and that ambiguity is what let a dropped stream be
+ * mistaken for a rendering fault through a whole field test. These counters
+ * make the difference legible in one glance on the next drive.
+ *
+ * Polls on its own 1 Hz timer rather than subscribing to the store, so it
+ * cannot influence the render rate of the screen it is measuring. Renders
+ * nothing outside __DEV__.
+ */
+function TrackingDiagnostics({ store }: { store: TrackingStore }) {
+  const [line, setLine] = useState("");
+  useEffect(() => {
+    if (!__DEV__) return;
+    const tick = () => {
+      const r = store.rejectionCounts();
+      const st = store.getStatus();
+      setLine(
+        `seq:${r["stale-seq"]} acc:${r.inaccurate} tp:${r.teleport}` +
+          ` · age ${st.ageMs == null ? "—" : Math.round(st.ageMs / 1000) + "s"}` +
+          `${st.stale ? " STALE" : ""}` +
+          ` · off ${store.renderOffsetM == null ? "—" : Math.round(store.renderOffsetM) + "m"}`,
+      );
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [store]);
+
+  if (!__DEV__ || !line) return null;
+  return (
+    <View style={s.diag} pointerEvents="none">
+      <Text style={s.diagTxt}>{line}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#FFFFFF" },
   mapWrap: { flex: 1, position: "relative", backgroundColor: "#EDE5CC" },
@@ -1067,6 +1149,12 @@ const s = StyleSheet.create({
   pillTxt: { fontSize: 14, fontWeight: "700", color: "#111827" },
 
   navBar: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 50, paddingHorizontal: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  diag: {
+    position: "absolute", left: 14, right: 14, top: 122,
+    backgroundColor: "rgba(0,0,0,0.66)", borderRadius: 7,
+    paddingVertical: 3, paddingHorizontal: 7,
+  },
+  diagTxt: { color: "#7FFFD4", fontSize: 10, fontWeight: "700" },
   mapControls: {
     position: "absolute", left: 14, right: 14,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

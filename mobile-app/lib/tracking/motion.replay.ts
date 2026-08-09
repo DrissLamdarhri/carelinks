@@ -373,5 +373,79 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
   ok(offCount > 0, "a sustained measured deviation still reports off-route");
 }
 
+// ── 8. THE FIELD FAILURE: two sequence-number domains ───────────────────────
+// Reproduces exactly what froze the professional's marker for a whole real
+// trip. The screen fed this gate from two sources that number their fixes on
+// different scales: the pre-departure foreground watch used `Date.now()`
+// (~1.79e12), and the post-departure background service restarts its own
+// counter at 1. From the instant of departure every real fix was `1 <= 1.79e12`
+// and was discarded — permanently, because nothing on the real path cleared
+// `lastSeq`. `setNurse` kept updating, so the route and camera still moved and
+// the dropped stream looked like a rendering bug.
+{
+  console.log("8. mixed sequence domains must not be able to freeze the pipeline");
+  const fixes = trace(10);
+
+  // (a) The gate itself is correct and must stay strict — this is what protects
+  //     the PATIENT, whose fixes arrive over realtime with no ordering.
+  const strict = new MotionTrack();
+  strict.push({ ...fixes[0], seq: 1_786_000_000_000 });
+  let rejectedSmall = 0;
+  for (let i = 1; i < 5; i++) {
+    if (strict.push({ ...fixes[i], seq: i }) === "stale-seq") rejectedSmall++;
+  }
+  ok(rejectedSmall === 4, `a huge seq followed by 1,2,3 IS rejected by design (${rejectedSmall}/4)`);
+  ok(
+    strict.rejected["stale-seq"] === 4,
+    "and the rejections are counted, so a live run can prove it",
+  );
+
+  // (b) THE FIX, part one: one counter for every source. Renumbering at the
+  //     single point of entry makes the collision unreachable.
+  const renumbered = new MotionTrack();
+  let localSeq = 0;
+  let accepted = 0;
+  // Pre-departure samples, then post-departure ones that restart at 1 — the
+  // exact sequence that failed in the field.
+  const incoming = [
+    { fix: fixes[0], senderSeq: 1_786_000_000_000 },
+    { fix: fixes[1], senderSeq: 1_786_000_001_500 },
+    { fix: fixes[2], senderSeq: 1 },
+    { fix: fixes[3], senderSeq: 2 },
+    { fix: fixes[4], senderSeq: 3 },
+    { fix: fixes[5], senderSeq: 4 },
+  ];
+  for (const { fix } of incoming) {
+    if (renumbered.push({ ...fix, seq: ++localSeq }) === null) accepted++;
+  }
+  ok(accepted === incoming.length, `every fix is accepted when renumbered locally (${accepted}/6)`);
+  ok(
+    renumbered.rejected["stale-seq"] === 0,
+    "stale-seq stays at zero — the value the next drive must show",
+  );
+  ok(renumbered.latest?.seq === 6, "and the newest fix is the newest one pushed");
+
+  // (c) THE FIX, part two: resetting at the source handover also clears
+  //     `lastSeq`, so even a caller that forgot to renumber recovers.
+  const handover = new MotionTrack();
+  handover.push({ ...fixes[0], seq: 1_786_000_000_000 });
+  handover.reset();
+  let afterReset = 0;
+  for (let i = 1; i < 5; i++) {
+    if (handover.push({ ...fixes[i], seq: i }) === null) afterReset++;
+  }
+  ok(afterReset === 4, `reset() at the handover lets a restarted counter through (${afterReset}/4)`);
+
+  // (d) And the pipeline actually MOVES afterwards — the property the field
+  //     test was checking by eye. A frozen buffer renders a frozen marker.
+  const moved = new MotionTrack();
+  let sq = 0;
+  for (const f of trace(12)) moved.push({ ...f, seq: ++sq });
+  const t0 = moved.latest!.receivedAt - 6000;
+  const a = moved.sampleAt(t0);
+  const b = moved.sampleAt(t0 + 3000);
+  ok(!!a && !!b && distanceM(a, b) > 5, "the rendered position advances once fixes are accepted");
+}
+
 console.log(failures === 0 ? "\nALL MOTION CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
