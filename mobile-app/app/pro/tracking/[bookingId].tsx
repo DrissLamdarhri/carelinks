@@ -528,7 +528,21 @@ export default function ProTrackingScreen() {
     personalityIdx.current += 1;
     showToast(`Conducteur : ${who}`);
 
-    const { coords, fromRouter } = await fetchRoute(origin, target);
+    // DRIVE THE ROAD THAT IS ON SCREEN.
+    //
+    // Fetching a fresh route here instead produced a second, slightly
+    // different geometry: OSRM answered from a marginally different origin and
+    // picked a parallel street, so the synthetic vehicle drove ~28 m beside the
+    // drawn line — past the 25 m snap limit, which meant map-matching refused
+    // to engage and the marker floated off the road for the whole run. The
+    // simulator was testing a road the professional could not see.
+    //
+    // Using the array already being drawn makes the driven path and the
+    // rendered path the same points by construction, which is the only way the
+    // run says anything about production.
+    const { coords, fromRouter } = route && route.length >= 2
+      ? { coords: route, fromRouter: true }
+      : await fetchRoute(origin, target);
     // A straight line is not a road; map-matching would rightly distrust it and
     // the run would tell us nothing about the real experience.
     let path = fromRouter && coords.length >= 2 ? coords : syntheticLoop(origin, 500);
@@ -588,7 +602,7 @@ export default function ProTrackingScreen() {
         showToast("Simulation terminée");
       },
     });
-  }, [bookingId, nurse, dest, pushPosition, trackingStore]);
+  }, [bookingId, nurse, dest, route, pushPosition, trackingStore]);
 
   const advance = useCallback(
     async (status: BookingStatus, doneMsg: string) => {
