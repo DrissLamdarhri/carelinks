@@ -1259,6 +1259,9 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     unit_min: "min",
+  
+    // --- extracted from hardcoded strings ---
+    address_required_booking: "Add your address first — the professional needs to know where to go.",
   },
   ar: {
     confirm_email_title: "أكّد بريدك الإلكتروني",
@@ -1901,6 +1904,9 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     unit_min: "دقيقة",
+  
+    // --- extracted from hardcoded strings ---
+    address_required_booking: "أضف عنوانك أولاً: يحتاج المهني إلى معرفة وجهته.",
   },
   fr: {
     confirm_email_title: "Confirmez votre email",
@@ -2545,6 +2551,9 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     unit_min: "min",
+  
+    // --- extracted from hardcoded strings ---
+    address_required_booking: "Ajoutez d'abord votre adresse : le professionnel doit savoir où se rendre.",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",

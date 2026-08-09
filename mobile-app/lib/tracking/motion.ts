@@ -85,6 +85,24 @@ export type MotionSample = {
   stale: boolean;
   /** Age of the newest accepted fix, ms — drives the "position is old" UI. */
   ageMs: number;
+  /**
+   * Distance along the attached route AT THIS SAMPLE'S INSTANT, or null when
+   * the position is not map-matched.
+   *
+   * This is what the traversed/remaining split and the turn countdown must be
+   * drawn from, and it is NOT the same number as `MotionTrack.routeOffsetM`.
+   * That one describes the newest RAW fix — the present — while the marker is
+   * deliberately rendered at `now - RENDER_DELAY_MS`. Mixing the two puts the
+   * colour seam and the distance-to-turn a full render delay AHEAD of the
+   * avatar: measured on a live trip at ~78 km/h, the dimmed "already travelled"
+   * segment extended roughly 40 m PAST the marker, into road it had not
+   * reached yet.
+   *
+   * Business logic that must react to reality as fast as possible — deciding
+   * whether to re-route — still reads the raw offset. Anything DRAWN reads
+   * this, so that everything on screen depicts one instant.
+   */
+  routeOffsetM: number | null;
 };
 
 /** Render this far behind real time so interpolation always has an endpoint. */
@@ -177,13 +195,26 @@ export type RejectReason = "stale-seq" | "inaccurate" | "teleport";
  */
 export class MotionTrack {
   private buffer: Fix[] = [];
-  /** Map-match for each buffered fix; null when it could not be matched. */
+  /** Map-match for each buffered fix; null when it could not be SNAPPED. */
   private matches: (RouteMatch | null)[] = [];
+  /**
+   * MEASURED lateral distance from the road for each buffered fix, kept even
+   * when the fix was too far away to snap to.
+   *
+   * `matches` cannot answer "did they leave the road", because it is null both
+   * for "measured 90 m off" and for "could not be placed at all" — and those
+   * mean opposite things. Keeping the measurement separately is what lets
+   * `isOffRoute` demand evidence rather than treating absence of evidence as
+   * evidence.
+   */
+  private deviations: (number | null)[] = [];
   /** Eased 0..1 confidence that the marker is on the road. */
   private renderSnap = 0;
   private snapInitialised = false;
   private route: Route | null = null;
   private lastMatchedOffsetM = 0;
+  /** Route offset of the most recent RENDERED sample — see MotionSample. */
+  private lastRenderOffsetM: number | null = null;
   private lastSeq = -1;
   /** Rendered bearing, carried across samples so rotation can be rate-limited. */
   private renderBearing: number | null = null;
@@ -243,9 +274,34 @@ export class MotionTrack {
    */
   isOffRoute(thresholdM: number, samples = 3): boolean {
     if (!this.route) return false;
-    const window = this.matches.slice(-samples);
+
+    // AN UNMATCHED FIX IS NOT EVIDENCE OF ANYTHING.
+    //
+    // This used to read `m == null || m.deviationM > threshold`, so a fix that
+    // simply could not be placed on the road counted as proof the road had
+    // been left. That is exactly backwards: `matchToRoute` returns null for a
+    // multipath bounce, a fix beyond the forward search window, or the first
+    // frames after a reset — none of which say the driver went anywhere.
+    //
+    // Worse, it was self-sustaining. Failing to match triggered a re-route;
+    // the new route arrived with an empty match history; the next few fixes
+    // were unmatched again because the buffer had not re-accumulated; that
+    // re-routed again. Observed on a live trip: the 25-recompute budget was
+    // spent in minutes and the professional was left holding a stale road and
+    // a "retry" button.
+    //
+    // Requiring POSITIVE evidence — every fix in the window MEASURED, and every
+    // measurement beyond the threshold — means only a sustained, quantified
+    // departure from the road can trigger a recompute. When we genuinely cannot
+    // tell where someone is, the right answer is to keep the road we have and
+    // wait for a fix we can trust.
+    //
+    // Note this reads `deviations`, not `matches`: a fix 90 m off the road is
+    // deliberately not SNAPPED (it is past MAX_SNAP_M) but it is very much
+    // measured, and it is exactly the case this function exists to catch.
+    const window = this.deviations.slice(-samples);
     if (window.length < samples) return false;
-    return window.every((m) => m == null || m.deviationM > thresholdM);
+    return window.every((d) => d != null && d > thresholdM);
   }
 
   /**
@@ -279,10 +335,13 @@ export class MotionTrack {
 
     this.lastSeq = fix.seq;
     this.buffer.push(fix);
-    this.matches.push(this.matchToRoute(fix));
+    const probed = this.matchToRoute(fix);
+    this.matches.push(probed.match);
+    this.deviations.push(probed.deviationM);
     if (this.buffer.length > MAX_BUFFER) {
       this.buffer.shift();
       this.matches.shift();
+      this.deviations.shift();
     }
     return null;
   }
@@ -299,9 +358,23 @@ export class MotionTrack {
   setRoute(points: LatLng[] | null): void {
     this.route = points && points.length >= 2 ? new Route(points) : null;
     this.lastMatchedOffsetM = 0;
+    this.lastRenderOffsetM = null;
     // Re-match everything already buffered so a route arriving mid-trip takes
     // effect immediately instead of only for future fixes.
-    this.matches = this.buffer.map((f) => this.matchToRoute(f));
+    const probed = this.buffer.map((f) => this.matchToRoute(f));
+    this.matches = probed.map((p) => p.match);
+    // Deliberately NOT `probed.map(p => p.deviationM)`.
+    //
+    // A new route starts at wherever the subject is NOW, so every fix already
+    // in the buffer sits behind its start and measures tens of metres "off" it
+    // — through no fault of the driver. Carrying those measurements over made
+    // re-routing self-sustaining: each new route was instantly judged
+    // abandoned by the history of the previous one, which triggered another,
+    // and the recompute budget was gone within minutes of a live trip.
+    //
+    // A freshly attached road has no evidence for or against it yet. It earns
+    // a verdict from fixes that arrive AFTER it, and from nothing else.
+    this.deviations = this.buffer.map(() => null);
   }
 
   /** True while positions are being map-matched to a road. */
@@ -345,12 +418,16 @@ export class MotionTrack {
    * is genuinely off-route (a side street, a car park, a footpath), and drawing
    * them on the road anyway would be a confident lie.
    */
-  private matchToRoute(fix: Fix): RouteMatch | null {
-    if (!this.route) return null;
+  private matchToRoute(fix: Fix): { match: RouteMatch | null; deviationM: number | null } {
+    if (!this.route) return { match: null, deviationM: null };
     const m = this.route.match(fix, this.lastMatchedOffsetM, MATCH_WINDOW_M);
-    if (!m || m.deviationM > MAX_SNAP_M) return null;
+    // `m == null` means the road could not be found near this fix AT ALL within
+    // the forward search window — we do not know where they are. That is not
+    // the same as knowing they are 90 m away, and must not be reported as such.
+    if (!m) return { match: null, deviationM: null };
+    if (m.deviationM > MAX_SNAP_M) return { match: null, deviationM: m.deviationM };
     this.lastMatchedOffsetM = m.offsetM;
-    return m;
+    return { match: m, deviationM: m.deviationM };
   }
 
   /** Discard all state — call when the tracked subject changes. */
@@ -361,6 +438,7 @@ export class MotionTrack {
     this.renderBearing = null;
     this.lastSampleAt = null;
     this.lastMatchedOffsetM = 0;
+    this.lastRenderOffsetM = null;
     this.renderSnap = 0;
     this.snapInitialised = false;
   }
@@ -383,6 +461,10 @@ export class MotionTrack {
     let targetBearing: number;
     let moving: boolean;
     let stale: boolean;
+    // Offset along the route at THIS instant. Held across samples so that a
+    // momentary failure to match does not blank the traversed portion of the
+    // road and make the line flicker back to full length.
+    let renderOffsetM: number | null = this.lastRenderOffsetM;
 
     const oldest = this.buffer[0];
     if (t <= oldest.receivedAt) {
@@ -392,6 +474,7 @@ export class MotionTrack {
       targetBearing = oldest.heading ?? this.renderBearing ?? 0;
       moving = false;
       stale = false;
+      renderOffsetM = this.matches[0]?.offsetM ?? renderOffsetM;
     } else if (t >= newest.receivedAt) {
       // No fix newer than the render clock: extrapolate briefly, then hold.
       const overshoot = t - newest.receivedAt;
@@ -406,6 +489,16 @@ export class MotionTrack {
       // "Stale" the moment we stop having real data to interpolate through —
       // the UI can start warning before the marker visibly freezes.
       stale = overshoot > DEAD_RECKON_MS;
+      // Dead reckoning advances the marker along its heading, so the offset
+      // has to advance with it or the seam falls behind the avatar during a
+      // signal dropout — the one moment the two are most closely watched.
+      const base = this.matches[this.matches.length - 1]?.offsetM ?? renderOffsetM;
+      renderOffsetM =
+        base == null
+          ? null
+          : canReckon
+            ? Math.min(this.route?.length ?? base, base + speed * (overshoot / 1000))
+            : base;
     } else {
       // The good case: interpolate between two known fixes at constant velocity.
       let i = this.buffer.length - 2;
@@ -439,6 +532,10 @@ export class MotionTrack {
         const offset = mA.offsetM + (mB.offsetM - mA.offsetM) * f;
         const at = this.route.positionAt(offset);
         if (at) {
+          // The SAME scalar the marker's road position is derived from. The
+          // seam and the avatar therefore cannot disagree: they are two
+          // renderings of one number at one instant.
+          renderOffsetM = offset;
           roadPos = at.point;
           // Road direction averaged over a short window. A single polyline
           // segment's bearing steps at every vertex, which on a dense route is a
@@ -487,7 +584,16 @@ export class MotionTrack {
         ? targetBearing
         : approachAngle(this.renderBearing, targetBearing, MAX_TURN_RATE_DEG_S * dtSec);
 
-    return { lat: pos.lat, lng: pos.lng, bearing: this.renderBearing, moving, stale, ageMs };
+    this.lastRenderOffsetM = renderOffsetM;
+    return {
+      lat: pos.lat,
+      lng: pos.lng,
+      bearing: this.renderBearing,
+      moving,
+      stale,
+      ageMs,
+      routeOffsetM: renderOffsetM,
+    };
   }
 
   /**

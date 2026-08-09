@@ -104,12 +104,25 @@ export default function PsychologistBookingScreen() {
         return;
       }
 
+      // Only an in-person session needs somewhere to go. It used to be sent to
+      // the literal string "Meknès, Maroc" whatever the patient's real address.
+      let homeAddress: string | null = null;
+      if (mode === "in_person") {
+        const home = await db.addresses.defaultForUser(user.id);
+        if (!home) {
+          Alert.alert(t("error"), t("address_required_booking"));
+          setConfirming(false);
+          return;
+        }
+        homeAddress = [home.street, home.city].filter(Boolean).join(", ");
+      }
+
       const base = {
         patient_id: user.id,
         specialty: "psychologist" as const,
         status: "matched" as const,
         professional_id: psy?.id ?? null,
-        address: mode === "in_person" ? "Meknès, Maroc" : null,
+        address: homeAddress,
         notes: psyName, // shown as the practitioner on the confirmation page
 
         budget_min_mad: PRICE,

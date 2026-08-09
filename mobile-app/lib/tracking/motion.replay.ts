@@ -239,5 +239,139 @@ function trace(n: number, opts: { jitterM?: number; dropFrom?: number; dropCount
   smoothness("2-point straight-line route", [path[0], path[path.length - 1]]);
 }
 
+// ── 6. The rendered offset describes the RENDERED instant ───────────────────
+// The seam between "already travelled" and "still to drive", and the countdown
+// to the next turn, are both drawn from `sample.routeOffsetM`. If that reported
+// the newest RAW fix instead, everything drawn would sit a full render delay
+// ahead of the avatar. Measured on a live trip at ~78 km/h the dimmed segment
+// ran ~40 m PAST the marker, into road it had not reached.
+{
+  console.log("6. render offset is in step with the drawn marker");
+  const fixes = trace(24);
+  const path = fixes.map((f) => ({ lat: f.lat, lng: f.lng }));
+  const tr = new MotionTrack();
+  tr.setRoute(path);
+  for (const f of fixes) tr.push(f);
+  const rt = new Route(path);
+
+  let worstGapM = 0;
+  let ahead = 0;
+  let samples = 0;
+  let monotonic = true;
+  let prevOffset = -Infinity;
+  const start = fixes[0].receivedAt + RENDER_DELAY_MS + 100;
+  const end = fixes[fixes.length - 1].receivedAt - 100;
+  for (let now = start; now <= end; now += 100) {
+    const s = tr.sampleAt(now);
+    if (!s || s.routeOffsetM == null) continue;
+    samples++;
+    if (s.routeOffsetM < prevOffset - 0.01) monotonic = false;
+    prevOffset = s.routeOffsetM;
+
+    // Where the reported offset lands on the road, versus where the marker is
+    // actually drawn. These are the two things that must not disagree.
+    const at = rt.positionAt(s.routeOffsetM);
+    if (!at) continue;
+    const gap = distanceM(at.point, s);
+    worstGapM = Math.max(worstGapM, gap);
+
+    // And it must not be the RAW offset, which describes ~2 s into the future.
+    const raw = tr.routeOffsetM;
+    if (raw != null && s.routeOffsetM > raw + 1) ahead++;
+  }
+
+  ok(samples > 50, `enough matched frames to judge (got ${samples})`);
+  ok(
+    worstGapM < 1.0,
+    `the offset the seam is drawn at tracks the marker (worst gap ${worstGapM.toFixed(2)} m)`,
+  );
+  ok(ahead === 0, `the rendered offset never runs ahead of the newest fix (${ahead} frames)`);
+  ok(monotonic, "the rendered offset never steps backwards");
+
+  // The raw offset must remain available and AHEAD — re-routing decisions want
+  // the freshest possible truth, not the delayed render state.
+  const rawFinal = tr.routeOffsetM;
+  const renderFinal = tr.sampleAt(end)?.routeOffsetM ?? null;
+  ok(rawFinal != null && renderFinal != null, "both offsets are exposed");
+  if (rawFinal != null && renderFinal != null) {
+    ok(rawFinal >= renderFinal - 0.01, "the raw offset is at or ahead of the rendered one");
+  }
+}
+
+// ── 7. An unmatched fix is not evidence of leaving the road ─────────────────
+// This one caused a live re-route storm: unmatched fixes counted as off-route,
+// each re-route reset the match history, and the next fixes were unmatched
+// again. The 25-recompute budget was gone in minutes.
+{
+  console.log("7. off-route needs positive evidence, not missing evidence");
+  const fixes = trace(12);
+  const path = fixes.map((f) => ({ lat: f.lat, lng: f.lng }));
+
+  // (a) A driver perfectly on the road is never off-route.
+  const onRoad = new MotionTrack();
+  onRoad.setRoute(path);
+  for (const f of fixes) onRoad.push(f);
+  ok(!onRoad.isOffRoute(45, 3), "a driver following the road is not off-route");
+
+  // (b) A single wild outlier among good fixes — one multipath bounce off a
+  //     tall building must never discard a perfectly good road.
+  const blip = new MotionTrack();
+  blip.setRoute(path);
+  for (const f of fixes) blip.push(f);
+  const lastFix = fixes[fixes.length - 1];
+  blip.push({
+    lat: lastFix.lat + 0.0009, lng: lastFix.lng,
+    heading: 40, speed: 14, accuracy: 8,
+    seq: 900, receivedAt: lastFix.receivedAt + 1500,
+  });
+  ok(!blip.isOffRoute(45, 3), "one outlier among good fixes is not off-route");
+
+  // (c) THE RE-ROUTE STORM. A new road starts where the driver is now, so
+  //     every fix already buffered sits behind its start and measures far
+  //     "off" it. Judging a fresh route by the history of the old one made
+  //     each re-route trigger the next; the live budget of 25 was spent in
+  //     minutes and the professional was left with a stale road and a retry
+  //     button. A new route must start with no verdict.
+  const longFixes = trace(220);
+  const longPath = longFixes.map((f) => ({ lat: f.lat, lng: f.lng }));
+  const rerouted = new MotionTrack();
+  rerouted.setRoute(longPath);
+  for (let i = 0; i < 12; i++) rerouted.push(longFixes[i]);
+
+  // Re-route: a fresh road anchored at the driver's current position.
+  const freshRoute = longFixes.slice(11).map((f) => ({ lat: f.lat, lng: f.lng }));
+  rerouted.setRoute(freshRoute);
+  ok(
+    !rerouted.isOffRoute(45, 3),
+    "a freshly attached route is not instantly judged abandoned by old fixes",
+  );
+  // And it still cannot fire until enough NEW fixes have accumulated.
+  rerouted.push({
+    lat: longFixes[12].lat, lng: longFixes[12].lng,
+    heading: 40, speed: 14, accuracy: 8,
+    seq: 950, receivedAt: longFixes[12].receivedAt,
+  });
+  ok(!rerouted.isOffRoute(45, 3), "one fix after a re-route is not enough to re-route again");
+
+  // (d) A real, measured, sustained departure still triggers — ~90 m sideways,
+  //     past the 25 m snap limit but very much measured.
+  const departed = new MotionTrack();
+  departed.setRoute(longPath);
+  for (let i = 0; i < 20; i++) departed.push(longFixes[i]);
+  let s2 = 800;
+  let offCount = 0;
+  for (let i = 20; i < 26; i++) {
+    departed.push({
+      lat: longFixes[i].lat + 0.0008, // ~89 m north of the road
+      lng: longFixes[i].lng,
+      heading: 40, speed: 14, accuracy: 8,
+      seq: ++s2,
+      receivedAt: longFixes[i].receivedAt,
+    });
+    if (departed.isOffRoute(45, 3)) offCount++;
+  }
+  ok(offCount > 0, "a sustained measured deviation still reports off-route");
+}
+
 console.log(failures === 0 ? "\nALL MOTION CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

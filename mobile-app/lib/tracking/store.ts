@@ -162,9 +162,26 @@ export class TrackingStore {
     return this.track.renderRoute;
   }
 
-  /** How far along the road the marker has travelled, in metres. */
+  /**
+   * How far along the road the newest RAW fix is, in metres.
+   *
+   * Reality as of the last packet. Use it to DECIDE things (is a re-route
+   * warranted), never to draw them — it describes a different instant from the
+   * marker, which is rendered `RENDER_DELAY_MS` in the past.
+   */
   get routeOffsetM(): number | null {
     return this.track.routeOffsetM;
+  }
+
+  /**
+   * How far along the road the marker is being DRAWN, in metres.
+   *
+   * Everything visual — the traversed/remaining seam, the distance to the next
+   * turn — must come from here, so that the avatar, the colour split and the
+   * countdown all depict the same instant. Null until the first matched frame.
+   */
+  get renderOffsetM(): number | null {
+    return this.snapshot?.routeOffsetM ?? null;
   }
 
   /** Lateral distance of the newest fix from the route; null when unmatched. */

@@ -9,7 +9,7 @@
  * views, so their animations keep running). Route + radius are GeoJSON layers.
  * The Camera is controlled by `center`, so during tracking it follows the pro.
  */
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, type NativeSyntheticEvent } from "react-native";
 import {
   Camera,
@@ -83,6 +83,7 @@ export default function CareLinkMapNative({
   trackingVariant,
   trackingPaddingBottom,
   trackingProgressM,
+  trackingProgressFromStore,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -120,8 +121,49 @@ export default function CareLinkMapNative({
   // Where to break the line, expressed as an INDEX INTO THE ARRAY BEING DRAWN.
   // When tracking, it is derived from metres travelled along that same array,
   // so the split cannot drift out of step with the geometry on screen.
+  /**
+   * Split index taken from the store's RENDER offset, updated on this leaf.
+   *
+   * Subscribing here rather than lifting the offset into the screen is what
+   * keeps the seam glued to the avatar without paying for it: the index only
+   * changes when the marker crosses a route vertex — every few metres, so a
+   * couple of times a second at urban speed — and only then is a new GeoJSON
+   * pair uploaded. Tracking the raw metres instead would re-upload both
+   * sources on every animation frame, which is the flicker the memoisation
+   * above exists to prevent.
+   */
+  const [storeSplitIdx, setStoreSplitIdx] = useState<number | null>(null);
+  const indexForOffset = useCallback(
+    (offsetM: number): number => {
+      if (!route || route.length < 2) return 0;
+      let acc = 0;
+      for (let i = 1; i < route.length; i++) {
+        const dLat = (route[i].lat - route[i - 1].lat) * 111_320;
+        const dLng =
+          (route[i].lng - route[i - 1].lng) * 111_320 * Math.cos((route[i].lat * Math.PI) / 180);
+        acc += Math.hypot(dLat, dLng);
+        if (acc >= offsetM) return i;
+      }
+      return route.length - 1;
+    },
+    [route],
+  );
+  useEffect(() => {
+    if (!trackingProgressFromStore || !trackingStore) {
+      setStoreSplitIdx(null);
+      return;
+    }
+    const read = () => {
+      const off = trackingStore.renderOffsetM;
+      setStoreSplitIdx(off == null ? null : indexForOffset(off));
+    };
+    read();
+    return trackingStore.subscribe(read);
+  }, [trackingProgressFromStore, trackingStore, indexForOffset]);
+
   const splitIdx = useMemo(() => {
     if (!route || route.length < 2) return progressIdx;
+    if (storeSplitIdx != null) return storeSplitIdx;
     if (trackingProgressM == null) return progressIdx;
     let acc = 0;
     for (let i = 1; i < route.length; i++) {
@@ -132,7 +174,7 @@ export default function CareLinkMapNative({
       if (acc >= trackingProgressM) return i;
     }
     return route.length - 1;
-  }, [route, progressIdx, trackingProgressM]);
+  }, [route, progressIdx, trackingProgressM, storeSplitIdx]);
 
   const traversedData = useMemo(() => {
     if (!route || route.length < 2) return null;

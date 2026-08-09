@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -270,7 +270,7 @@ export default function ProTrackingScreen() {
     // the next fix matters after a re-route: otherwise the banner spends up to
     // a second measuring the OLD offset against the NEW maneuvers, which is a
     // countdown to the wrong junction.
-    setRouteProgressM(trackingStore.routeOffsetM ?? null);
+    setRouteProgressM(trackingStore.renderOffsetM ?? trackingStore.routeOffsetM ?? null);
   }, [trackingStore, route]);
 
   /**
@@ -293,10 +293,11 @@ export default function ProTrackingScreen() {
         seq: p.seq ?? Date.now(),
         receivedAt: Date.now(),
       });
-      // Read straight back out: `push` matches the fix to the route
-      // synchronously, so this is the offset for the fix we just accepted.
-      // Everything the banner says is derived from it.
-      setRouteProgressM(trackingStore.routeOffsetM ?? null);
+      // The RENDER offset, not the raw one. The banner has to agree with the
+      // avatar and with the colour seam; reading the newest fix's offset here
+      // would put the turn countdown a render delay ahead of the marker, which
+      // is the same defect as the seam and just as visible at the junction.
+      setRouteProgressM(trackingStore.renderOffsetM ?? trackingStore.routeOffsetM ?? null);
     },
     [trackingStore],
   );
@@ -715,6 +716,15 @@ export default function ProTrackingScreen() {
   // the mission card. Measured on layout since its content height varies
   // (address line, action row, status button, etc.) — not a fixed constant.
   const [sheetHeight, setSheetHeight] = useState(0);
+  /**
+   * Mirrors the sheet's drag state on the JS thread.
+   *
+   * The camera needs to know how much of the map is actually covered so it can
+   * hold the marker above it, and the translation itself lives in a shared
+   * value the render pass cannot read. Only the settled state matters — the
+   * camera should not chase the sheet mid-drag.
+   */
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const sheetTranslateY = useSharedValue(0);
   const sheetDragStart = useSharedValue(0);
   const sheetMaxTranslate = Math.max(0, sheetHeight - SHEET_PEEK);
@@ -732,6 +742,7 @@ export default function ProTrackingScreen() {
         damping: 22,
         stiffness: 220,
       });
+      runOnJS(setSheetCollapsed)(shouldCollapse);
     });
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetTranslateY.value }],
@@ -800,11 +811,16 @@ export default function ProTrackingScreen() {
             destination={dest ?? undefined}
             // The SMOOTHED curve — exactly the path the marker walks.
             route={drawnRoute ?? undefined}
-            // Metres travelled, so the map can dim the road already covered.
-            // Without this the split index falls back to 0 and the pro's own
-            // map draws the WHOLE route as "remaining" for the entire trip —
-            // she had no visual sense of progress at all.
+            // The seam comes from the store's per-frame RENDER offset, so it
+            // depicts the same instant as the avatar. `trackingProgressM` is
+            // kept as the fallback for the frames before the first match.
+            trackingProgressFromStore
             trackingProgressM={routeProgressM}
+            // Keep the marker clear of the sheet. Without this the camera
+            // centres it in the full map view — which, with the sheet open, is
+            // underneath the sheet. Passed as camera padding, so the map itself
+            // stays full-bleed and dominant.
+            trackingPaddingBottom={sheetCollapsed ? SHEET_PEEK : sheetHeight}
             fitCoords={fit}
             trackingStore={trackingStore}
             trackingVariant="self"
@@ -883,7 +899,18 @@ export default function ProTrackingScreen() {
             />
           </View>
         ) : (
-          <Text style={s.title}>{t("en_route_to_patient")}</Text>
+          // "En route vers le patient" was printed on every state including
+          // finished and cancelled missions, which is simply untrue by the time
+          // someone opens one from their history.
+          <Text style={s.title}>
+            {status === "completed"
+              ? t("mission_completed")
+              : status === "cancelled"
+                ? t("job_cancelled")
+                : status === "in_progress"
+                  ? t("mission_in_progress")
+                  : t("en_route_to_patient")}
+          </Text>
         )}
 
         <View style={s.row}>

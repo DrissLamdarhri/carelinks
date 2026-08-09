@@ -406,6 +406,22 @@ export const addresses = {
     );
   },
 
+  /**
+   * The address a home visit should be sent to: the one marked default, or the
+   * most recent if none is. Null when the patient has saved none.
+   *
+   * Exists because two booking flows used to write the literal string
+   * "Meknès, Maroc" into `bookings.address` — so a professional in Fès was
+   * routed to a city an hour away, and the tracking map measured the whole
+   * journey against it. An address we do not have has to be asked for, never
+   * invented.
+   */
+  async defaultForUser(userId: UUID): Promise<Address | null> {
+    const rows = await addresses.listForUser(userId).catch(() => [] as Address[]);
+    if (rows.length === 0) return null;
+    return rows.find((a) => a.is_default) ?? rows[0];
+  },
+
   async create(input: Omit<Address, "id" | "created_at" | "updated_at">): Promise<Address> {
     return unwrap(await supabase.from("addresses").insert(input).select("*").single());
   },

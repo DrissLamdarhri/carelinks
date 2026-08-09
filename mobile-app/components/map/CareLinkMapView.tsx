@@ -102,6 +102,19 @@ export type CareLinkMapViewProps = {
    * route appears frozen while the marker drives on.
    */
   trackingProgressM?: number | null;
+  /**
+   * Take the traversed/remaining split from the tracking store's RENDERED
+   * offset instead of the `trackingProgressM` prop.
+   *
+   * The prop is sampled by the screen once per GPS fix, from the newest raw
+   * position — a different instant from the one the marker is drawn at, and
+   * frozen between fixes. Both errors push the colour seam ahead of the
+   * avatar. Reading the store's per-frame render offset removes both, and
+   * keeps the work on this leaf rather than re-rendering the screen.
+   *
+   * Opt-in so the patient's screen keeps its existing behaviour untouched.
+   */
+  trackingProgressFromStore?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 

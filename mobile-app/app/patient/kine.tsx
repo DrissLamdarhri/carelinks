@@ -101,12 +101,22 @@ export default function KineScreen() {
         setSubmitting(false);
         return;
       }
+      // The professional will be routed to whatever goes in `address`. It used
+      // to be the literal string "Meknès, Maroc" regardless of where the
+      // patient lived.
+      const home = await db.addresses.defaultForUser(user.id);
+      if (!home) {
+        toastError(t("address_required_booking"));
+        setSubmitting(false);
+        return;
+      }
+      const homeAddress = [home.street, home.city].filter(Boolean).join(", ");
       const [h, m] = ["10", "00"];
       const firstISO = new Date(`${dates[startDay].iso}T${h}:${m}:00`).toISOString();
       const rows = await db.bookings.createSeries(
         {
           patient_id: user.id, specialty: "physiotherapist", status: "matched",
-          professional_id: realId, address: "Meknès, Maroc",
+          professional_id: realId, address: homeAddress,
           notes: `${chosen?.name ?? t("spec_physio")} · ${t(FOCUS[focus])}`,
           budget_min_mad: PRICE, budget_max_mad: PRICE, final_price_mad: PRICE,
           session_mode: "in_person", plan_type: "subscription", recurrence: freq,
