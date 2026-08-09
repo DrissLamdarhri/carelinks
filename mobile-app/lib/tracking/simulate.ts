@@ -81,6 +81,21 @@ export type SimulateOptions = {
   onProgress?: (fraction: number) => void;
   onDone?: () => void;
   /**
+   * Receive each synthetic fix locally, as well as on the wire.
+   *
+   * The pro's screen does not listen to its own broadcast — it reads the
+   * device GPS — so without this the simulator can animate the patient's map
+   * and not the professional's.
+   */
+  onFix?: (fix: {
+    lat: number;
+    lng: number;
+    heading: number | null;
+    speed: number | null;
+    accuracy: number | null;
+    seq: number;
+  }) => void;
+  /**
    * Take a WRONG TURN at this offset (ms), driving a genuinely different road
    * to the same destination.
    *
@@ -103,7 +118,7 @@ export type SimulateOptions = {
 export function simulateTrip(opts: SimulateOptions): SimulationHandle {
   const {
     bookingId, path, personality = "normal", intervalMs = 1500, jitterM = 8, outage,
-    seed = 7, wrongTurnAtMs, destination, onProgress, onDone, onWrongTurn,
+    seed = 7, wrongTurnAtMs, destination, onProgress, onDone, onWrongTurn, onFix,
   } = opts;
 
   let route = new Route(path);
@@ -186,21 +201,27 @@ export function simulateTrip(opts: SimulateOptions): SimulationHandle {
 
     const at = driver.sample();
     const jitterDeg = jitterM / 111_320;
-    void channel.send({
-      type: "broadcast",
-      event: "position",
-      payload: {
-        lat: at.point.lat + (rnd() - 0.5) * 2 * jitterDeg,
-        lng: at.point.lng + (rnd() - 0.5) * 2 * jitterDeg,
-        at: new Date().toISOString(),
-        // A stationary phone reports no usable course; publishing one anyway
-        // would let the marker point somewhere meaningless at a red light.
-        heading: at.stopped ? null : at.heading,
-        speed: at.speed,
-        accuracy: 5 + rnd() * 7,
-        seq: ++seq,
-      },
-    });
+    const payload = {
+      lat: at.point.lat + (rnd() - 0.5) * 2 * jitterDeg,
+      lng: at.point.lng + (rnd() - 0.5) * 2 * jitterDeg,
+      at: new Date().toISOString(),
+      // A stationary phone reports no usable course; publishing one anyway
+      // would let the marker point somewhere meaningless at a red light.
+      heading: at.stopped ? null : at.heading,
+      speed: at.speed,
+      accuracy: 5 + rnd() * 7,
+      seq: ++seq,
+    };
+    void channel.send({ type: "broadcast", event: "position", payload });
+    // Hand the SAME fix to the local pipeline.
+    //
+    // Broadcasting alone only ever animated the patient's screen: the pro's
+    // own `LiveTrackingChannel` subscribes to the channel in "watch" mode only
+    // — in "broadcast" mode it takes positions from the device GPS and nothing
+    // else. So the one screen the simulator lives on was the one screen it
+    // could not drive, and the pro-side map could only be judged by physically
+    // driving. This closes that.
+    onFix?.(payload);
   }, PHYSICS_MS);
 
   function stop() {

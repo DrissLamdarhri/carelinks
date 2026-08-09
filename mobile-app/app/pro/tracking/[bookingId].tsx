@@ -81,6 +81,8 @@ const ARRIVAL_RADIUS_KM = 0.06;
  * screen and the professional gets an explicit retry instead.
  */
 const MAX_AUTO_REROUTES = 25;
+/** Longest stretch the dev simulator will drive, in metres. */
+const SIM_MAX_M = 2500;
 
 export default function ProTrackingScreen() {
   const { t } = useI18n();
@@ -271,7 +273,15 @@ export default function ProTrackingScreen() {
     setRouteProgressM(trackingStore.routeOffsetM ?? null);
   }, [trackingStore, route]);
 
-  const onNursePosition = useCallback(
+  /**
+   * True while the dev simulator owns the position stream.
+   *
+   * A ref, not state, because it is read inside the position callback and must
+   * be correct on the very next fix rather than on the next render.
+   */
+  const simOwnsPositionRef = useRef(false);
+
+  const pushPosition = useCallback(
     (p: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null; seq?: number | null }) => {
       setNurse({ lat: p.lat, lng: p.lng });
       trackingStore.push({
@@ -289,6 +299,24 @@ export default function ProTrackingScreen() {
       setRouteProgressM(trackingStore.routeOffsetM ?? null);
     },
     [trackingStore],
+  );
+
+  /**
+   * Positions arriving from the device.
+   *
+   * Dropped while the simulator is driving. Without this the two streams
+   * interleave: the real GPS keeps reporting the phone parked on a desk while
+   * the simulator reports a vehicle moving away from it, and every alternation
+   * is a jump the motion filter correctly rejects as a teleport — so the marker
+   * sits perfectly still and the run says nothing. In production the ref is
+   * always false and this is a straight pass-through.
+   */
+  const onNursePosition = useCallback(
+    (p: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null; seq?: number | null }) => {
+      if (simOwnsPositionRef.current) return;
+      pushPosition(p);
+    },
+    [pushPosition],
   );
   const broadcasting = booking?.status === "en_route";
   // `request: true` — this is the one screen where asking is unambiguous: the
@@ -446,6 +474,12 @@ export default function ProTrackingScreen() {
     if (simRef.current) {
       simRef.current.stop();
       simRef.current = null;
+      simOwnsPositionRef.current = false;
+      // Hand the pipeline back to the device cleanly: the next real fix is
+      // wherever the phone actually is, which is a long way from where the
+      // simulation left the marker, and without a reset that first honest fix
+      // would be thrown away as a teleport.
+      trackingStore.reset();
       setSimulating(false);
       return;
     }
@@ -466,28 +500,53 @@ export default function ProTrackingScreen() {
     // Starting ~1.6km away and following the real road in means the drawn route
     // and the driven path are the same geometry, so map-matching engages and
     // the marker is glued to the street exactly as in production.
+    // DRIVE AWAY FROM WHERE THE PROFESSIONAL ACTUALLY IS.
+    //
+    // This used to start 1.6 km from the DESTINATION, which works when the run
+    // is being judged on the patient's screen but is unusable on this one: with
+    // the patient 70 km away (a real test: pro in Fès, patient in Meknès) every
+    // synthetic fix was 70 km from the last real one, and `MotionTrack.push`
+    // rejected all of them as teleports — correctly. The marker never moved and
+    // the run said nothing.
+    //
+    // Starting at the professional's own position keeps the fixes contiguous
+    // with their real GPS, and drives the first stretch of the ACTUAL route, so
+    // the road on screen and the road being driven are the same geometry.
     const target = dest ?? nurse;
-    if (!target) {
+    const origin = nurse ?? dest;
+    if (!target || !origin) {
       showToast("Position inconnue — impossible de simuler");
       return;
     }
     setSimulating(true);
+    // Take the stream before the first synthetic fix lands, and clear whatever
+    // the device put in the pipeline so the handover is not read as a jump.
+    simOwnsPositionRef.current = true;
+    trackingStore.reset();
     const who = PERSONALITIES[personalityIdx.current % PERSONALITIES.length];
     personalityIdx.current += 1;
     showToast(`Conducteur : ${who}`);
-    // A fixed bearing keeps runs comparable between attempts.
-    const startM = 1600;
-    const brg = 40 * (Math.PI / 180);
-    const start = {
-      lat: target.lat + (startM * Math.cos(brg)) / 111_320,
-      lng: target.lng + (startM * Math.sin(brg)) / (111_320 * Math.cos((target.lat * Math.PI) / 180)),
-    };
 
-    const { coords, fromRouter } = await fetchRoute(start, target);
+    const { coords, fromRouter } = await fetchRoute(origin, target);
     // A straight line is not a road; map-matching would rightly distrust it and
     // the run would tell us nothing about the real experience.
-    const path = fromRouter && coords.length >= 2 ? coords : syntheticLoop(target, 500);
+    let path = fromRouter && coords.length >= 2 ? coords : syntheticLoop(origin, 500);
     if (!fromRouter) showToast("Routage indisponible — boucle synthétique");
+    // A cross-city job is a 70 km road. Driving all of it at realistic speed is
+    // an hour-long run; the first couple of kilometres contain every junction
+    // type worth looking at.
+    if (fromRouter) {
+      const full = new Route(path);
+      if (full.usable && full.length > SIM_MAX_M) {
+        const stepM = 8;
+        const truncated: LatLng[] = [];
+        for (let m = 0; m <= SIM_MAX_M; m += stepM) {
+          const at = full.positionAt(m);
+          if (at) truncated.push(at.point);
+        }
+        path = truncated;
+      }
+    }
 
     simRef.current = simulateTrip({
       bookingId,
@@ -504,16 +563,31 @@ export default function ProTrackingScreen() {
       wrongTurnAtMs: wrongTurn ? 35_000 : undefined,
       destination: wrongTurn ? target : undefined,
       onWrongTurn: () => showToast("Mauvais virage — déviation en cours"),
+      // Feed the local pipeline too. Broadcasting alone only drives the
+      // PATIENT's map — this screen reads the device GPS, not the channel.
+      //
+      // The seq is REWRITTEN on the way in. The simulator numbers its own
+      // fixes from 1, while real fixes arriving from the device carry
+      // `Date.now()`; `MotionTrack` drops anything whose seq is not greater
+      // than the last one it accepted, so a simulator started after even one
+      // real fix had every single sample rejected as stale-seq and the marker
+      // sat still. Wall-clock keeps it monotonic against both sources.
+      onFix: (f) => pushPosition({ ...f, seq: Date.now() }),
       // A 10s dropout partway, so dead reckoning and the staleness banner are
       // exercised in the same run rather than needing a separate tunnel test.
       outage: wrongTurn ? undefined : [30_000, 40_000],
       onDone: () => {
         simRef.current = null;
+        // Release the stream, or the device's own fixes stay blocked for the
+        // rest of the session: the marker goes stale, `routeOffsetM` never
+        // updates again, and the banner sits on "calculating" forever.
+        simOwnsPositionRef.current = false;
+        trackingStore.reset();
         setSimulating(false);
         showToast("Simulation terminée");
       },
     });
-  }, [bookingId, nurse, dest]);
+  }, [bookingId, nurse, dest, pushPosition, trackingStore]);
 
   const advance = useCallback(
     async (status: BookingStatus, doneMsg: string) => {
