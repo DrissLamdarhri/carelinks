@@ -389,7 +389,26 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
 
-  meWrap: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  /**
+   * Sized to CONTAIN the ripple, not just the dot.
+   *
+   * This box was 34x34 — the size of the marker itself — while `meRing` is a
+   * 34x34 FILLED disc that animates up to scale 2.8, i.e. ~95px. Everything
+   * past the box edge is clipped to the box's rectangle, and a filled disc
+   * clipped to a square IS a square: on the professional's night map that
+   * rendered as a solid teal block sitting where the position marker should be.
+   *
+   * It only bit the "self" marker. `TrackingMarker`, which the patient sees,
+   * scales its rings 0.55 -> 1.0 so they never reach the edge, and strokes them
+   * (`borderWidth`) instead of filling them — so even at the boundary there is
+   * no solid area to clip into a shape.
+   *
+   * 96 = 34 x 2.8 rounded up, so the largest ripple frame still finishes inside
+   * the box. The marker's appearance, colours and animation are unchanged;
+   * this only stops the clip. The box is transparent and `pointerEvents="none"`,
+   * so a larger one costs nothing.
+   */
+  meWrap: { width: 96, height: 96, alignItems: "center", justifyContent: "center" },
   // NO elevation / shadow here. Android renders `elevation` as a shadow of the
   // view's RECTANGULAR bounds — it can't derive the silhouette from an SVG
   // child — so a drop shadow on this wrapper paints a visible grey box behind
