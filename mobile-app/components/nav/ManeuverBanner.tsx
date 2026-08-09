@@ -139,28 +139,33 @@ export function ManeuverBanner({ status, guidance, t }: Props) {
     const unavailable = status === "unavailable";
     return (
       <View style={[s.card, unavailable && s.cardMuted]}>
-        <View style={s.iconTile}>
-          {unavailable ? (
-            <MapPinOff size={22} color="#FFFFFF" strokeWidth={2.4} />
-          ) : (
-            <ActivityIndicator color="#FFFFFF" />
-          )}
-        </View>
-        <View style={s.body}>
-          <Text style={s.pendingTitle} numberOfLines={1}>
-            {unavailable
-              ? t("nav_route_unavailable")
-              : status === "recalculating"
-                ? t("nav_recalculating")
-                : status === "locating"
-                  ? t("locating")
-                  : t("calculating_route")}
-          </Text>
-          {unavailable ? (
-            <Text style={s.road} numberOfLines={1}>
-              {t("nav_route_unavailable_sub")}
+        {/* Same row wrapper as the guiding branch. Without it these children
+            land in `card`, which is a column, and the icon sits ABOVE the text
+            instead of beside it. */}
+        <View style={s.primaryRow}>
+          <View style={s.iconTile}>
+            {unavailable ? (
+              <MapPinOff size={22} color="#FFFFFF" strokeWidth={2.4} />
+            ) : (
+              <ActivityIndicator color="#FFFFFF" />
+            )}
+          </View>
+          <View style={s.body}>
+            <Text style={s.pendingTitle} numberOfLines={1}>
+              {unavailable
+                ? t("nav_route_unavailable")
+                : status === "recalculating"
+                  ? t("nav_recalculating")
+                  : status === "locating"
+                    ? t("locating")
+                    : t("calculating_route")}
             </Text>
-          ) : null}
+            {unavailable ? (
+              <Text style={s.road} numberOfLines={1}>
+                {t("nav_route_unavailable_sub")}
+              </Text>
+            ) : null}
+          </View>
         </View>
       </View>
     );
