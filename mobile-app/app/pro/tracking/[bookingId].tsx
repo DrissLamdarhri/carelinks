@@ -81,6 +81,16 @@ const ARRIVAL_RADIUS_KM = 0.06;
  * screen and the professional gets an explicit retry instead.
  */
 const MAX_AUTO_REROUTES = 25;
+/**
+ * Below this the vehicle is stopped or crawling and its lateral wander is GPS
+ * noise, not a decision. ~9 km/h — slower than any moving traffic, faster than
+ * the drift of a parked phone.
+ */
+const REROUTE_MIN_SPEED_MPS = 2.5;
+/** How long a deviation must persist, in wall-clock time, before it is real. */
+const OFF_ROUTE_SUSTAIN_MS = 6000;
+/** A freshly computed road is left alone this long before it can be replaced. */
+const REROUTE_QUIET_MS = 12_000;
 /** Longest stretch the dev simulator will drive, in metres. */
 const SIM_MAX_M = 2500;
 
@@ -390,11 +400,16 @@ export default function ProTrackingScreen() {
   const lastRerouteAtRef = useRef(0);
   const hasRouteRef = useRef(false);
   const rerouteCountRef = useRef(0);
+  /** When the current sustained deviation began, or null. See B3. */
+  const offRouteSinceRef = useRef<number | null>(null);
 
   const computeRoute = useCallback(
     async (origin: LatLng, destination: LatLng) => {
       reroutingRef.current = true;
       lastRerouteAtRef.current = Date.now();
+      // The verdict that produced this recompute is spent. A new road is judged
+      // from scratch, by fixes that arrive after it.
+      offRouteSinceRef.current = null;
       setRecalculating(true);
       try {
         const { coords, steps, fromRouter } = await fetchRoute(origin, destination, { steps: true });
@@ -448,7 +463,32 @@ export default function ProTrackingScreen() {
     // once: a single 60m outlier is a multipath bounce off a building, and
     // re-routing on it would discard a perfectly good road.
     const haveRoute = !!route && route.length >= 2 && hasRouteRef.current;
-    const offRoute = haveRoute && trackingStore.isOffRoute(OFF_ROUTE_M, 3);
+
+    // B2 — A STOPPED VEHICLE NEVER LEFT THE ROAD.
+    //
+    // At a junction at walking pace the GPS wanders across parallel segments,
+    // and lateral deviation says nothing about intent. Recorded on the field
+    // drive: the destination stayed ~150 m away for 80 seconds while the route
+    // was re-chosen underneath, with the countdown pinned at "70 m" and then
+    // "maintenant" — the professional was crawling in traffic the whole time.
+    // Reality can only contradict the plan while reality is moving.
+    const speedMps = trackingStore.latestFix?.speed ?? null;
+    const movingEnough = speedMps != null && speedMps >= REROUTE_MIN_SPEED_MPS;
+
+    // B3 — DEVIATION MUST PERSIST IN TIME, NOT MERELY ACROSS N SAMPLES.
+    //
+    // Three consecutive fixes is ~4.5 s while driving but can be under a second
+    // when fixes come densely, so the sample count alone is a weak claim. The
+    // clock is the honest measure of "they really did take another street".
+    const deviating = haveRoute && movingEnough && trackingStore.isOffRoute(OFF_ROUTE_M, 3);
+    if (!deviating) offRouteSinceRef.current = null;
+    else if (offRouteSinceRef.current == null) offRouteSinceRef.current = Date.now();
+    const sustainedFor = offRouteSinceRef.current == null ? 0 : Date.now() - offRouteSinceRef.current;
+    const offRoute = deviating && sustainedFor >= OFF_ROUTE_SUSTAIN_MS;
+
+    // B3 — and a quiet period after each recompute, so a fresh road gets a fair
+    // chance to be followed before it can be judged and replaced again.
+    if (haveRoute && Date.now() - lastRerouteAtRef.current < REROUTE_QUIET_MS) return;
 
     if (haveRoute && !offRoute) return;
     if (reroutingRef.current) return;
@@ -736,23 +776,62 @@ export default function ProTrackingScreen() {
     [guidanceRoute, routeProgressM],
   );
 
+  /**
+   * B4 — the last instruction we were able to give.
+   *
+   * A recompute takes a few hundred milliseconds and clears `guidance` while it
+   * runs. Replacing the whole card with a spinner for that window is what made
+   * the route feel untrustworthy: on the field recording the banner dropped to
+   * "Calcul de l'itinéraire…" repeatedly, and a driver who looks up during one
+   * of those windows has been given nothing. The previous instruction is still
+   * the best available answer until a better one exists.
+   */
+  const lastGuidanceRef = useRef<typeof guidance>(null);
+  if (guidance) lastGuidanceRef.current = guidance;
+
+  /**
+   * B1 — arrival is a STATE, not the absence of a route.
+   *
+   * Inside the arrival radius the screen deliberately clears the route: there
+   * is nothing left to navigate. But `navStatus` had no case for that, so it
+   * fell through to "calculating" and the app spent the entire final approach
+   * claiming to compute a route it had correctly decided not to compute — 110
+   * seconds of it on the recording, at exactly the moment the professional is
+   * looking for a door.
+   */
   const navigating = status === "matched" || status === "en_route";
-  const navStatus: NavStatus = !nurse
-    ? "locating"
-    : recalculating
-      ? "recalculating"
-      : !route
-        ? "calculating"
-        : !guidanceRoute?.usable
-          ? "unavailable"
-          : guidance
-            ? "guiding"
-            : "calculating";
+  const arrived = navigating && distanceKm != null && distanceKm <= ARRIVAL_RADIUS_KM;
+  const arrivalDistanceM = distanceKm != null ? distanceKm * 1000 : null;
+  /** Keep "destination on your left/right" if the route ever told us. */
+  const arrivalKey =
+    lastGuidanceRef.current?.current.dir === "arrive"
+      ? lastGuidanceRef.current.current.instructionKey
+      : "you_arrived";
+
+  // B4 — fall back to the last instruction rather than to a spinner. `arrived`
+  // is checked first: at the door the previous turn is no longer the answer.
+  const shownGuidance = arrived ? null : (guidance ?? lastGuidanceRef.current);
+
+  const navStatus: NavStatus = arrived
+    ? "arrived"
+    : !nurse
+      ? "locating"
+      : shownGuidance
+        ? "guiding"
+        : recalculating
+          ? "recalculating"
+          : !route
+            ? "calculating"
+            : !guidanceRoute?.usable
+              ? "unavailable"
+              : "calculating";
 
   // Clock time beats a duration for someone planning a day — "am I making my
   // 15:00?" is answered directly instead of by mental arithmetic.
   const arrivalAt =
-    guidance?.remainingS != null && guidance.remainingS > 0 ? arrivalClock(guidance.remainingS) : null;
+    shownGuidance?.remainingS != null && shownGuidance.remainingS > 0
+      ? arrivalClock(shownGuidance.remainingS)
+      : null;
 
   // A booking that has moved past `matched` was, by construction, already past
   // this gate once — `en_route` is only reachable by pressing "Je pars" on the
@@ -892,7 +971,14 @@ export default function ProTrackingScreen() {
               200m, turn left" is noise at exactly the moment she needs the
               mission controls instead. */}
           {navigating ? (
-            <ManeuverBanner status={navStatus} guidance={guidance} t={t} />
+            <ManeuverBanner
+              status={navStatus}
+              guidance={shownGuidance}
+              recalculating={recalculating}
+              arrivalDistanceM={arrivalDistanceM}
+              arrivalKey={arrivalKey}
+              t={t}
+            />
           ) : (
             <View style={{ flex: 1 }} />
           )}
@@ -944,11 +1030,11 @@ export default function ProTrackingScreen() {
         {/* Sits in the peek strip on purpose: dragging the sheet down to see
             the map must never hide how much journey is left or when she gets
             there. Falls back to the title before there is a route to measure. */}
-        {navigating && guidance ? (
+        {navigating && shownGuidance ? (
           <View style={s.tripRow}>
             <TripStrip
-              remainingM={guidance.remainingM}
-              remainingS={guidance.remainingS}
+              remainingM={shownGuidance.remainingM}
+              remainingS={shownGuidance.remainingS}
               arrivalAt={arrivalAt}
               t={t}
             />

@@ -382,5 +382,97 @@ ok(new GuidanceRoute([], STEPS).at(0) === null, "an empty geometry guides nothin
   ok(arrivalClock(3 * 60, new Date(2026, 7, 9, 9, 5, 0)) === "09:08", "single digits are padded");
 }
 
+// ── Re-route gating (B2/B3) ──────────────────────────────────────────────────
+// The pro screen decides when to recompute. The rule it applies is pure and is
+// mirrored here, because on the field recording the route was re-chosen while
+// the vehicle sat in traffic: the destination stayed ~150 m away for 80 s, the
+// countdown pinned at "70 m" then "maintenant", and the "then" line changed
+// three times. Deviation while stopped is GPS wander, not a decision.
+{
+  const MIN_SPEED = 2.5;
+  const SUSTAIN_MS = 6000;
+  const QUIET_MS = 12_000;
+
+  /** Exactly the predicate the screen applies, in the same order. */
+  function shouldReroute(o: {
+    haveRoute: boolean;
+    speedMps: number | null;
+    deviating: boolean;
+    offRouteSinceMs: number | null;
+    now: number;
+    lastRerouteAt: number;
+  }): boolean {
+    const moving = o.speedMps != null && o.speedMps >= MIN_SPEED;
+    const dev = o.haveRoute && moving && o.deviating;
+    const sustained = dev && o.offRouteSinceMs != null && o.now - o.offRouteSinceMs >= SUSTAIN_MS;
+    if (o.haveRoute && o.now - o.lastRerouteAt < QUIET_MS) return false;
+    return !o.haveRoute || sustained;
+  }
+
+  const base = {
+    haveRoute: true,
+    speedMps: 14,
+    deviating: true,
+    offRouteSinceMs: 0,
+    now: 100_000,
+    lastRerouteAt: 0,
+  };
+
+  // B2 — stationary and crawling never re-route, however far off they look.
+  ok(!shouldReroute({ ...base, speedMps: 0 }), "a stopped vehicle never re-routes");
+  ok(!shouldReroute({ ...base, speedMps: 1.2 }), "a crawling vehicle (4 km/h) never re-routes");
+  ok(!shouldReroute({ ...base, speedMps: null }), "an unknown speed never re-routes");
+  ok(shouldReroute({ ...base, speedMps: 3 }), "a moving vehicle with sustained deviation does");
+
+  // B3 — the deviation has to last, in wall-clock time.
+  ok(
+    !shouldReroute({ ...base, offRouteSinceMs: base.now - 1000 }),
+    "1s of deviation is not enough",
+  );
+  ok(
+    !shouldReroute({ ...base, offRouteSinceMs: base.now - (SUSTAIN_MS - 500) }),
+    "just under the sustain window is not enough",
+  );
+  ok(
+    shouldReroute({ ...base, offRouteSinceMs: base.now - SUSTAIN_MS }),
+    "exactly the sustain window is enough",
+  );
+
+  // B3 — a fresh road gets a quiet period before it can be replaced.
+  ok(
+    !shouldReroute({ ...base, lastRerouteAt: base.now - 3000 }),
+    "no re-route within the quiet period after the last one",
+  );
+  ok(
+    shouldReroute({ ...base, lastRerouteAt: base.now - (QUIET_MS + 1) }),
+    "re-routing resumes once the quiet period has passed",
+  );
+
+  // The FIRST route of a trip is never rationed by any of this.
+  ok(
+    shouldReroute({ ...base, haveRoute: false, speedMps: 0, deviating: false, offRouteSinceMs: null }),
+    "the first route is fetched immediately, stationary or not",
+  );
+
+  // A driver following the road is left alone.
+  ok(!shouldReroute({ ...base, deviating: false, offRouteSinceMs: null }), "on-route never re-routes");
+
+  // The recorded failure, replayed: crawling in traffic, GPS wandering off the
+  // line for a full minute. Must produce no recompute at all.
+  let reroutes = 0;
+  let since: number | null = null;
+  for (let tms = 0; tms <= 60_000; tms += 1500) {
+    const speed = 0.8; // stop-start traffic
+    const deviating = true;
+    const moving = speed >= MIN_SPEED;
+    if (!(moving && deviating)) since = null;
+    else if (since == null) since = tms;
+    if (shouldReroute({ haveRoute: true, speedMps: speed, deviating, offRouteSinceMs: since, now: tms, lastRerouteAt: -QUIET_MS })) {
+      reroutes++;
+    }
+  }
+  ok(reroutes === 0, `a minute crawling off-line triggers no recompute (got ${reroutes})`);
+}
+
 console.log(failures === 0 ? "  all guidance assertions passed" : `  ${failures} FAILURES`);
 if (failures > 0) process.exit(1);

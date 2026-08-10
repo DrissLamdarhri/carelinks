@@ -43,6 +43,7 @@ import {
   instructionText,
   type Guidance,
   type ManeuverDir,
+  NOW_M as NOW_LABEL_M,
   type NavPhase,
 } from "@/lib/tracking/guidance";
 
@@ -57,12 +58,39 @@ const NAVY = "#0D0870";
  * Saying "follow the address" is the honest answer and keeps the call button
  * one tap away.
  */
-export type NavStatus = "guiding" | "calculating" | "recalculating" | "unavailable" | "locating";
+export type NavStatus =
+  | "guiding"
+  | "calculating"
+  | "recalculating"
+  | "unavailable"
+  | "locating"
+  /**
+   * At the destination. A DISTINCT state, not the absence of a route.
+   *
+   * Inside the arrival radius the screen clears the route because there is
+   * nothing left to navigate — and without this case that fell through to
+   * "calculating", so the app spent the entire final approach claiming to
+   * compute a route it had correctly decided not to compute. Measured at 110
+   * seconds on a field recording, at exactly the point the professional is
+   * looking for a door.
+   */
+  | "arrived";
 
 type Props = {
   status: NavStatus;
   guidance: Guidance | null;
   t: (k: string) => string;
+  /**
+   * A recompute is in flight. Deliberately NOT a separate status: when an
+   * instruction is still available it stays on screen and this only adds a
+   * quiet hint, because a driver who glances up mid-recompute must not be
+   * handed a spinner where the turn used to be.
+   */
+  recalculating?: boolean;
+  /** Metres to the destination, for the arrival state. */
+  arrivalDistanceM?: number | null;
+  /** Arrival wording, so "destination à droite" survives the route being cleared. */
+  arrivalKey?: string;
 };
 
 /** The turn glyph. Never mirrored under RTL — left is left in every script. */
@@ -108,9 +136,17 @@ function isCommitted(phase: NavPhase): boolean {
   return phase === "imminent" || phase === "now";
 }
 
-export function ManeuverBanner({ status, guidance, t }: Props) {
+export function ManeuverBanner({
+  status,
+  guidance,
+  t,
+  recalculating = false,
+  arrivalDistanceM = null,
+  arrivalKey = "you_arrived",
+}: Props) {
   const phase: NavPhase = guidance?.phase ?? "cruise";
-  const committed = status === "guiding" && isCommitted(phase);
+  const committed =
+    status === "arrived" || (status === "guiding" && isCommitted(phase));
 
   // One slow breath while the turn is imminent. Deliberately subtle and
   // deliberately not a flash: peripheral vision notices a scale change without
@@ -133,6 +169,30 @@ export function ManeuverBanner({ status, guidance, t }: Props) {
   }, [committed, pulse]);
 
   const iconScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+
+  // ── Arrived ───────────────────────────────────────────────────────────────
+  // Reuses the committed treatment already used for an imminent maneuver, so
+  // no new colour or shape is introduced.
+  if (status === "arrived") {
+    const close = arrivalDistanceM == null || arrivalDistanceM < NOW_LABEL_M;
+    return (
+      <View style={s.card}>
+        <View style={s.primaryRow}>
+          <View style={[s.iconTile, s.iconTileHot]}>
+            <Flag size={24} color={NAVY} strokeWidth={2.6} />
+          </View>
+          <View style={s.body}>
+            <Text style={[s.distance, close && s.distanceWord, s.distanceHot]} numberOfLines={1}>
+              {close ? t("nav_now") : formatDistance(arrivalDistanceM ?? 0, t)}
+            </Text>
+            <Text style={s.instruction} numberOfLines={2}>
+              {t(arrivalKey)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   // ── Non-guiding states ────────────────────────────────────────────────────
   if (status !== "guiding" || !guidance) {
@@ -198,7 +258,18 @@ export function ManeuverBanner({ status, guidance, t }: Props) {
           <Text style={s.instruction} numberOfLines={2}>
             {instructionText(current, t)}
           </Text>
-          {current.road ? (
+          {/* B4 — the recompute is announced on the quiet third line, where the
+              street name lives, and nowhere else. The distance and the verb
+              stay exactly where they were, because they are still the best
+              answer available until a better one arrives. */}
+          {recalculating ? (
+            <View style={s.recalcRow}>
+              <ActivityIndicator size="small" color="rgba(255,255,255,0.72)" />
+              <Text style={s.road} numberOfLines={1}>
+                {t("nav_recalculating")}
+              </Text>
+            </View>
+          ) : current.road ? (
             <Text style={s.road} numberOfLines={1}>
               {current.road}
             </Text>
@@ -300,6 +371,7 @@ const s = StyleSheet.create({
   distanceHot: { color: Colors.accent },
   instruction: { color: "#FFFFFF", fontSize: 15.5, fontWeight: "700", lineHeight: 20, marginTop: 1 },
   road: { color: "rgba(255,255,255,0.72)", fontSize: 12.5, marginTop: 2 },
+  recalcRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
 
   pendingTitle: { color: "#FFFFFF", fontSize: 15.5, fontWeight: "700", lineHeight: 20 },
 
