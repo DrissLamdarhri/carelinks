@@ -115,6 +115,16 @@ export type CareLinkMapViewProps = {
    * Opt-in so the patient's screen keeps its existing behaviour untouched.
    */
   trackingProgressFromStore?: boolean;
+  /**
+   * Turn-by-turn framing for the camera: course-up while moving, tighter dead
+   * zone, closer zoom on an imminent maneuver.
+   *
+   * Off by default and never set by the patient's screen, so that camera keeps
+   * its pre-Phase-2 behaviour exactly.
+   */
+  trackingNavigating?: boolean;
+  /** Extra zoom while a maneuver is imminent. Navigation only. */
+  trackingZoomBoost?: number;
   style?: StyleProp<ViewStyle>;
 };
 

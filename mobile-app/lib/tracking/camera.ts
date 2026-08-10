@@ -35,6 +35,13 @@ export type CameraState = {
   zoom: number;
   /** Last centre the camera was commanded to. */
   center: { lat: number; lng: number } | null;
+  /**
+   * Map rotation last commanded, degrees. 0 = north-up.
+   *
+   * Held across commands so rotation can be rate-limited and dead-banded
+   * against what is actually on screen, not against the previous sample.
+   */
+  bearing: number;
 };
 
 export type CameraCommand = {
@@ -42,8 +49,10 @@ export type CameraCommand = {
   zoom: number;
   /** Map tilt in degrees. */
   pitch: number;
+  /** Map rotation, degrees. 0 = north-up. */
+  bearing: number;
   durationMs: number;
-  reason: "initial" | "drift" | "zoom-band" | "resume" | "fit";
+  reason: "initial" | "drift" | "zoom-band" | "resume" | "fit" | "rotate";
 };
 
 /**
@@ -118,14 +127,101 @@ export const ZOOM_BANDS: readonly ZoomBand[] = [
  * does not shrink the usable frame.
  */
 export const DEAD_ZONE = 0.30;
+/**
+ * Dead zone while NAVIGATING.
+ *
+ * Tighter than the tracking value. A patient watching someone approach wants
+ * the journey to breathe; a driver wants their position where they left it.
+ */
+export const NAV_DEAD_ZONE = 0.18;
 /** Idle time after a gesture before following resumes (ms). */
 export const RESUME_AFTER_MS = 6000;
 /** Drift correction. Long and soft: the camera should float, never snap. */
 const DRIFT_MS = 1200;
 const ZOOM_MS = 1100;
 
+// ── Course-up rotation ───────────────────────────────────────────────────────
+// STABILITY IS THE REQUIREMENT, not responsiveness. A map that yaws with every
+// GPS bearing wobble is worse than one that never rotates: the whole world
+// swims, and the driver loses the fixed frame they were using to read it.
+//
+// Three independent brakes, all of which must release before the map turns:
+//
+//   1. Only while genuinely moving. A stationary vehicle's course is noise.
+//   2. A dead band. Under this, the commanded bearing is simply not changed.
+//   3. A rate limit. Above this, the turn is stretched over more time rather
+//      than delivered faster.
+//
+// `sample.bearing` is already smoothed, short-path and rate-limited by the
+// motion pipeline, so this brakes an input that is itself well behaved.
+
+/** Below this the vehicle is stopped or crawling; course means nothing. */
+export const ROTATE_MIN_SPEED_MPS = 2.5;
+/** Bearing changes smaller than this never move the map. */
+export const ROTATE_DEADBAND_DEG = 8;
+/** Hard ceiling on how fast the world may yaw. */
+export const ROTATE_MAX_DEG_S = 45;
+/** Floor on a rotation ease, so small corrections still glide. */
+const ROTATE_MIN_MS = 450;
+
+/** Signed shortest angular difference from → to, in (-180, 180]. */
+function shortestAngleDelta(from: number, to: number): number {
+  return ((((to - from) % 360) + 540) % 360) - 180;
+}
+
+const norm360 = (d: number): number => ((d % 360) + 360) % 360;
+
+export type RotationPlan = {
+  /** Bearing to command. Equal to the current one when nothing should move. */
+  bearing: number;
+  /** True when this is a change worth issuing a command for on its own. */
+  changed: boolean;
+  /** Minimum ease duration that keeps the yaw under the rate limit. */
+  minDurationMs: number;
+};
+
+/**
+ * Decide the map's rotation. Pure, and the single place the brakes live.
+ *
+ * Returns the CURRENT bearing unchanged whenever any brake is engaged, which is
+ * most of the time and is the point.
+ */
+export function planRotation(
+  state: CameraState,
+  input: { navigating?: boolean; bearing?: number | null; speedMps: number | null },
+): RotationPlan {
+  const still: RotationPlan = { bearing: state.bearing, changed: false, minDurationMs: 0 };
+
+  // Not navigating: north-up, always. This is what keeps the patient's camera
+  // byte-identical — `navigating` is never set on that screen.
+  if (!input.navigating) {
+    if (state.bearing === 0) return still;
+    const delta = Math.abs(shortestAngleDelta(state.bearing, 0));
+    return { bearing: 0, changed: true, minDurationMs: (delta / ROTATE_MAX_DEG_S) * 1000 };
+  }
+
+  // Stopped: HOLD the last bearing rather than snapping back to north. A car
+  // waiting at a light would otherwise spin the world once on stopping and
+  // again on moving off — two large rotations to convey nothing.
+  const speed = input.speedMps ?? 0;
+  if (speed < ROTATE_MIN_SPEED_MPS) return still;
+  if (input.bearing == null) return still;
+
+  const target = norm360(input.bearing);
+  const delta = shortestAngleDelta(state.bearing, target);
+  if (Math.abs(delta) < ROTATE_DEADBAND_DEG) return still;
+
+  return {
+    bearing: target,
+    changed: true,
+    // Stretch the turn rather than accelerating it: a 90° corner becomes a
+    // two-second sweep, which reads as the map following rather than snapping.
+    minDurationMs: Math.max(ROTATE_MIN_MS, (Math.abs(delta) / ROTATE_MAX_DEG_S) * 1000),
+  };
+}
+
 export function initialCameraState(zoom = 16.0): CameraState {
-  return { mode: "following", userTouchedAt: null, zoom, center: null };
+  return { mode: "following", userTouchedAt: null, zoom, center: null, bearing: 0 };
 }
 
 /** Zoom for a speed, given the band currently applied (hysteresis). */
@@ -165,6 +261,17 @@ export type CameraInputs = {
   obscuredPx?: number;
   /** Metres between the last commanded centre and the marker. */
   distanceFromCenterM: number;
+  /**
+   * Turn-by-turn framing: course-up, tighter dead zone, closer zoom.
+   *
+   * Off by default, and the patient's screen never sets it — so every path
+   * below behaves exactly as it did before Phase 2 when this is absent.
+   */
+  navigating?: boolean;
+  /** Marker heading in degrees, for course-up. Ignored unless navigating. */
+  bearing?: number | null;
+  /** Extra zoom while a maneuver is imminent. Ignored unless navigating. */
+  zoomBoost?: number;
 };
 
 /**
@@ -185,35 +292,78 @@ export function nextCameraCommand(
     // Idle long enough — glide back, slowly, so it reads as the app helping
     // rather than snatching the map away.
     const zoom = zoomForSpeed(input.speedMps, state.zoom);
+    const rot = planRotation(state, input);
     return {
-      state: { ...state, mode: "following", userTouchedAt: null, zoom, center: input.target },
-      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: 1800, reason: "resume" },
+      state: { ...state, mode: "following", userTouchedAt: null, zoom, center: input.target, bearing: rot.bearing },
+      command: {
+        center: input.target,
+        zoom,
+        pitch: TRACKING_PITCH,
+        bearing: rot.bearing,
+        durationMs: Math.max(1800, rot.minDurationMs),
+        reason: "resume",
+      },
     };
   }
 
-  const zoom = zoomForSpeed(input.speedMps, state.zoom);
+  const zoom = zoomForSpeed(input.speedMps, state.zoom) + (input.navigating ? (input.zoomBoost ?? 0) : 0);
+  const rot = planRotation(state, input);
 
   // First frame: frame the subject.
   if (!state.center) {
     return {
-      state: { ...state, zoom, center: input.target },
-      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: 0, reason: "initial" },
+      state: { ...state, zoom, center: input.target, bearing: rot.bearing },
+      command: {
+        center: input.target,
+        zoom,
+        pitch: TRACKING_PITCH,
+        bearing: rot.bearing,
+        durationMs: 0,
+        reason: "initial",
+      },
     };
   }
 
   // A zoom band change is worth a camera move on its own, and recentres too.
   if (zoom !== state.zoom) {
     return {
-      state: { ...state, zoom, center: input.target },
-      command: { center: input.target, zoom, pitch: TRACKING_PITCH, durationMs: ZOOM_MS, reason: "zoom-band" },
+      state: { ...state, zoom, center: input.target, bearing: rot.bearing },
+      command: {
+        center: input.target,
+        zoom,
+        pitch: TRACKING_PITCH,
+        bearing: rot.bearing,
+        durationMs: Math.max(ZOOM_MS, rot.minDurationMs),
+        reason: "zoom-band",
+      },
     };
   }
 
   // Dead zone: hold still until the marker approaches the edge of the
-  // comfortable middle of the screen.
+  // comfortable middle of the screen. Navigation uses a tighter one — a driver
+  // wants their position where they left it.
   const usablePx = Math.max(120, input.viewportPx - (input.obscuredPx ?? 0));
-  const allowedM = (viewportSpanM(zoom, usablePx, input.target.lat) * DEAD_ZONE) / 2;
-  if (input.distanceFromCenterM < allowedM) return { state, command: null };
+  const zoneFraction = input.navigating ? NAV_DEAD_ZONE : DEAD_ZONE;
+  const allowedM = (viewportSpanM(zoom, usablePx, input.target.lat) * zoneFraction) / 2;
+  if (input.distanceFromCenterM < allowedM) {
+    // A TURN still has to move the map even when the marker has not left the
+    // dead zone — which is exactly what happens rounding a corner. Without
+    // this the world stays locked through the one moment rotation matters.
+    if (rot.changed) {
+      return {
+        state: { ...state, bearing: rot.bearing },
+        command: {
+          center: state.center,
+          zoom,
+          pitch: TRACKING_PITCH,
+          bearing: rot.bearing,
+          durationMs: rot.minDurationMs,
+          reason: "rotate",
+        },
+      };
+    }
+    return { state, command: null };
+  }
 
   // Far outside the frame — the subject is not merely drifting, they are
   // off-screen. Easing over more than a second means staring at empty map
@@ -222,12 +372,15 @@ export function nextCameraCommand(
   // normal easing.
   const lost = input.distanceFromCenterM > allowedM * 3;
   return {
-    state: { ...state, center: input.target },
+    state: { ...state, center: input.target, bearing: rot.bearing },
     command: {
       center: input.target,
       zoom,
       pitch: TRACKING_PITCH,
-      durationMs: lost ? 0 : DRIFT_MS,
+      bearing: rot.bearing,
+      // A recovery snap must not be slowed down by a pending rotation, but an
+      // ordinary drift correction should still respect the yaw rate limit.
+      durationMs: lost ? 0 : Math.max(DRIFT_MS, rot.minDurationMs),
       reason: lost ? "initial" : "drift",
     },
   };

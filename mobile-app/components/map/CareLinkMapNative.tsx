@@ -84,6 +84,8 @@ export default function CareLinkMapNative({
   trackingPaddingBottom,
   trackingProgressM,
   trackingProgressFromStore,
+  trackingNavigating,
+  trackingZoomBoost,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
@@ -333,6 +335,8 @@ export default function CareLinkMapNative({
           store={trackingStore}
           fallbackCenter={center}
           paddingBottom={trackingPaddingBottom}
+          navigating={trackingNavigating}
+          zoomBoost={trackingZoomBoost}
         />
       ) : (
         <Camera ref={cameraRef} />

@@ -41,7 +41,7 @@ import { useForegroundPosition } from "@/lib/hooks/useForegroundPosition";
 import { fetchRoute, type RouteStep } from "@/lib/routing";
 import { TrackingStore } from "@/lib/tracking/store";
 import { Route } from "@/lib/tracking/route";
-import { GuidanceRoute, arrivalClock } from "@/lib/tracking/guidance";
+import { GuidanceRoute, arrivalClock, IMMINENT_M } from "@/lib/tracking/guidance";
 import { simulateTrip, syntheticLoop, type SimulationHandle } from "@/lib/tracking/simulate";
 import type { Booking, BookingStatus, Profile } from "@/lib/db/types";
 
@@ -812,6 +812,28 @@ export default function ProTrackingScreen() {
   // is checked first: at the door the previous turn is no longer the answer.
   const shownGuidance = arrived ? null : (guidance ?? lastGuidanceRef.current);
 
+  /** A maneuver is close enough to commit to — drives the camera zoom boost. */
+  const imminent =
+    navigating && !arrived && (shownGuidance?.phase === "imminent" || shownGuidance?.phase === "now");
+
+  /**
+   * Phase 2 — one haptic per maneuver, at the 100 m threshold.
+   *
+   * Latched on the maneuver's own index rather than on the phase, because the
+   * phase can flap: a fix that wobbles across the boundary would otherwise buzz
+   * repeatedly at the same junction, which is worse than not buzzing at all.
+   * The latch clears when the maneuver changes, so the next turn gets its own.
+   */
+  const buzzedForRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!navigating || arrived || !shownGuidance) return;
+    const idx = shownGuidance.current.index;
+    if (buzzedForRef.current === idx) return;
+    if (shownGuidance.distanceToManeuverM > IMMINENT_M) return;
+    buzzedForRef.current = idx;
+    haptics.light();
+  }, [navigating, arrived, shownGuidance]);
+
   const navStatus: NavStatus = arrived
     ? "arrived"
     : !nurse
@@ -857,6 +879,7 @@ export default function ProTrackingScreen() {
    * camera should not chase the sheet mid-drag.
    */
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+
   const sheetTranslateY = useSharedValue(0);
   const sheetDragStart = useSharedValue(0);
   const sheetMaxTranslate = Math.max(0, sheetHeight - SHEET_PEEK);
@@ -876,6 +899,34 @@ export default function ProTrackingScreen() {
       });
       runOnJS(setSheetCollapsed)(shouldCollapse);
     });
+  /**
+   * Phase 2 — collapse the sheet once the trip actually starts.
+   *
+   * On the field recording the sheet took roughly 55% of the screen for the
+   * whole drive, so the map — the thing being navigated by — got less than
+   * half. Departure is the moment the mission card stops being the subject and
+   * the road becomes it.
+   *
+   * Collapsed, NOT hidden: the trip strip stays in the peek and the handle is
+   * still there, so one drag brings everything back. Applied once per
+   * transition rather than continuously, so it never fights a professional who
+   * has deliberately pulled it open again.
+   */
+  const autoCollapsedRef = useRef(false);
+  useEffect(() => {
+    if (status !== "en_route") {
+      autoCollapsedRef.current = false;
+      return;
+    }
+    if (autoCollapsedRef.current || sheetHeight <= 0) return;
+    autoCollapsedRef.current = true;
+    setSheetCollapsed(true);
+    sheetTranslateY.value = withSpring(Math.max(0, sheetHeight - SHEET_PEEK), {
+      damping: 22,
+      stiffness: 220,
+    });
+  }, [status, sheetHeight, sheetTranslateY]);
+
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetTranslateY.value }],
   }));
@@ -946,6 +997,11 @@ export default function ProTrackingScreen() {
             // The seam comes from the store's per-frame RENDER offset, so it
             // depicts the same instant as the avatar. `trackingProgressM` is
             // kept as the fallback for the frames before the first match.
+            // Phase 2 — turn-by-turn framing. Course-up while moving, tighter
+            // dead zone, and a closer zoom once a maneuver is imminent. Gated
+            // on `navigating`, which the patient's screen never sets.
+            trackingNavigating={navigating}
+            trackingZoomBoost={imminent ? 0.5 : 0}
             trackingProgressFromStore
             trackingProgressM={routeProgressM}
             // Keep the marker clear of the sheet. Without this the camera

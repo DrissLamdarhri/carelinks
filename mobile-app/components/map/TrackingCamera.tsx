@@ -51,10 +51,19 @@ type Props = {
    * the moment the sheet is dragged.
    */
   paddingBottom?: number;
+  /**
+   * Turn-by-turn framing: course-up, tighter dead zone, closer zoom.
+   *
+   * Off by default. The patient's screen never sets it, so its camera keeps
+   * behaving exactly as it did before Phase 2 — asserted in camera.replay.
+   */
+  navigating?: boolean;
+  /** Extra zoom while a maneuver is imminent. Navigation only. */
+  zoomBoost?: number;
 };
 
 export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function TrackingCamera(
-  { store, fallbackCenter, paddingBottom = 0 },
+  { store, fallbackCenter, paddingBottom = 0, navigating = false, zoomBoost = 0 },
   ref,
 ) {
   const cameraRef = useRef<CameraRef>(null);
@@ -62,6 +71,13 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
   // and tear down the store subscription mid-journey.
   const paddingBottomRef = useRef(paddingBottom);
   paddingBottomRef.current = paddingBottom;
+  // Same reason as the padding: read through refs so toggling navigation or
+  // approaching a turn does not re-create `apply` and tear down the store
+  // subscription mid-journey.
+  const navigatingRef = useRef(navigating);
+  navigatingRef.current = navigating;
+  const zoomBoostRef = useRef(zoomBoost);
+  zoomBoostRef.current = zoomBoost;
   const state = useRef<CameraState>(initialCameraState());
 
   useImperativeHandle(ref, () => ({
@@ -92,6 +108,12 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
       distanceFromCenterM: state.current.center
         ? distanceM(state.current.center, target)
         : Number.POSITIVE_INFINITY,
+      navigating: navigatingRef.current,
+      // The bearing of the curve the marker is actually travelling — already
+      // smoothed, short-path and rate-limited by the motion pipeline. The
+      // camera policy brakes it further before any of it reaches the map.
+      bearing: sample.bearing,
+      zoomBoost: zoomBoostRef.current,
     });
     state.current = next;
     if (!command) return; // the common case, and the point of the policy
@@ -100,6 +122,7 @@ export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function T
       center: [command.center.lng, command.center.lat],
       zoom: command.zoom,
       pitch: command.pitch,
+      bearing: command.bearing,
       duration: command.durationMs,
       padding: { top: 0, left: 0, right: 0, bottom: paddingBottomRef.current },
     });
