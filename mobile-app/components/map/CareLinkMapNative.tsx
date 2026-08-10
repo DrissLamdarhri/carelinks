@@ -279,7 +279,14 @@ export default function CareLinkMapNative({
     <Map
       style={[StyleSheet.absoluteFill, style]}
       mapStyle={mapStyleSpec}
-      attribution={false}
+      // REQUIRED, not decorative. The basemap is OpenStreetMap data served by
+      // MapTiler, and both licences oblige us to credit them wherever the map
+      // is shown. This was `false`, which was a licence breach on every screen.
+      // It renders as a small (i) that opens the credits — the least intrusive
+      // form the SDK offers, and bottom-left so it never sits under the
+      // recentre control or the maneuver banner.
+      attribution
+      attributionPosition={{ bottom: 8, left: 8 }}
       logo={false}
       compass
       compassHiddenFacingNorth
