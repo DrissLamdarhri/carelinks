@@ -6,6 +6,7 @@
  * eas.json build env before building the dev client, or the map tiles won't load.
  */
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
+import { isAfterMaghrib } from "@/lib/prayer-time";
 
 export const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY ?? "";
 
@@ -204,8 +205,8 @@ export function darkMapStyle(): StyleSpecification {
   return style as unknown as StyleSpecification;
 }
 
-/** Pick day/night automatically by local hour (night = 19:00–06:00). */
+/** Pick day/night automatically by Maghrib (sunset) — dark from Maghrib until
+ *  the next sunrise, not a fixed clock hour. */
 export function autoMapStyle(): StyleSpecification {
-  const h = new Date().getHours();
-  return h >= 19 || h < 6 ? darkMapStyle() : creamMapStyle();
+  return isAfterMaghrib() ? darkMapStyle() : creamMapStyle();
 }

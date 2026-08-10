@@ -16,13 +16,6 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
-import {
-  buildDemoMessages,
-  buildDemoProfile,
-  DEMO_PATIENT_ID,
-  DEMO_PRO_1_ID,
-  isDemoBookingId,
-} from "@/lib/demo-booking";
 
 const NAVY = "#0D0870";
 
@@ -71,9 +64,6 @@ const dayLabel = (iso: string) => {
 export function LiveChat({ bookingId, recipientId: _recipientId, recipientName = "Professionnel", recipientAvatar, bookingIds }: LiveChatProps) {
   const { user } = useAuth();
   const { t } = useI18n();
-  const isDemoBooking = isDemoBookingId(bookingId);
-  const demoRecipientId = _recipientId ?? DEMO_PRO_1_ID;
-  const demoPatientId = user?.id ?? DEMO_PATIENT_ID;
   // All bookings in this conversation (defaults to just the one).
   const threadIds = useMemo(
     () => (bookingIds && bookingIds.length ? Array.from(new Set(bookingIds)) : [bookingId]),
@@ -98,10 +88,6 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
     if (!bookingId) return;
     setLoading(true);
     try {
-      if (isDemoBooking) {
-        setMessages(buildDemoMessages(bookingId));
-        return;
-      }
       const { data, error } = await supabase
         .from("messages")
         .select("id, booking_id, sender_id, body, created_at")
@@ -114,24 +100,23 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
     } finally {
       setLoading(false);
     }
-  }, [threadIds, isDemoBooking]);
+  }, [threadIds]);
 
   useEffect(() => { void loadMessages(); }, [loadMessages]);
 
   // Mark the peer's messages as read once the thread is open, so unread counts
   // in the conversation list clear correctly.
   useEffect(() => {
-    if (isDemoBooking || !user?.id) return;
+    if (!user?.id) return;
     void supabase
       .from("messages")
       .update({ read_at: new Date().toISOString() })
       .in("booking_id", threadIds)
       .neq("sender_id", user.id)
       .is("read_at", null);
-  }, [threadIds, isDemoBooking, user?.id]);
+  }, [threadIds, user?.id]);
 
   useEffect(() => {
-    if (isDemoBooking) return;
     // Realtime has no reliable "in (...)" filter, so subscribe broadly and keep
     // only inserts that belong to this conversation's bookings.
     const idSet = new Set(threadIds);
@@ -148,15 +133,14 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [threadIds, isDemoBooking]);
+  }, [threadIds]);
 
   const sorted = useMemo(
     () => [...messages].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)),
     [messages]
   );
 
-  const isMine = (m: MessageRow) =>
-    isDemoBooking ? m.sender_id === demoPatientId || m.sender_id === DEMO_PATIENT_ID : m.sender_id === user?.id;
+  const isMine = (m: MessageRow) => m.sender_id === user?.id;
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
@@ -164,11 +148,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
     const body = input.trim();
     setInput("");
     try {
-      if (isDemoBooking) {
-        setMessages((prev) => [...prev, { id: `demo-msg-${Date.now()}`, booking_id: bookingId, sender_id: demoPatientId, body, created_at: new Date().toISOString() }]);
-        return;
-      }
-      if (!user?.id) throw new Error("Utilisateur non connecté.");
+      if (!user?.id) throw new Error(t("user_not_connected"));
       const { error } = await supabase.from("messages").insert({ booking_id: bookingId, sender_id: user.id, body });
       if (error) throw error;
     } catch (error) {
@@ -195,7 +175,7 @@ export function LiveChat({ bookingId, recipientId: _recipientId, recipientName =
           <View style={styles.emptyWrap}>
             <BubbleAvatar url={recipientAvatar} name={recipientName} />
             <Text style={styles.emptyTitle}>{t("start_conversation")}</Text>
-            <Text style={styles.emptySub}>Envoyez un message à {recipientName.split(" ")[0]}.</Text>
+            <Text style={styles.emptySub}>{t("cmp_send_message_to").replace("%s", recipientName.split(" ")[0])}</Text>
           </View>
         ) : null}
 

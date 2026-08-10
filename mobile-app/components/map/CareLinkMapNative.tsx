@@ -9,7 +9,7 @@
  * views, so their animations keep running). Route + radius are GeoJSON layers.
  * The Camera is controlled by `center`, so during tracking it follows the pro.
  */
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, type NativeSyntheticEvent } from "react-native";
 import {
   Camera,
@@ -22,6 +22,8 @@ import {
   ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
 import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
+import { LiveProMarker } from "./LiveProMarker";
+import { TrackingCamera, type TrackingCameraHandle } from "./TrackingCamera";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
 import type { ProPinData } from "./Pins";
@@ -59,6 +61,7 @@ function circleFeature(center: LatLng, radiusKm: number, steps = 64): GeoJSON.Fe
 export default function CareLinkMapNative({
   center,
   patient,
+  meHeading,
   destination,
   pros = [],
   pro,
@@ -75,16 +78,26 @@ export default function CareLinkMapNative({
   recenterKey,
   fitAllKey,
   follow,
+  trackingStore,
+  trackingArrived,
+  trackingVariant,
+  trackingPaddingBottom,
+  trackingProgressM,
+  trackingProgressFromStore,
   style,
 }: CareLinkMapViewProps) {
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
 
-  // Driver heading (deg) for the marker pointer — direction of travel along the route.
+  // Driver heading (deg) for the marker pointer — prefer the pro's real GPS
+  // course (reported live, only valid while actually moving) over the
+  // route-derived bearing, which is just a fallback for when the device
+  // hasn't reported a usable heading yet (stationary, cold GPS fix, demo path).
   const driverBearing = useMemo(() => {
+    if (pro?.heading != null) return pro.heading;
     if (!route || route.length < 2) return 0;
     const i = Math.min(progressIdx, route.length - 2);
     return bearingDeg(route[i], route[i + 1]);
-  }, [route, progressIdx]);
+  }, [pro?.heading, route, progressIdx]);
   // Memoized GeoJSON so frequent driver-position updates don't re-upload
   // unchanged sources (which caused flicker). Each segment needs ≥2 points.
   const radiusData = useMemo(
@@ -92,31 +105,116 @@ export default function CareLinkMapNative({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [patient?.lat, patient?.lng, center.lat, center.lng, radiusKm],
   );
-  // Split the route EXACTLY at the driver's position (pro) so the marker always
-  // rides the seam — traversed ends at the marker, remaining starts at it.
-  const splitPt = pro ? { lat: pro.lat, lng: pro.lng } : null;
+  // Where to break the route into traversed and remaining.
+  //
+  // This used to be forced through `pro` — the RAW GPS fix — so BOTH lines were
+  // dragged off the carriageway to wherever the last fix landed. With the
+  // marker drawn at its map-matched position ON the road, the result was a
+  // visible spur: the route detoured to a point beside the street while the
+  // marker sat on it. Invisible zoomed out, glaring zoomed in, and the direct
+  // cause of "the route doesn't pass underneath the marker".
+  //
+  // While tracking, the seam is a genuine route vertex instead. OSRM vertices
+  // are only metres apart, so the seam still lands under the marker — but it
+  // lands ON THE ROAD, because it IS the road.
+  const splitPt = trackingStore ? null : pro ? { lat: pro.lat, lng: pro.lng } : null;
+  // Where to break the line, expressed as an INDEX INTO THE ARRAY BEING DRAWN.
+  // When tracking, it is derived from metres travelled along that same array,
+  // so the split cannot drift out of step with the geometry on screen.
+  /**
+   * Split index taken from the store's RENDER offset, updated on this leaf.
+   *
+   * Subscribing here rather than lifting the offset into the screen is what
+   * keeps the seam glued to the avatar without paying for it: the index only
+   * changes when the marker crosses a route vertex — every few metres, so a
+   * couple of times a second at urban speed — and only then is a new GeoJSON
+   * pair uploaded. Tracking the raw metres instead would re-upload both
+   * sources on every animation frame, which is the flicker the memoisation
+   * above exists to prevent.
+   */
+  const [storeSplitIdx, setStoreSplitIdx] = useState<number | null>(null);
+  const indexForOffset = useCallback(
+    (offsetM: number): number => {
+      if (!route || route.length < 2) return 0;
+      let acc = 0;
+      for (let i = 1; i < route.length; i++) {
+        const dLat = (route[i].lat - route[i - 1].lat) * 111_320;
+        const dLng =
+          (route[i].lng - route[i - 1].lng) * 111_320 * Math.cos((route[i].lat * Math.PI) / 180);
+        acc += Math.hypot(dLat, dLng);
+        if (acc >= offsetM) return i;
+      }
+      return route.length - 1;
+    },
+    [route],
+  );
+  useEffect(() => {
+    if (!trackingProgressFromStore || !trackingStore) {
+      setStoreSplitIdx(null);
+      return;
+    }
+    const read = () => {
+      const off = trackingStore.renderOffsetM;
+      setStoreSplitIdx(off == null ? null : indexForOffset(off));
+    };
+    read();
+    return trackingStore.subscribe(read);
+  }, [trackingProgressFromStore, trackingStore, indexForOffset]);
+
+  const splitIdx = useMemo(() => {
+    if (!route || route.length < 2) return progressIdx;
+    if (storeSplitIdx != null) return storeSplitIdx;
+    if (trackingProgressM == null) return progressIdx;
+    let acc = 0;
+    for (let i = 1; i < route.length; i++) {
+      const dLat = (route[i].lat - route[i - 1].lat) * 111_320;
+      const dLng =
+        (route[i].lng - route[i - 1].lng) * 111_320 * Math.cos((route[i].lat * Math.PI) / 180);
+      acc += Math.hypot(dLat, dLng);
+      if (acc >= trackingProgressM) return i;
+    }
+    return route.length - 1;
+  }, [route, progressIdx, trackingProgressM, storeSplitIdx]);
+
   const traversedData = useMemo(() => {
     if (!route || route.length < 2) return null;
-    const pts = [...route.slice(0, progressIdx + 1), ...(splitPt ? [splitPt] : [])];
+    const pts = [...route.slice(0, splitIdx + 1), ...(splitPt ? [splitPt] : [])];
     return pts.length >= 2 ? lineFeature(pts) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, progressIdx, splitPt?.lat, splitPt?.lng]);
+  }, [route, splitIdx, splitPt?.lat, splitPt?.lng]);
   const remainingData = useMemo(() => {
     if (!route || route.length < 2) return null;
-    const pts = [...(splitPt ? [splitPt] : []), ...route.slice(progressIdx + 1)];
+    const pts = [...(splitPt ? [splitPt] : []), ...route.slice(splitIdx)];
     return pts.length >= 2 ? lineFeature(pts) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, progressIdx, splitPt?.lat, splitPt?.lng]);
+  }, [route, splitIdx, splitPt?.lat, splitPt?.lng]);
 
   // ── Camera: framed ONCE, then user-controlled (no fighting the finger) ──────
   // Tracking (has a route): fit the whole journey once → the driver glides
   // within view, user can pan/zoom freely. Booking: recenter only when the
   // patient's location actually changes (GPS / pin), not every render.
   const cameraRef = useRef<CameraRef>(null);
+  const trackingCameraRef = useRef<TrackingCameraHandle>(null);
+  // While the tracking camera owns the viewport, the legacy fit/fly effects
+  // below must stay out of its way — two controllers issuing camera commands
+  // is exactly the "map fights you" behaviour this replaces.
+  const liveCamera = !!trackingStore;
   const didFit = useRef(false);
-  const hasRoute = !!(fitCoords && fitCoords.length >= 2);
+  // A bounding box needs actual area. When every point in `fitCoords` is the
+  // same place (pro standing at the patient's door, two test phones on one
+  // desk), fitBounds gets a zero-area box and MapLibre snaps the camera to a
+  // meaningless zoom — the map just goes blank. Treat that as "no route" and
+  // fly to the point instead.
+  const fitSpan = useMemo(() => {
+    if (!fitCoords || fitCoords.length < 2) return 0;
+    const lngs = fitCoords.map((c) => c.lng);
+    const lats = fitCoords.map((c) => c.lat);
+    return Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));
+  }, [fitCoords]);
+  const hasRoute = fitSpan > 0.0004; // ≈45 m — below this there's nothing to frame
 
   useEffect(() => {
+    if (liveCamera) return; // TrackingCamera owns the viewport
     const cam = cameraRef.current;
     if (!cam) return;
     if (follow) {
@@ -138,11 +236,15 @@ export default function CareLinkMapNative({
       cam.flyTo({ center: [center.lng, center.lat], zoom: radiusKm > 0 ? 14 : 15, pitch: radiusKm > 0 ? 30 : 0, duration: 500 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRoute, center.lat, center.lng, radiusKm, follow]);
+  }, [hasRoute, center.lat, center.lng, radiusKm, follow, liveCamera]);
 
   // Re-center FAB → re-frame the route (tracking) or fly back to the patient (booking).
   useEffect(() => {
     if (recenterKey == null) return;
+    if (liveCamera) {
+      trackingCameraRef.current?.recenter();
+      return;
+    }
     const cam = cameraRef.current;
     if (!cam) return;
     if (hasRoute && fitCoords) {
@@ -183,6 +285,11 @@ export default function CareLinkMapNative({
       compassHiddenFacingNorth
       touchRotate
       touchPitch
+      onRegionIsChanging={(e) => {
+        // A real gesture, not our own easeTo. This is what stops the camera
+        // fighting the finger.
+        if (e.nativeEvent?.userInteraction) trackingCameraRef.current?.notifyUserGesture();
+      }}
       onPress={(e: NativeSyntheticEvent<PressEvent | PressEventWithFeatures>) => {
         const coords = (e.nativeEvent as unknown as { geometry?: { coordinates?: number[] } })?.geometry
           ?.coordinates;
@@ -213,7 +320,16 @@ export default function CareLinkMapNative({
       }}
     >
       {/* Uncontrolled camera — positioned imperatively so the user stays in control */}
-      <Camera ref={cameraRef} />
+      {liveCamera && trackingStore ? (
+        <TrackingCamera
+          ref={trackingCameraRef}
+          store={trackingStore}
+          fallbackCenter={center}
+          paddingBottom={trackingPaddingBottom}
+        />
+      ) : (
+        <Camera ref={cameraRef} />
+      )}
 
       {radiusData ? (
         <GeoJSONSource id="radius" data={radiusData}>
@@ -261,7 +377,7 @@ export default function CareLinkMapNative({
 
       {patient ? (
         <ViewAnnotation lngLat={[patient.lng, patient.lat]} anchor="center">
-          <MeMarker />
+          <MeMarker heading={meHeading} />
         </ViewAnnotation>
       ) : null}
 
@@ -290,7 +406,18 @@ export default function CareLinkMapNative({
         </ViewAnnotation>
       ))}
 
-      {pro ? (
+      {liveCamera && trackingStore ? (
+        // Live tracking: the marker subscribes to the store on its own leaf, so
+        // moving it does not re-render this map or the screen around it.
+        <LiveProMarker
+          store={trackingStore}
+          variant={trackingVariant}
+          arrived={trackingArrived}
+          avatarUrl={pro?.avatarUrl ?? null}
+          avatarSource={pro?.avatarSource}
+          initials={pro?.initials ?? ""}
+        />
+      ) : pro ? (
         <ViewAnnotation lngLat={[pro.lng, pro.lat]} anchor="center">
           <ProAvatarMarker
             pro={{ avatarSource: pro.avatarSource, avatarUrl: pro.avatarUrl, initials: pro.initials ?? "", specialty: pro.specialty, name: pro.name }}

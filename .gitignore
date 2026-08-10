@@ -84,3 +84,10 @@ coverage/
 .AppleDouble
 .LSOverride
 *.swp
+
+# Build artifacts
+*.apk
+*.aab
+
+# Motion replay harness output
+.motion-replay/

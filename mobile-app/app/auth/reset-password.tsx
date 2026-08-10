@@ -37,15 +37,28 @@ export default function ResetPasswordScreen() {
 
   useEffect(() => {
     let active = true;
+    const oneParam = (v: string | string[] | undefined): string | null =>
+      typeof v === "string" ? v : Array.isArray(v) ? v[0] : null;
     const handleUrl = async (url: string | null) => {
       if (!url) return;
       try {
+        // Supabase can hand back either a PKCE `code` (the default for mobile
+        // deep links) or the older `token_hash` + `type=recovery` pair,
+        // depending on how the project's email template is configured — try
+        // both so a dashboard template mismatch doesn't strand the user on
+        // "invalid link".
         const parsed = Linking.parse(url);
-        const raw = parsed.queryParams?.code;
-        const code = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : null;
+        const code = oneParam(parsed.queryParams?.code);
         if (code) {
           const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
           if (!exErr && active) setReady(true);
+          return;
+        }
+        const tokenHash = oneParam(parsed.queryParams?.token_hash);
+        const type = oneParam(parsed.queryParams?.type);
+        if (tokenHash && (type === "recovery" || !type)) {
+          const { error: otpErr } = await supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
+          if (!otpErr && active) setReady(true);
         }
       } catch {
         /* ignore */

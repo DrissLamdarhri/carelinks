@@ -86,12 +86,11 @@ import { useI18n } from "@/lib/i18n";
 // type TrackPosition = { lat: number; lng: number; at: string };
 
 // export default function LiveTrackingScreen() {
-  const { t } = useI18n();
+//   const { t } = useI18n();
 //   const router   = useRouter();
 //   const params   = useLocalSearchParams<{ bookingId?: string | string[] }>();
 //   const bookingId    = normalizeRouteParam(params.bookingId);
-//   const isDemoBooking = isDemoBookingId(bookingId);
-
+// 
 //   // ── Data ──────────────────────────────────────────────────────────────────
 //   const [booking,    setBooking]    = useState<Booking | null>(null);
 //   const [proProfile, setProProfile] = useState<Profile | null>(null);
@@ -145,7 +144,7 @@ import { useI18n } from "@/lib/i18n";
 //     };
 //     void load();
 //     return () => { cancelled = true; };
-//   }, [bookingId, isDemoBooking]);
+//   }, [bookingId]);
 
 //   // ── Demo: step pro along path ─────────────────────────────────────────────
 //   useEffect(() => {
@@ -210,7 +209,7 @@ import { useI18n } from "@/lib/i18n";
 //   return (
 //     <View style={styles.root}>
 //       {/* Supabase Realtime (non-visual) */}
-//       {!isDemoBooking && bookingId ? (
+//       {bookingId ? (
 //         <LiveTrackingChannel
 //           bookingId={bookingId}
 //           mode="watch"
@@ -502,6 +501,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -514,46 +514,60 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import ReAnimated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { AlertTriangle, Crosshair, MessageCircle, Phone, Share2, X } from "lucide-react-native";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
 import { showToast } from "@/lib/toast";
-import { DEFAULT_AVATAR } from "@/lib/colors";
+import { Colors, DEFAULT_AVATAR } from "@/lib/colors";
+import { careLabel } from "@/lib/care-label";
 import type { Booking, Profile } from "@/lib/db/types";
-import {
-  buildDemoBooking,
-  buildDemoProfile,
-  isDemoBookingId,
-  normalizeRouteParam,
-} from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { supabase } from "@/lib/supabase";
 import { LiveTrackingChannel } from "@/components/LiveTrackingChannel";
+import { fetchRoute } from "@/lib/routing";
+import { TrackingStore } from "@/lib/tracking/store";
+import { Route } from "@/lib/tracking/route";
 import { haversineKm, CREAM } from "@/components/map/engine";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
-import { DEMO_DRIVER_AVATAR } from "@/lib/demo-avatars";
 import { haptics } from "@/lib/haptics";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCREEN_W  = Dimensions.get("window").width;
 const SCREEN_H  = Dimensions.get("window").height;
-const MAP_H     = Math.round(SCREEN_H * 0.72); // ~72% = exactly the screenshot ratio
+/**
+ * The map gets the screen.
+ *
+ * Was 72%. A tracking screen whose lower third is a card feels cramped, and the
+ * sheet's job is to answer "who is coming" — a question asked once — while the
+ * map answers "where are they", which is asked continuously. The sheet still
+ * scrolls, so nothing is lost; it simply stops dominating.
+ */
+const MAP_H     = Math.round(SCREEN_H * 0.80);
+/**
+ * Bottom of the map deliberately kept clear of the marker.
+ *
+ * Passed to the camera as padding, so the professional settles ABOVE centre and
+ * the road ahead stays visible. People read a route forwards: framing the
+ * marker dead-centre spends half the screen on tarmac already driven.
+ */
+const FRAME_PAD = Math.round(SCREEN_H * 0.80 * 0.24);
 const NAVY      = "#0D0870";
+
+// ── Draggable sheet: drag the handle down to see the full map, back up to
+// return to the mission card. Same default position as before (sheet top at
+// MAP_H); collapsing slides it toward the bottom edge, leaving a small peek
+// strip (handle + progress row) so it's obvious how to bring it back up.
+const SHEET_EXPANDED_TOP = MAP_H - 24; // -24 preserves the original slight overlap onto the map
+const SHEET_PEEK_HEIGHT = 132;
+const SHEET_COLLAPSED_TOP = SCREEN_H - SHEET_PEEK_HEIGHT;
+const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 
 // ── Demo path ─────────────────────────────────────────────────────────────────
 type LatLng = { lat: number; lng: number };
 
 const MAP_CENTER: LatLng = { lat: 34.037, lng: -5.004 };
-
-const DEMO_PATH: LatLng[] = [
-  { lat: 34.052, lng: -4.982 },
-  { lat: 34.049, lng: -4.986 },
-  { lat: 34.046, lng: -4.990 },
-  { lat: 34.043, lng: -4.994 },
-  { lat: 34.040, lng: -4.998 },
-  { lat: 34.037, lng: -5.001 },
-];
-
-const DEMO_SPEED_KMH = 28; // Demo vehicle speed used for ETA calculations (km/h)
 
 // ── Pro avatar circle (photo or initials, exact style from screenshot) ─────────
 function ProAvatar({
@@ -591,7 +605,17 @@ const pa = StyleSheet.create({
   initials: { color: "#FFFFFF", fontWeight: "700" },
 });
 
-type TrackPosition = { lat: number; lng: number; at: string };
+type TrackPosition = {
+  lat: number;
+  lng: number;
+  at: string;
+  heading?: number | null;
+  speed?: number | null;
+  /** Reported GPS accuracy (m) — the pipeline rejects fixes too coarse to draw. */
+  accuracy?: number | null;
+  /** Monotonic per-session counter; lets late packets be dropped. */
+  seq?: number | null;
+};
 
 // ── Arrival confetti — pure RN primitives, native-driven, no external lib ─────
 function ConfettiBurst() {
@@ -637,17 +661,31 @@ function ConfettiBurst() {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function LiveTrackingScreen() {
+  // Was previously read from a stray `const { t } = useI18n();` left sitting
+  // at module scope inside the dead top-of-file draft (line ~89) — called
+  // once at import time, outside any component render, it froze on the
+  // I18nContext *default* value (`t: (k) => k`, before <I18nProvider> ever
+  // mounts) and every t() call on this whole screen silently returned the
+  // raw key forever after (this is why "call"/"share"/"message_action"/
+  // "waiting_pro_departure" rendered untranslated — every key was affected,
+  // not just those two). Calling the hook here, during the real render, is
+  // the actual fix.
+  const { t }         = useI18n();
   const router        = useRouter();
   const params        = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId     = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
 
   const [booking,    setBooking]    = useState<Booking | null>(null);
   const [proProfile, setProProfile] = useState<Profile | null>(null);
+  const [proRating,  setProRating]  = useState<{ avg: number; count: number } | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [eta,        setEta]        = useState(10);
+  const [eta,        setEta]        = useState<number | null>(null);
   const [errorMsg,   setErrorMsg]   = useState<string | null>(null);
-  const [proCoord,   setProCoord]   = useState<LatLng>(DEMO_PATH[0]);
+  const [proCoord,   setProCoord]   = useState<LatLng | null>(null);
+  // The care destination, kept as its own value instead of being read back off
+  // `routeCoords[last]`. Deriving it from the polyline meant a stale route also
+  // meant a stale destination, and clearing the route erased the home marker.
+  const [destCoord,  setDestCoord]  = useState<LatLng | null>(null);
   const [routeCoords, setRouteCoords] = useState<LatLng[] | null>(null);
   const [routeCenter, setRouteCenter] = useState<LatLng | null>(null);
   const [routeLoaded, setRouteLoaded] = useState(false);
@@ -660,23 +698,47 @@ export default function LiveTrackingScreen() {
     avatar: null,
   });
 
-  // Index of the route point nearest the pro — splits traversed vs remaining
+  // Index of the route point nearest the pro — splits traversed vs remaining.
+  // Searches forward-only from the last matched index (small look-ahead
+  // window) instead of scanning the whole polyline: real roads curve back
+  // near themselves, so a global nearest-vertex search can jump BACKWARD to
+  // an earlier point whenever GPS noise (10-30m, normal on a phone) makes it
+  // briefly "closer" than the true current point — which is exactly what made
+  // the traversed/remaining split (and the heading arrow derived from it)
+  // visibly reverse while walking forward. Clamping the search to only look
+  // ahead makes progress monotonic: it can stall on noisy fixes, but it can
+  // never run backward.
+  const progressIdxRef = useRef(0);
+  const progressIdxRouteRef = useRef<LatLng[] | null>(null);
   const progressIdx = useMemo(() => {
-    if (!routeCoords || routeCoords.length < 2) return 0;
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < routeCoords.length; i++) {
+    if (!proCoord || !routeCoords || routeCoords.length < 2) {
+      progressIdxRef.current = 0;
+      progressIdxRouteRef.current = routeCoords ?? null;
+      return 0;
+    }
+    if (progressIdxRouteRef.current !== routeCoords) {
+      progressIdxRef.current = 0;
+      progressIdxRouteRef.current = routeCoords;
+    }
+    const LOOKAHEAD = 60;
+    const start = Math.min(progressIdxRef.current, routeCoords.length - 1);
+    const end = Math.min(routeCoords.length - 1, start + LOOKAHEAD);
+    let best = start;
+    let bestD = haversineKm(proCoord, routeCoords[start]);
+    for (let i = start + 1; i <= end; i++) {
       const d = haversineKm(proCoord, routeCoords[i]);
       if (d < bestD) {
         bestD = d;
         best = i;
       }
     }
+    progressIdxRef.current = best;
     return best;
   }, [proCoord, routeCoords]);
 
   const patientCoord: LatLng =
-    routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER;
+    destCoord ??
+    (routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER);
 
   // Distance to patient, refreshed every 5 s. Reads latest coords via refs so the
   // interval is created ONCE (depending on proCoord would recreate it every tick
@@ -685,24 +747,36 @@ export default function LiveTrackingScreen() {
   proCoordRef.current = proCoord;
   const patientCoordRef = useRef(patientCoord);
   patientCoordRef.current = patientCoord;
+  // Same tick also drives the "position is N min old" warning, so a stalled
+  // GPS stream surfaces on its own rather than waiting for a fix that may
+  // never come.
+  const [nowTs, setNowTs] = useState(() => Date.now());
   useEffect(() => {
-    const update = () => setDistanceKm(haversineKm(proCoordRef.current, patientCoordRef.current));
+    const update = () => {
+      setDistanceKm(
+        proCoordRef.current ? haversineKm(proCoordRef.current, patientCoordRef.current) : null,
+      );
+      setNowTs(Date.now());
+    };
     update();
     const iv = setInterval(update, 5000);
     return () => clearInterval(iv);
   }, []);
 
-  // Fire a success haptic + confetti once, when the professional arrives.
+  // Fire a success haptic + confetti once, when the professional declares
+  // arrival (booking → in_progress). Same source of truth as the "Arrivé !"
+  // banner — never GPS proximity, which used to set this off mid-journey.
   const arrivedHaptic = useRef(false);
+  const hasArrived = booking?.status === "in_progress" || booking?.status === "completed";
   useEffect(() => {
-    if (eta === 0 && !arrivedHaptic.current) {
+    if (hasArrived && !arrivedHaptic.current) {
       arrivedHaptic.current = true;
       haptics.success();
       setShowConfetti(true);
       const t = setTimeout(() => setShowConfetti(false), 3000);
       return () => clearTimeout(t);
     }
-  }, [eta]);
+  }, [hasArrived]);
 
   // ── Load booking ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -711,18 +785,15 @@ export default function LiveTrackingScreen() {
       if (!bookingId) { setLoading(false); setErrorMsg(t("reservation_not_found")); return; }
       setLoading(true);
       try {
-        if (isDemoBooking) {
-          const b = buildDemoBooking(bookingId);
-          if (!cancelled) {
-            setBooking(b);
-            setProProfile(buildDemoProfile(b.professional_id ?? ""));
-            setEta(10);
-          }
-          return;
-        }
         const b = await db.bookings.get(bookingId);
         let prof: Profile | null = null;
-        if (b.professional_id) prof = await db.profiles.get(b.professional_id).catch(() => null);
+        if (b.professional_id) {
+          prof = await db.profiles.get(b.professional_id).catch(() => null);
+          const pro = await db.pros.get(b.professional_id).catch(() => null);
+          if (!cancelled && pro) {
+            setProRating({ avg: Number(pro.rating_avg ?? 0), count: Number(pro.rating_count ?? 0) });
+          }
+        }
 
         // attempt to extract booking coordinates (RPC may have stored them as booking_lat/booking_lng or lat/lng)
         const tryExtractCoords = (obj: any): LatLng | null => {
@@ -752,120 +823,15 @@ export default function LiveTrackingScreen() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
-  // ── Demo path animation (smooth, speed-based with real route fetch) ──────
-  useEffect(() => {
-    if (!isDemoBooking) return;
-    let cancelled = false;
-    let iv: ReturnType<typeof setInterval> | undefined;
-
-    // If route not loaded, fetch route from OSRM between a demo start and the patient center
-    (async () => {
-      try {
-        // demo start (example in Fès outskirts) and destination (patient)
-        const demoStart = DEMO_PATH[0];
-        const dest = MAP_CENTER;
-        const coordsStr = `${demoStart.lng},${demoStart.lat};${dest.lng},${dest.lat}`;
-        const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
-        const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 5000); // don't hang → fall back to straight line
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`Routing error ${res.status}`);
-        const body = await res.json();
-        const coords: LatLng[] = body.routes && body.routes[0] && body.routes[0].geometry && body.routes[0].geometry.coordinates
-          ? body.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }))
-          : DEMO_PATH;
-
-        if (cancelled) return;
-        setRouteCoords(coords);
-
-        // compute center of route for projection
-        const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
-        const center = { lat: avg.lat / coords.length, lng: avg.lng / coords.length };
-        setRouteCenter(center);
-        setRouteLoaded(true);
-
-        // start smooth motion along route using speed
-        const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
-        const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
-
-        let current: LatLng = { ...coords[0] };
-        let targetIdx = 1;
-
-        const remainingMeters = (pos: LatLng, idx: number) => {
-          let rem = distMeters(pos, coords[idx]);
-          for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
-          return rem;
-        };
-
-        // initial ETA
-        const initialRem = remainingMeters(current, 1);
-        setEta(Math.max(0, Math.ceil(initialRem / speedMps / 60)));
-        setProCoord({ ...current });
-
-        const tickInterval = 120; // small, frequent steps → the marker glides
-        iv = setInterval(() => {
-          if (cancelled) return;
-          if (targetIdx >= coords.length) {
-            setEta(0);
-            setProCoord({ ...coords[coords.length - 1] });
-            if (iv) clearInterval(iv);
-            return;
-          }
-
-          const target = coords[targetIdx];
-          const segDist = distMeters(current, target);
-          if (segDist < 1) {
-            current = { ...target };
-            targetIdx += 1;
-            setProCoord({ ...current });
-            return;
-          }
-
-          const dt = tickInterval / 1000;
-          const move = Math.min(1, (speedMps * dt) / segDist);
-          current = {
-            lat: current.lat + (target.lat - current.lat) * move,
-            lng: current.lng + (target.lng - current.lng) * move,
-          };
-
-          setProCoord({ ...current });
-
-          const rem = remainingMeters(current, targetIdx);
-          const etaMin = Math.max(0, Math.ceil(rem / speedMps / 60));
-          setEta(etaMin);
-
-          if (targetIdx === coords.length - 1 && rem < 5) {
-            setEta(0);
-            setProCoord({ ...coords[coords.length - 1] });
-            if (iv) clearInterval(iv);
-          }
-        }, tickInterval);
-      } catch (e) {
-        // fallback to older local path if routing fails
-        console.warn("Route fetch failed, using demo path", e);
-        setRouteCoords(DEMO_PATH);
-        setRouteCenter(MAP_CENTER);
-        setRouteLoaded(true);
-        setProCoord(DEMO_PATH[0]);
-      }
-    })();
-
-    return () => { cancelled = true; if (iv) clearInterval(iv); };
-  }, [isDemoBooking]);
-
-  // ── Real booking route fetch: when booking + a pro origin or live origin available
+  // ── Real booking: seed the map from the pro's last known REAL position only.
+  // No synthetic origin, no scripted glide — if the pro hasn't shared a real
+  // location yet, the screen stays in the "waiting" state until they do.
   useEffect(() => {
     let cancelled = false;
-    let iv: ReturnType<typeof setInterval> | undefined;
-    if (isDemoBooking) return;
     if (!booking) return;
 
-    // Destination (patient) + pro origin come from PostGIS via get_track_coords.
-    // Fall back to a synthetic origin ~2.5 km away so the nurse always "comes to
-    // you" exactly like the demo — even before the pro publishes a live GPS.
     (async () => {
       let destC: LatLng | null = null;
       let proOrigin: LatLng | null = null;
@@ -876,10 +842,20 @@ export default function LiveTrackingScreen() {
       } catch {
         // location denied/unavailable — fall through to other sources
       }
-      // Pro origin = matched pro's coords from the public view (deployed).
+      // Pro origin = matched pro's last reported coords from the public view.
       if (booking.professional_id) {
         try {
-          proOrigin = await geo.getProCoords(booking.professional_id);
+          // The SESSION's last known position first. live-location.ts persists
+          // the professional's real position here every ~15s during the trip,
+          // so this is where they actually are. `v_pros_public` below is only
+          // written when a pro toggles online or edits their profile — it can be
+          // hours old and kilometres away, and seeding from it means a patient
+          // reopening the screen mid-journey sees the wrong place entirely.
+          const session = await db.tracking.get(booking.id).catch(() => null);
+          if (session?.last_lat != null && session?.last_lng != null) {
+            proOrigin = { lat: session.last_lat, lng: session.last_lng };
+          }
+          if (!proOrigin) proOrigin = await geo.getProCoords(booking.professional_id);
         } catch {
           // ignore
         }
@@ -897,75 +873,33 @@ export default function LiveTrackingScreen() {
         // RPC not deployed — fine, we already have real coords above
       }
       if (cancelled) return;
-      const dest: LatLng = destC ?? MAP_CENTER; // demo center fallback → tracking still runs
-      const synthetic: LatLng = { lat: dest.lat + 0.02, lng: dest.lng + 0.015 }; // ~2.5 km away
-      const origin: LatLng = liveProOrigin ?? proOrigin ?? synthetic;
 
-      // Road-following route (OSRM); straight line as a fallback so motion never stalls.
-      let coords: LatLng[];
-      try {
-        const coordsStr = `${origin.lng},${origin.lat};${dest.lng},${dest.lat}`;
-        const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
-        const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 5000);
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`Routing error ${res.status}`);
-        const body = await res.json();
-        coords =
-          body.routes && body.routes[0]?.geometry?.coordinates
-            ? body.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }))
-            : [origin, dest];
-      } catch {
-        coords = [origin, dest];
+      if (destC) {
+        setDestCoord(destC);
+        setRouteCenter((c) => c ?? destC);
       }
-      if (cancelled || coords.length < 2) return;
 
-      setRouteCoords(coords);
-      const avg = coords.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
-      setRouteCenter({ lat: avg.lat / coords.length, lng: avg.lng / coords.length });
-      setRouteLoaded(true);
-
-      // Movement along the route — identical glide to the demo.
-      const speedMps = (DEMO_SPEED_KMH * 1000) / 3600;
-      const distMeters = (a: LatLng, b: LatLng) => haversineKm(a, b) * 1000;
-      let current: LatLng = { ...coords[0] };
-      let targetIdx = 1;
-      const remainingMeters = (pos: LatLng, idx: number) => {
-        let rem = distMeters(pos, coords[idx]);
-        for (let i = idx; i < coords.length - 1; i++) rem += distMeters(coords[i], coords[i + 1]);
-        return rem;
-      };
-      setEta(Math.max(0, Math.ceil(remainingMeters(current, 1) / speedMps / 60)));
-      setProCoord({ ...current });
-
-      const tickInterval = 120; // small, frequent steps → the marker glides
-      iv = setInterval(() => {
-        if (cancelled) return;
-        if (liveActiveRef.current) return; // real GPS is streaming → don't script
-        if (targetIdx >= coords.length) {
-          setEta(0);
-          setProCoord({ ...coords[coords.length - 1] });
-          if (iv) clearInterval(iv);
-          return;
-        }
-        const target = coords[targetIdx];
-        const segDist = distMeters(current, target);
-        if (segDist < 1) { current = { ...target }; targetIdx += 1; setProCoord({ ...current }); return; }
-        const dt = tickInterval / 1000;
-        const move = Math.min(1, (speedMps * dt) / segDist);
-        current = { lat: current.lat + (target.lat - current.lat) * move, lng: current.lng + (target.lng - current.lng) * move };
-        setProCoord({ ...current });
-        const rem = remainingMeters(current, targetIdx);
-        setEta(Math.max(0, Math.ceil(rem / speedMps / 60)));
-        if (targetIdx === coords.length - 1 && rem < 5) { setEta(0); setProCoord({ ...coords[coords.length - 1] }); if (iv) clearInterval(iv); }
-      }, tickInterval);
+      // Real GPS is already streaming (handlePosition) — never overwrite it here.
+      if (!proOrigin || liveActiveRef.current) return;
+      setProCoord((prev) => prev ?? proOrigin);
+      // No route is drawn from this seed. `proOrigin` is the pro's LAST PUBLISHED
+      // position (written whenever they toggled online — possibly hours old and
+      // kilometres away); routing from it painted a road line that had nothing to
+      // do with where the pro actually was, and nothing ever cleared it. The
+      // route is now owned entirely by the live-position effect below.
     })();
 
-    return () => { cancelled = true; if (iv) clearInterval(iv); };
-  }, [booking, isDemoBooking]);
+    return () => { cancelled = true; };
+  }, [booking]);
 
-  // NOTE: ETA is now computed from demo motion (distance / speed). Remove the blind countdown.
+  // ETA is derived purely from real distance — it only changes when a real GPS
+  // update moves proCoord (via handlePosition) or the patient position resolves.
+  // No countdown, no scripted speed: if the pro isn't moving, the number doesn't move.
+  useEffect(() => {
+    if (distanceKm == null) { setEta(null); return; }
+    const ASSUMED_SPEED_KMH = 30;
+    setEta(Math.max(0, Math.round((distanceKm / ASSUMED_SPEED_KMH) * 60)));
+  }, [distanceKm]);
 
   const [liveProOrigin, setLiveProOrigin] = useState<LatLng | null>(null);
   // Once the pro broadcasts real GPS, live positions win over the scripted glide.
@@ -974,75 +908,317 @@ export default function LiveTrackingScreen() {
   // Drives the honest "waiting" label below: until the first real GPS frame
   // lands there is nothing to show, and a frozen map reads as a broken app.
   const [proLive, setProLive] = useState(false);
+  // Real GPS course from the pro's device (only trustworthy while they're
+  // actually moving) — preferred over the route-derived bearing fallback.
+  const [proHeading, setProHeading] = useState<number | null>(null);
+
+  // When the last fix landed. A dot that stopped updating 4 minutes ago looks
+  // exactly like a dot that updated a second ago, so without this the screen
+  // confidently shows a position it has no reason to believe — the pro may
+  // have lost signal, killed the app, or driven into a tunnel.
+  const [lastFixAt, setLastFixAt] = useState<number | null>(null);
+
+  // Metres travelled along the drawn route. Updated once per GPS fix — the
+  // travelled/remaining split does not need frame precision, and re-rendering
+  // the screen at 60Hz to move a colour boundary is the pathology Phase 2
+  // removed.
+  const [routeProgressM, setRouteProgressM] = useState<number | null>(null);
+
+  // ── Live motion pipeline (real bookings only) ─────────────────────────────
+  // Demo bookings keep their existing scripted animation: they already move
+  // smoothly on their own 120ms tick, and pushing them through a pipeline that
+  // renders 2s in the past would make the demo feel worse, not better.
+  const trackingStore = useMemo(() => new TrackingStore(), []);
+  useEffect(() => () => trackingStore?.destroy(), [trackingStore]);
+
+  // The drawn route is also the road the marker is map-matched to, so it
+  // follows streets instead of cutting across blocks.
+  useEffect(() => {
+    trackingStore?.setRoute(routeCoords ?? null);
+  }, [trackingStore, routeCoords]);
+
+  /**
+   * The polyline to DRAW — derived synchronously from the same coordinates the
+   * store is given, never read back off the store.
+   *
+   * Reading `trackingStore.renderRoute` during render looked equivalent and was
+   * not: `setRoute` runs in an effect AFTER render, so the frame that follows a
+   * refetch drew the PREVIOUS curve while the marker was already matched to the
+   * new one — and because a store getter cannot trigger a re-render, the map
+   * kept drawing the stale line indefinitely. The marker and the road were
+   * literally on two different geometries, which is the few-pixel offset that
+   * survived the last fix.
+   *
+   * Both sides now build a Route from the identical array, and Route is
+   * deterministic, so the drawn curve and the driven curve are the same points
+   * by construction.
+   */
+  const drawnRoute = useMemo(
+    () => (routeCoords && routeCoords.length >= 2 ? new Route(routeCoords).renderPath() : routeCoords),
+    [routeCoords],
+  );
 
   const handlePosition = useCallback((pos: TrackPosition) => {
     liveActiveRef.current = true;
     setProLive(true);
+    setLastFixAt(Date.now());
     setProCoord({ lat: pos.lat, lng: pos.lng });
+    setProHeading(pos.heading ?? null);
+    // Receipt time, never the sender's clock: two phones disagree by seconds.
+    trackingStore?.push({
+      lat: pos.lat,
+      lng: pos.lng,
+      heading: pos.heading ?? null,
+      speed: pos.speed ?? null,
+      accuracy: pos.accuracy ?? null,
+      seq: pos.seq ?? Date.now(),
+      receivedAt: Date.now(),
+    });
+    setRouteProgressM(trackingStore?.routeOffsetM ?? null);
     // capture first seen pro origin for routing (only if not demo)
-    if (!isDemoBooking && !liveProOrigin) {
+    if (!liveProOrigin) {
       setLiveProOrigin({ lat: pos.lat, lng: pos.lng });
     }
-  }, [isDemoBooking, liveProOrigin]);
+  }, [liveProOrigin, trackingStore]);
+
+  // Smooth rendering position — the pro dot glides between real fixes
+  // instead of snapping every ~2s, without affecting the progress/deviation
+  // math below (which always uses the raw `proCoord`). Demo bookings already
+  // animate `proCoord` themselves on a fast 120ms tick (see the effect
+  // below), so gliding on top of that would just lag behind it — only wrap
+  // real, sparser GPS updates.
+  // Demo bookings animate their own scripted path on a 120ms tick, so they are
+  // passed through untouched. REAL bookings are smoothed by the motion pipeline
+  // inside TrackingStore, which runs outside React entirely — the old
+  // useGlidingPosition hook is deliberately NOT used here: it called setState
+  // every animation frame from this screen, re-rendering the map, the sheet,
+  // the provider card and the ETA sixty times a second to move one dot.
+  // The viewer's own compass heading, for the "you are here" marker's facing
+  // cone (patient can be waiting/looking around while the pro is en route).
+
+  // ── The drawn route always starts where the pro actually is ────────────────
+  // Previously the route was fetched once from a stale seed origin and only
+  // refetched when the pro strayed >75m from the *nearest point on the line*.
+  // Standing at the destination is 0m from the line's end, so that test never
+  // fired and a phantom road path stayed painted across the map for the whole
+  // session. The route is now anchored to the origin it was computed from: the
+  // moment the pro is more than ~60m from that anchor, it's redrawn from their
+  // live position. When they're already within 60m of the door there is nothing
+  // to route, so the line is cleared rather than faked.
+  const ARRIVAL_RADIUS_KM = 0.06;
+  /**
+   * Lateral distance from the road that counts as genuinely off-route.
+   *
+   * Comfortably wider than urban GPS error (5-15m) and than the pipeline's own
+   * 25m snap radius, so ordinary noise and a brief lane-level wander never
+   * trigger a recompute — only actually taking a different street does.
+   */
+  const OFF_ROUTE_M = 45;
+  /**
+   * Minimum gap between route requests.
+   *
+   * Was 10s, which is slow enough to be noticed as the map insisting on a road
+   * the nurse has visibly abandoned. Three consecutive fixes already take ~4.5s
+   * to accumulate, so the deviation is well established by the time this fires
+   * and there is no need to wait further.
+   */
+  const REROUTE_COOLDOWN_MS = 4000;
+  const reroutingRef = useRef(false);
+  const lastRerouteAtRef = useRef(0);
+  const routeOriginRef = useRef<LatLng | null>(null);
+  useEffect(() => {
+    if (!proCoord || !destCoord) return;
+
+    if (haversineKm(proCoord, destCoord) <= ARRIVAL_RADIUS_KM) {
+      routeOriginRef.current = null;
+      setRouteCoords((prev) => (prev && prev.length > 1 ? null : prev));
+      return;
+    }
+
+    // RE-ROUTE ON LATERAL DEVIATION, NOT ON DISTANCE TRAVELLED.
+    //
+    // This previously refetched whenever the pro moved 60m from the point the
+    // route was computed FROM — which, for someone actually following the
+    // route, meant a fresh route every 60m. Each refetch re-based the road at
+    // the latest jittered fix, so the drawn route's first metres ran off the
+    // carriageway and the marker (matched to that route) inherited the error.
+    // It also hammered the routing server for no reason.
+    //
+    // Travelling along a road is not a reason to recompute it. Being off it is.
+    // REALITY WINS OVER THE PLAN — but only once reality has said so more than
+    // once. A sustained deviation across several consecutive fixes means the
+    // professional genuinely took another street; a single 60m outlier is a
+    // multipath bounce off a building, and re-routing on it would discard a
+    // perfectly good road.
+    const haveRoute = !!routeCoords && routeCoords.length >= 2;
+    const offRoute = haveRoute && !!trackingStore?.isOffRoute(OFF_ROUTE_M, 3);
+    if (haveRoute && !offRoute) return;
+    if (reroutingRef.current || Date.now() - lastRerouteAtRef.current < REROUTE_COOLDOWN_MS) return;
+
+    const origin = proCoord;
+    reroutingRef.current = true;
+    lastRerouteAtRef.current = Date.now();
+    (async () => {
+      // fetchRoute never throws: on failure it hands back a straight line
+      // between the two real endpoints rather than an invented road path.
+      const { coords } = await fetchRoute(origin, destCoord);
+      // OSRM snaps the endpoint to the nearest road, which can leave the line
+      // stopping 10-20m short of the actual door — the route visibly ending
+      // beside the destination pin instead of inside it. Walking the last leg
+      // is both what navigation apps draw and what the nurse will physically do.
+      const last = coords[coords.length - 1];
+      const withFinalLeg =
+        last && haversineKm(last, destCoord) > 0.003 ? [...coords, destCoord] : coords;
+      routeOriginRef.current = origin;
+      setRouteCoords(withFinalLeg);
+      setRouteLoaded(true);
+      reroutingRef.current = false;
+    })();
+  }, [proCoord, destCoord, routeCoords, trackingStore]);
 
   // Keep the patient's screen honest about where the mission actually is: the pro
   // advances `matched → en_route → in_progress → completed` on their side, and
   // without this subscription the patient only ever saw the status they arrived with.
+  // Cancellation gets a hard stop here too: the screen used to just keep sitting
+  // there showing tracking UI for a booking that no longer existed, with no
+  // indication anything had changed — a patient could tap all the way through
+  // to "end session" on a job that had already been cancelled out from under them.
+  const cancelledHandledRef = useRef(false);
   useEffect(() => {
-    if (!bookingId || isDemoBooking) return;
+    if (!bookingId) return;
     const channel = supabase
       .channel(`booking:track:${bookingId}:${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${bookingId}` },
-        (payload) => setBooking(payload.new as Booking),
+        (payload) => {
+          const next = payload.new as Booking;
+          setBooking(next);
+          if (next.status === "cancelled" && !cancelledHandledRef.current) {
+            cancelledHandledRef.current = true;
+            Alert.alert(
+              t("reservation_cancelled_title"),
+              next.refund_mad
+                ? t("reservation_cancelled_refund_msg").replace("%d", String(next.refund_mad))
+                : t("reservation_cancelled_msg"),
+              [{ text: "OK", onPress: () => router.replace("/patient/bookings") }],
+            );
+          }
+        },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId, router, t]);
 
   // ── Derived values ────────────────────────────────────────────────────────
-  const arrived      = eta === 0;
-  const proName      = proProfile?.full_name ?? trackProMeta.name ?? (isDemoBooking ? "Karim Benali" : "Professionnel");
+  // "Arrivé !" is a fact the PRO declares, not something this screen guesses.
+  // It used to be `eta === 0` (i.e. GPS proximity), which announced arrival off
+  // a coarse destination while the pro was still driving. The only source of
+  // truth is the booking status the pro advances with "Je suis arrivé".
+  const arrived      = hasArrived;
+  // Only warn once the gap is longer than a few missed fixes (the stream runs
+  // at ~2s, so 30s means something is genuinely wrong — signal lost, app
+  // killed, tunnel) and only while a trip is actually in flight.
+  const fixAgeSec    = lastFixAt != null ? Math.round((nowTs - lastFixAt) / 1000) : null;
+  const staleLabel   =
+    arrived || !proLive || fixAgeSec == null || fixAgeSec < 30
+      ? null
+      : fixAgeSec < 120
+        ? t("position_stale_sec").replace("%d", String(fixAgeSec))
+        : t("position_stale_min").replace("%d", String(Math.round(fixAgeSec / 60)));
+
+  // ── Arrival ───────────────────────────────────────────────────────────────
+  // Once the professional has declared arrival the journey is over, so the
+  // road path is retired. Leaving it drawn keeps implying travel that is no
+  // longer happening, and the marker would go on being map-matched to a route
+  // nobody is following any more.
+  useEffect(() => {
+    if (!arrived) return;
+    setRouteCoords(null);
+    trackingStore?.setRoute(null);
+  }, [arrived, trackingStore]);
+
+  const proName      = proProfile?.full_name ?? trackProMeta.name ?? t("professional");
   const proPhone     = proProfile?.phone     ?? null;
-  const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? (isDemoBooking ? "https://randomuser.me/api/portraits/men/32.jpg" : null);
+  const proAvatar    = proProfile?.avatar_url ?? trackProMeta.avatar ?? null;
   const proInitials  = proName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-  const proSpecialty = booking?.specialty?.replaceAll("_", " ") ?? "Infirmier";
+  const proSpecialty = booking ? careLabel(booking, t) : t("spec_nurse");
   const proPrice     = booking?.final_price_mad ?? booking?.budget_max_mad ?? 120;
-  const progress     = Math.max(8, 100 - eta * 8);
+  const progress     = eta != null ? Math.max(8, 100 - eta * 8) : 8;
+
+  // Sheet drag: 0 = expanded (default, sheet top at MAP_H), SHEET_MAX_TRANSLATE
+  // = collapsed (map fully visible). Dragged via the handle only, so it never
+  // fights the sheet's own ScrollView.
+  const sheetTranslateY = useSharedValue(0);
+  const sheetDragStart = useSharedValue(0);
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      sheetDragStart.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const next = sheetDragStart.value + e.translationY;
+      sheetTranslateY.value = Math.max(0, Math.min(SHEET_MAX_TRANSLATE, next));
+    })
+    .onEnd((e) => {
+      const shouldCollapse =
+        sheetTranslateY.value > SHEET_MAX_TRANSLATE / 2 || e.velocityY > 800;
+      sheetTranslateY.value = withSpring(shouldCollapse ? SHEET_MAX_TRANSLATE : 0, {
+        damping: 22,
+        stiffness: 220,
+      });
+    });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
 
   return (
     <View style={s.root}>
-      {!isDemoBooking && bookingId ? (
+      {bookingId ? (
         <LiveTrackingChannel bookingId={bookingId} mode="watch" onPosition={handlePosition} />
       ) : null}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  MAP — 72% of screen height, green background                     */}
+      {/*  MAP — fills the whole screen; dragging the sheet down reveals it   */}
+      {/*  beyond the old fixed 72% strip.                                    */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <View style={[s.map, { height: MAP_H, backgroundColor: CREAM }]}>
-
-        {/* Real map (MapLibre) — patient + moving pro + road route */}
+      <View style={[s.mapFull, { backgroundColor: CREAM }]}>
         <CareLinkMapView
-          center={proCoord}
-          patient={routeCoords && routeCoords.length ? routeCoords[routeCoords.length - 1] : MAP_CENTER}
-          pro={{ ...proCoord, avatarSource: isDemoBooking ? DEMO_DRIVER_AVATAR : undefined, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }}
-          route={routeCoords ?? undefined}
+          center={proCoord ?? patientCoord}
+          // The patient's own location is where the nurse is DRIVING TO, so it
+          // reads as an arrival pin, not a "you are here" compass. That also
+          // lets the route terminate inside the marker instead of beside it.
+          destination={patientCoord}
+          trackingStore={trackingStore}
+          trackingArrived={arrived}
+          trackingPaddingBottom={FRAME_PAD}
+          trackingProgressM={routeProgressM}
+          pro={
+            proCoord
+              ? { ...(proCoord as LatLng), heading: proHeading, avatarUrl: proAvatar, initials: proInitials, specialty: proSpecialty, name: proName }
+              : undefined
+          }
+          // The SMOOTHED curve, which is exactly the path the marker walks.
+          route={drawnRoute ?? undefined}
           progressIdx={progressIdx}
-          fitCoords={routeCoords ?? undefined}
+          fitCoords={routeCoords ?? (proCoord ? [proCoord, patientCoord] : undefined)}
           radiusKm={0}
           nightAuto
           recenterKey={recenterKey}
         />
+      </View>
 
+      {/* Chrome overlay (close/ETA header, recenter FAB) — same footprint as
+          before; `box-none` lets taps on the empty parts fall through to the
+          map underneath. */}
+      <View style={[s.map, { height: MAP_H }]} pointerEvents="box-none">
         {/* Re-center FAB */}
         <TouchableOpacity
           style={s.recenterFab}
           onPress={() => setRecenterKey((k) => k + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Recentrer la carte"
+          accessibilityLabel={t("pay_recenter_map")}
         >
           <Crosshair size={20} color="#0D0870" strokeWidth={2.2} />
         </TouchableOpacity>
@@ -1054,7 +1230,7 @@ export default function LiveTrackingScreen() {
             style={s.closeBtn}
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/patient/bookings"))}
             accessibilityRole="button"
-            accessibilityLabel="Fermer le suivi"
+            accessibilityLabel={t("pay_close_tracking")}
           >
             <X size={20} color="#1F2937" strokeWidth={2.5} />
           </TouchableOpacity>
@@ -1064,8 +1240,10 @@ export default function LiveTrackingScreen() {
             <View style={[s.etaDot, { backgroundColor: arrived ? "#16A34A" : "#22D3EE" }]} />
             <Text style={s.etaText}>
               {arrived
-                ? "Arrivé !"
-                : `${distanceKm != null ? `${distanceKm.toFixed(1)} km · ` : ""}${eta} min`}
+                ? t("arrived_excl")
+                : eta != null
+                  ? `${distanceKm != null ? `${distanceKm.toFixed(1)} km · ` : ""}${eta} min`
+                  : t("waiting_pro_departure")}
             </Text>
           </View>
 
@@ -1075,25 +1253,27 @@ export default function LiveTrackingScreen() {
       </View>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  BOTTOM SHEET — white, rounded top corners, overlaps map by 20px  */}
+      {/*  BOTTOM SHEET — draggable: pull the handle down to see the full map */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <View style={s.sheet}>
+      <ReAnimated.View style={[s.sheet, sheetAnimatedStyle]}>
+        <GestureDetector gesture={sheetPan}>
+          <View style={s.handleZone}>
+            <View style={s.handle} />
+          </View>
+        </GestureDetector>
 
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-          {/* Drag handle */}
-          <View style={s.handle} />
 
           {/* Progress label + value */}
           <View style={s.progressRow}>
             <Text style={s.progressLabel}>
               {arrived
                 ? t("pro_arrived")
-                : !isDemoBooking && !proLive
+                : !proLive
                   ? t("waiting_pro_departure")
                   : t("en_route_to_you")}
             </Text>
-            <Text style={s.progressValue}>{arrived ? "Arrivé" : `${eta} min`}</Text>
+            <Text style={s.progressValue}>{arrived ? t("arrived_excl") : eta != null ? `${eta} min` : "—"}</Text>
           </View>
 
           {/* Progress bar */}
@@ -1101,13 +1281,22 @@ export default function LiveTrackingScreen() {
             <View style={[s.progressFill, { width: `${progress}%` as `${number}%` }]} />
           </View>
 
+          {/* Staleness. Silent while the stream is healthy; the moment fixes
+              stop arriving the patient is told, instead of being shown a dot
+              that quietly stopped being true. */}
+          {staleLabel ? (
+            <View style={s.staleRow}>
+              <View style={s.staleDot} />
+              <Text style={s.staleTxt}>{staleLabel}</Text>
+            </View>
+          ) : null}
+
           {/* Provider card */}
           <View style={s.providerCard}>
             {/* Circular avatar with cyan status dot */}
             <View style={s.avatarWrap}>
               <ProAvatar
                 uri={proAvatar}
-                source={isDemoBooking ? DEMO_DRIVER_AVATAR : undefined}
                 initials={proInitials}
                 size={52}
               />
@@ -1119,19 +1308,21 @@ export default function LiveTrackingScreen() {
               <Text style={s.providerName} numberOfLines={1}>{proName}</Text>
               <Text style={s.providerSub} numberOfLines={1}>
                 {proSpecialty}
-                {booking?.address ? ` · ${booking.address.split(",")[0]}` : " · Pansement"}
+                {booking?.address ? ` · ${booking.address.split(",")[0]}` : ""}
               </Text>
               <View style={s.ratingRow}>
                 <Text style={s.ratingStar}>★</Text>
-                <Text style={s.ratingVal}>4.8</Text>
-                <Text style={s.ratingCount}>(127)</Text>
+                <Text style={s.ratingVal}>
+                  {proRating?.avg ? proRating.avg.toFixed(1) : "—"}
+                </Text>
+                {proRating ? <Text style={s.ratingCount}>({proRating.count})</Text> : null}
               </View>
             </View>
 
             {/* Price */}
             <View style={s.priceBlock}>
               <Text style={s.priceVal}>{proPrice}</Text>
-              <Text style={s.priceUnit}>MAD</Text>
+              <Text style={s.priceUnit}>{t("mad")}</Text>
             </View>
           </View>
 
@@ -1141,38 +1332,43 @@ export default function LiveTrackingScreen() {
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Appeler le professionnel"
+              accessibilityLabel={t("pay_call_professional")}
               onPress={() => {
                 if (proPhone) void Linking.openURL(`tel:${proPhone}`);
                 else showToast(t("number_unavailable_chat"));
               }}
             >
               <Phone size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>{t("call")}</Text>
+              <Text style={s.actionTxt} numberOfLines={1}>{t("call")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Partager le suivi"
+              accessibilityLabel={t("pay_share_tracking")}
               onPress={() =>
-                void Share.share({ message: `Mon infirmier arrive dans ${eta} min — CareLinks` })
+                void Share.share({
+                  message:
+                    eta != null
+                      ? t("pay_share_eta_msg").replace("{n}", String(eta))
+                      : t("pay_share_live_msg"),
+                })
               }
             >
               <Share2 size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>{t("share")}</Text>
+              <Text style={s.actionTxt} numberOfLines={1}>{t("share")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={s.actionBtn}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Envoyer un message"
+              accessibilityLabel={t("pay_send_message")}
               onPress={() => { if (bookingId) router.push(`/patient/chat/${bookingId}`); }}
             >
               <MessageCircle size={18} color="#1F2937" strokeWidth={2} />
-              <Text style={s.actionTxt}>{t("message_action")}</Text>
+              <Text style={s.actionTxt} numberOfLines={1}>{t("message_action")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1186,6 +1382,17 @@ export default function LiveTrackingScreen() {
             </TouchableOpacity>
           )}
 
+          {bookingId ? (
+            <TouchableOpacity
+              style={s.reportLink}
+              onPress={() => router.push(`/patient/report/${bookingId}`)}
+              accessibilityRole="button"
+            >
+              <AlertTriangle size={14} color={Colors.danger} />
+              <Text style={s.reportLinkTxt}>{t("report_problem_link")}</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {loading && (
             <View style={s.loadRow}>
               <ActivityIndicator size="small" color={NAVY} />
@@ -1196,7 +1403,7 @@ export default function LiveTrackingScreen() {
 
         </ScrollView>
 
-      </View>
+      </ReAnimated.View>
 
       {showConfetti ? <ConfettiBurst /> : null}
     </View>
@@ -1209,6 +1416,7 @@ const s = StyleSheet.create({
 
   // Map
   map: { position: "relative", overflow: "hidden", width: "100%" },
+  mapFull: { ...StyleSheet.absoluteFillObject },
   pinAbs: { position: "absolute" },
   recenterFab: {
     position: "absolute",
@@ -1258,11 +1466,13 @@ const s = StyleSheet.create({
 
   // Bottom sheet
   sheet: {
-    flex: 1,
+    position: "absolute",
+    left: 0, right: 0,
+    top: SHEET_EXPANDED_TOP,
+    height: SCREEN_H - SHEET_EXPANDED_TOP,
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -24,
     paddingHorizontal: 22,
     paddingTop: 0,
     paddingBottom: 32,
@@ -1272,12 +1482,12 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: -6 },
     elevation: 12,
   },
+  handleZone: { paddingTop: 12, paddingBottom: 6, alignItems: "center" },
   handle: {
     alignSelf: "center",
     width: 38, height: 4,
     borderRadius: 2,
     backgroundColor: "#E5E7EB",
-    marginTop: 12, marginBottom: 16,
   },
 
   // Progress
@@ -1298,6 +1508,14 @@ const s = StyleSheet.create({
     height: "100%", borderRadius: 999,
     backgroundColor: NAVY,
   },
+
+  // Stale-position warning
+  staleRow: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    marginTop: -10, marginBottom: 16,
+  },
+  staleDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#F59E0B" },
+  staleTxt: { color: "#B45309", fontSize: 12.5, fontWeight: "600" },
 
   // Provider card
   providerCard: {
@@ -1354,6 +1572,11 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   completeTxt: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  reportLink: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    marginTop: 14, paddingVertical: 6,
+  },
+  reportLinkTxt: { color: Colors.danger, fontSize: 13, fontWeight: "600" },
 
   loadRow:  { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
   loadTxt:  { color: "#9CA3AF", fontSize: 12 },

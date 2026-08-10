@@ -24,14 +24,7 @@ import { db } from "@/lib/db/dal";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { Booking, Bid, Professional, Profile } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
-import {
-  buildDemoBids,
-  buildDemoBooking,
-  buildDemoProfessional,
-  buildDemoProfile,
-  isDemoBookingId,
-  normalizeRouteParam,
-} from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 
 type ProOfferMeta = {
   fullName: string;
@@ -69,14 +62,8 @@ export default function NurseOffersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
 
-  const { bids: liveBids, loading: liveLoading, error } = useBookingBids(isDemoBooking ? null : bookingId);
-  const [demoBids, setDemoBids] = useState<Bid[]>(() =>
-    isDemoBooking && bookingId ? buildDemoBids(bookingId) : []
-  );
-  const bids = isDemoBooking ? demoBids : liveBids;
-  const loading = isDemoBooking ? false : liveLoading;
+  const { bids, loading, error } = useBookingBids(bookingId);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -94,10 +81,6 @@ export default function NurseOffersScreen() {
       }
 
       try {
-        if (isDemoBooking) {
-          if (!cancelled) setBooking(buildDemoBooking(bookingId));
-          return;
-        }
         const next = await db.bookings.get(bookingId);
         if (!cancelled) setBooking(next);
       } catch (loadError) {
@@ -110,12 +93,7 @@ export default function NurseOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId, isDemoBooking]);
-
-  useEffect(() => {
-    if (!isDemoBooking || !bookingId) return;
-    setDemoBids(buildDemoBids(bookingId));
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
   const visibleOffers = useMemo(
     () =>
@@ -126,21 +104,11 @@ export default function NurseOffersScreen() {
     [bids, hiddenOfferIds]
   );
 
-  const demoMetaByProId = useMemo<Record<string, ProOfferMeta>>(() => {
-    if (!isDemoBooking) return {};
-    return Object.fromEntries(
-      [...new Set(visibleOffers.map((offer) => offer.professional_id))].map((proId) => [
-        proId,
-        getMeta(buildDemoProfile(proId), buildDemoProfessional(proId), t),
-      ])
-    );
-  }, [isDemoBooking, visibleOffers]);
-  const metaByProId = isDemoBooking ? demoMetaByProId : liveMetaByProId;
+  const metaByProId = liveMetaByProId;
 
   useEffect(() => {
     const loadMeta = async () => {
       const uniqueProIds = [...new Set(visibleOffers.map((offer) => offer.professional_id))];
-      if (isDemoBooking) return;
       const missingIds = uniqueProIds.filter((id) => !metaByProId[id]);
       if (missingIds.length === 0) return;
 
@@ -161,24 +129,13 @@ export default function NurseOffersScreen() {
       setLiveMetaByProId((prev) => ({ ...prev, ...Object.fromEntries(fetched) }));
     };
     void loadMeta();
-  }, [isDemoBooking, visibleOffers]);
+  }, [visibleOffers]);
 
   const handleAccept = async (offer: Bid) => {
     if (!bookingId) return;
     setActionError(null);
     setActionId(offer.id);
     try {
-      if (isDemoBooking) {
-        setDemoBids((prev) =>
-          prev.map((bid) => ({
-            ...bid,
-            status: bid.id === offer.id ? "accepted" : "rejected",
-          }))
-        );
-        // Escrow: pay first so the funds are held before the nurse travels.
-        router.replace(`/patient/payment/${encodeURIComponent(bookingId)}`);
-        return;
-      }
       // Atomic accept + match via SECURITY DEFINER RPC (RLS-safe; notifies pro).
       await db.bids.acceptAndMatch(offer.id);
       toastSuccess(t("offer_accepted_notified"));
@@ -197,13 +154,6 @@ export default function NurseOffersScreen() {
     setActionError(null);
     setActionId(`${offerId}:reject`);
     try {
-      if (isDemoBooking) {
-        setDemoBids((prev) =>
-          prev.map((bid) => (bid.id === offerId ? { ...bid, status: "rejected" } : bid))
-        );
-        setHiddenOfferIds((prev) => [...prev, offerId]);
-        return;
-      }
       await db.bids.setStatus(offerId, "rejected");
       setHiddenOfferIds((prev) => [...prev, offerId]);
     } catch (rejectError) {
@@ -240,7 +190,7 @@ export default function NurseOffersScreen() {
             </Text>
             <Text style={styles.requestMetaText}>·</Text>
             <Text style={styles.requestMetaText} numberOfLines={1}>
-              {booking.address ?? "Adresse non renseignée"}
+              {booking.address ?? t("pat_address_not_provided")}
             </Text>
           </View>
         ) : null}
@@ -254,10 +204,10 @@ export default function NurseOffersScreen() {
           </View>
         ) : (
           <Text style={styles.countText}>
-            <Text style={styles.countStrong}>
-              {visibleOffers.length} professionnel{visibleOffers.length === 1 ? "" : "s"}
-            </Text>{" "}
-            {visibleOffers.length === 1 ? "a répondu" : "ont répondu"}
+            {t(visibleOffers.length === 1 ? "pat_pros_responded_one" : "pat_pros_responded_many").replace(
+              "{n}",
+              String(visibleOffers.length),
+            )}
           </Text>
         )}
       </View>
@@ -290,8 +240,10 @@ export default function NurseOffersScreen() {
                   </>
                 ) : (
                   <Text style={styles.bannerCounterText}>
-                    Contre-offre : {counterDelta > 0 ? "+" : ""}
-                    {counterDelta} MAD
+                    {t("pat_counter_offer").replace(
+                      "%s",
+                      `${counterDelta > 0 ? "+" : ""}${counterDelta}`,
+                    )}
                   </Text>
                 )}
               </View>
@@ -318,30 +270,44 @@ export default function NurseOffersScreen() {
                     <View style={styles.ratingRow}>
                       <Star size={12} color="#FBBF24" fill="#FBBF24" />
                       <Text style={styles.ratingText}>
-                        {pro.rating > 0 ? pro.rating.toFixed(1) : "Nouveau"}
+                        {pro.rating > 0 ? pro.rating.toFixed(1) : t("new_badge")}
                       </Text>
                       {pro.reviewCount > 0 ? (
-                        <Text style={styles.reviewsText}>({pro.reviewCount} avis)</Text>
+                        <Text style={styles.reviewsText}>
+                          {t("pat_reviews_count").replace("{n}", String(pro.reviewCount))}
+                        </Text>
                       ) : null}
                     </View>
                     <View style={styles.specialtyRow}>
                       <Text style={styles.specialtyText}>{pro.specialtyLabel}</Text>
                       {pro.yearsExperience ? (
-                        <Text style={styles.specialtyText}>· {pro.yearsExperience} ans exp.</Text>
+                        <Text style={styles.specialtyText}>
+                          · {t("pat_years_exp").replace("{n}", String(pro.yearsExperience))}
+                        </Text>
                       ) : null}
                     </View>
                   </View>
 
                   <View style={styles.priceWrap}>
                     <Text style={styles.priceValue}>{offer.price_mad}</Text>
-                    <Text style={styles.priceUnit}>MAD</Text>
+                    <Text style={styles.priceUnit}>{t("mad")}</Text>
                   </View>
                 </View>
 
-                <View style={styles.metaRow}>
-                  <MapPin size={12} color={Colors.textMuted} />
-                  <Text style={styles.metaText}>Réponse en {offer.eta_min ?? 30} min</Text>
-                </View>
+                {/* Only shown when the professional actually stated an ETA.
+                    It used to fall back to a hardcoded "30 min", which is a
+                    number the patient reads as a commitment and nobody made;
+                    and `?? 30` does not catch a stored 0, so a bid with no
+                    real ETA rendered as "Réponse en 0 min". A promise of zero
+                    minutes is worse than no promise. */}
+                {typeof offer.eta_min === "number" && offer.eta_min > 0 ? (
+                  <View style={styles.metaRow}>
+                    <Clock3 size={12} color={Colors.textMuted} />
+                    <Text style={styles.metaText}>
+                      {t("pat_arrives_in").replace("{n}", String(offer.eta_min))}
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.actionsRow}>
                   <TouchableOpacity

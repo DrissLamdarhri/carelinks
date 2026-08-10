@@ -20,8 +20,13 @@ export default function AppIndex() {
       router.replace("/pro");
       return;
     }
+    // Mobile admin is temporarily disabled (product owner request — testing
+    // is focused on patient/pro right now). An admin-role session used to
+    // land straight in /admin from here; now it's kicked back to /auth
+    // instead, same as the guard in app/admin/_layout.tsx for any direct
+    // navigation there. The web admin is unaffected.
     if (role === "admin") {
-      router.replace("/admin");
+      router.replace("/auth");
       return;
     }
     router.replace("/patient");

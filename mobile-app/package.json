@@ -16,6 +16,7 @@
     "tunnel:fallback": "node ./scripts/start-tunnel-fallback.cjs",
     "build": "eas build",
     "lint": "eslint . --ext .ts,.tsx",
+    "test:tracking": "tsc lib/tracking/motion.ts lib/tracking/store.ts lib/tracking/motion.replay.ts lib/tracking/store.replay.ts lib/tracking/driver.ts lib/tracking/bench.replay.ts lib/tracking/camera.replay.ts lib/tracking/guidance.replay.ts --outDir .motion-replay --module commonjs --target es2020 --skipLibCheck --moduleResolution node && echo '{\"type\":\"commonjs\"}' > .motion-replay/package.json && node .motion-replay/motion.replay.js && node .motion-replay/store.replay.js && node .motion-replay/bench.replay.js && node .motion-replay/camera.replay.js && node .motion-replay/guidance.replay.js",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -50,6 +51,7 @@
     "expo-router": "~6.0.24",
     "expo-secure-store": "~15.0.8",
     "expo-splash-screen": "~31.0.13",
+    "expo-task-manager": "^14.0.9",
     "expo-web-browser": "~15.0.11",
     "lucide-react-native": "^1.14.0",
     "nativewind": "^4.2.0",

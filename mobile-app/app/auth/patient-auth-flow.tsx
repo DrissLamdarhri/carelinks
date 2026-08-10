@@ -24,7 +24,7 @@ import { useI18n } from "@/lib/i18n";
 export default function PatientAuthFlowScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset, resendConfirmationEmail } = useAuth();
   const { t } = useI18n();
   const screenWidth = Dimensions.get("window").width;
 
@@ -38,6 +38,10 @@ export default function PatientAuthFlowScreen() {
   const [loginShowPw, setLoginShowPw] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginUnconfirmed, setLoginUnconfirmed] = useState(false);
+  const [resendingLogin, setResendingLogin] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Registration form state
   const [firstName, setFirstName] = useState("");
@@ -97,13 +101,14 @@ export default function PatientAuthFlowScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "patient") return;
     const label =
-      nextRole === "pro" ? "professionnel" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "pro" ? t("auth_role_pro") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const handleEmailSignIn = async () => {
     if (!loginValid || loginSubmitting) return;
     setLoginError(null);
+    setLoginUnconfirmed(false);
     setLoginSubmitting(true);
     try {
       const result = await signInWithEmail(loginEmail.trim(), loginPassword, "patient");
@@ -114,7 +119,12 @@ export default function PatientAuthFlowScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Identifiants incorrects.");
+      if (error instanceof Error && error.message === "EMAIL_NOT_CONFIRMED") {
+        setLoginUnconfirmed(true);
+        setLoginError(t("email_not_confirmed"));
+      } else {
+        setLoginError(error instanceof Error ? error.message : t("wrong_credentials"));
+      }
     } finally {
       setLoginSubmitting(false);
     }
@@ -125,16 +135,20 @@ export default function PatientAuthFlowScreen() {
     setRegError(null);
     setRegSubmitting(true);
     try {
-      await signUpWithEmail(
+      const { needsEmailConfirmation } = await signUpWithEmail(
         regEmail.trim(),
         password,
         fullName,
         "patient",
         { phone, city }
       );
+      if (needsEmailConfirmation) {
+        setNeedsConfirmation(true);
+        return;
+      }
       goAfterSignUp();
     } catch (error) {
-      setRegError(error instanceof Error ? error.message : "Inscription échouée.");
+      setRegError(error instanceof Error ? error.message : t("signup_failed"));
     } finally {
       setRegSubmitting(false);
     }
@@ -158,7 +172,7 @@ export default function PatientAuthFlowScreen() {
         goAfterSignUp();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Google impossible.";
+      const msg = error instanceof Error ? error.message : t("google_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -184,7 +198,7 @@ export default function PatientAuthFlowScreen() {
         goAfterSignUp();
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Authentification Apple impossible.";
+      const msg = error instanceof Error ? error.message : t("apple_auth_failed");
       if (tab === 0) setLoginError(msg);
       else setRegError(msg);
     } finally {
@@ -196,6 +210,42 @@ export default function PatientAuthFlowScreen() {
     setTab(newTab);
     scrollRef.current?.scrollTo({ x: newTab * screenWidth, animated: true });
   };
+
+  if (needsConfirmation) {
+    return (
+      <View style={[styles.root, { alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }]}>
+        <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.input, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+          <Mail size={44} color={Colors.primary} />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: "700", color: Colors.textPrimary, textAlign: "center" }}>
+          {t("confirm_email_title")}
+        </Text>
+        <Text style={{ fontSize: 13.5, color: Colors.textMuted, textAlign: "center", marginTop: 10, lineHeight: 20 }}>
+          {t("confirm_email_sub").replace("%s", regEmail.trim())}
+        </Text>
+        <TouchableOpacity
+          style={[styles.submit, resending && styles.submitDisabled, { marginTop: 26 }]}
+          disabled={resending}
+          onPress={async () => {
+            setResending(true);
+            try {
+              await resendConfirmationEmail(regEmail.trim());
+              showToast(t("confirm_email_resent"));
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("action_failed"));
+            } finally {
+              setResending(false);
+            }
+          }}
+        >
+          {resending ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.submitText}>{t("resend")}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 14, padding: 8 }} onPress={() => { setNeedsConfirmation(false); switchTab(0); }}>
+          <Text style={{ color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" }}>{t("back_to_login")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -295,7 +345,17 @@ export default function PatientAuthFlowScreen() {
             </View>
           </View>
 
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => {
+              if (!loginEmail.trim()) { showToast(t("enter_email_first")); return; }
+              try {
+                await sendPasswordReset(loginEmail.trim());
+                showToast(t("reset_sent"));
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : t("send_failed"));
+              }
+            }}
+          >
             <Text style={styles.forgot}>{t("forgot_password")}</Text>
           </TouchableOpacity>
 
@@ -315,9 +375,30 @@ export default function PatientAuthFlowScreen() {
           </TouchableOpacity>
 
           {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+          {loginUnconfirmed ? (
+            <TouchableOpacity
+              style={{ alignSelf: "center", marginTop: 6 }}
+              disabled={resendingLogin}
+              onPress={async () => {
+                setResendingLogin(true);
+                try {
+                  await resendConfirmationEmail(loginEmail.trim());
+                  showToast(t("confirm_email_resent"));
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : t("action_failed"));
+                } finally {
+                  setResendingLogin(false);
+                }
+              }}
+            >
+              <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: "700" }}>
+                {resendingLogin ? t("sending") : t("resend_confirmation_email")}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>💡 Première visite ? Créez un compte via l'onglet "Inscription".</Text>
+            <Text style={styles.hintText}>{t("first_visit_hint")}</Text>
           </View>
         </ScrollView>
 
@@ -348,7 +429,7 @@ export default function PatientAuthFlowScreen() {
                   value={firstName}
                   onChangeText={setFirstName}
                   style={styles.input}
-                  placeholder="Jean"
+                  placeholder={t("auth_ph_first_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -361,7 +442,7 @@ export default function PatientAuthFlowScreen() {
                   value={lastName}
                   onChangeText={setLastName}
                   style={styles.input}
-                  placeholder="Dupont"
+                  placeholder={t("auth_ph_last_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -377,7 +458,7 @@ export default function PatientAuthFlowScreen() {
                 value={phone}
                 onChangeText={setPhone}
                 style={styles.input}
-                placeholder="+212 6XX XXX XXX"
+                placeholder={t("auth_ph_phone")}
                 keyboardType="phone-pad"
                 placeholderTextColor={Colors.textSubtle}
               />
@@ -481,9 +562,9 @@ export default function PatientAuthFlowScreen() {
               {agreed && <View style={styles.checkboxMark} />}
             </TouchableOpacity>
             <Text style={styles.agreeText}>
-              J'accepte les{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>conditions d'utilisation</Text> et la{" "}
-              <Text style={{ color: Colors.primary, fontWeight: "600" }}>politique de confidentialité</Text>
+              {t("accept_terms_prefix")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("terms_of_use")}</Text> {t("and_the_f")}{" "}
+              <Text style={{ color: Colors.primary, fontWeight: "600" }}>{t("privacy_policy")}</Text>
             </Text>
           </View>
 
@@ -505,7 +586,7 @@ export default function PatientAuthFlowScreen() {
           {regError ? <Text style={styles.errorText}>{regError}</Text> : null}
 
           <View style={styles.hintCard}>
-            <Text style={styles.hintText}>🔒 Votre compte sera sécurisé par authentification multi-facteurs.</Text>
+            <Text style={styles.hintText}>🔒 {t("auth_account_mfa_secured")}</Text>
           </View>
         </ScrollView>
       </ScrollView>

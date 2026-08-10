@@ -18,16 +18,12 @@ import { useProBookingsWindow } from "@/lib/db/realtime";
 import { addDays, dateKey, effectiveDate, friendlyDayLabel, intlLocale, isSameDay, startOfWeek } from "@/lib/date-utils";
 import { DateStrip } from "@/components/DateStrip";
 import { MonthCalendarModal } from "@/components/MonthCalendarModal";
+import { careLabel } from "@/lib/care-label";
+import { isTerminal, statusLabelKey } from "@/lib/booking-lifecycle";
 import type { Booking } from "@/lib/db/types";
 
 const NAVY = "#0D0870";
 const SCREEN_W = Dimensions.get("window").width;
-const SPEC_LABEL: Record<string, string> = {
-  nurse: "spec_nurse",
-  physiotherapist: "spec_physio",
-  psychologist: "spec_psy",
-  yoga_instructor: "spec_yoga",
-};
 
 export default function ProScheduleScreen() {
   const { t, locale } = useI18n();
@@ -56,14 +52,13 @@ export default function ProScheduleScreen() {
     () => bookings.filter((b) => isSameDay(effectiveDate(b), selectedDate)),
     [bookings, selectedDate],
   );
-  const upcoming = useMemo(
-    () => dayBookings.filter((b) => b.status === "matched" || b.status === "in_progress"),
-    [dayBookings],
-  );
-  const done = useMemo(
-    () => dayBookings.filter((b) => b.status === "completed" || b.status === "cancelled"),
-    [dayBookings],
-  );
+  // Split on "is anything still going to happen to this?", not on a hand-listed
+  // set of statuses. The old version listed `matched | in_progress` as upcoming
+  // and `completed | cancelled` as done, which (a) made `en_route` bookings
+  // vanish from BOTH tabs — a nurse actually on her way had no row at all — and
+  // (b) filed bookings the server had already written off as still to come.
+  const upcoming = useMemo(() => dayBookings.filter((b) => !isTerminal(b)), [dayBookings]);
+  const done = useMemo(() => dayBookings.filter((b) => isTerminal(b)), [dayBookings]);
 
   const selectDay = (d: Date) => {
     setSelectedDate(d);
@@ -81,8 +76,9 @@ export default function ProScheduleScreen() {
 
   const renderCard = (b: Booking) => {
     const d = b.scheduled_at ? new Date(b.scheduled_at) : null;
-    const done_ = b.status === "completed";
+    const done_ = b.status === "completed" || (isTerminal(b) && b.status !== "cancelled");
     const cancelled = b.status === "cancelled";
+    const label = t(statusLabelKey(b));
     return (
       <TouchableOpacity key={b.id} activeOpacity={0.9} onPress={() => router.push(`/pro/tracking/${b.id}`)} style={s.card}>
         <View style={s.dateTile}>
@@ -94,11 +90,11 @@ export default function ProScheduleScreen() {
             <Text style={s.patient}>{t("patient")}</Text>
             <View style={[s.pill, done_ ? s.pillDone : cancelled ? s.pillCancel : b.status === "in_progress" ? s.pillLive : s.pillSoon]}>
               <Text style={[s.pillTxt, done_ ? s.pillTxtDone : cancelled ? s.pillTxtCancel : b.status === "in_progress" ? s.pillTxtLive : s.pillTxtSoon]}>
-                {done_ ? t("status_completed") : cancelled ? t("status_cancelled") : b.status === "in_progress" ? t("status_in_progress") : t("tab_upcoming")}
+                {label}
               </Text>
             </View>
           </View>
-          <Text style={s.spec}>{SPEC_LABEL[b.specialty] ? t(SPEC_LABEL[b.specialty]) : b.specialty}</Text>
+          <Text style={s.spec}>{careLabel(b, t)}</Text>
           <View style={s.metaRow}>
             <Clock size={12} color={Colors.textMuted} />
             <Text style={s.metaTxt}>
@@ -112,7 +108,7 @@ export default function ProScheduleScreen() {
             </View>
           ) : null}
           <View style={s.foot}>
-            <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} MAD</Text>
+            <Text style={s.price}>{b.final_price_mad ?? b.budget_max_mad ?? 0} {t("mad")}</Text>
             {!done_ && !cancelled ? (
               <View style={s.openRow}>
                 <Text style={s.openTxt}>{t("open_action")}</Text>

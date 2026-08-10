@@ -3,16 +3,15 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, Touc
 import { useRouter } from "expo-router";
 import { MessageCircle, Search } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, tr } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
-import { buildDemoProfile, DEMO_PRO_1_ID, isDemoBookingId } from "@/lib/demo-booking";
 
 const NAVY = "#0D0870";
-const specialtyLabels: Record<string, string> = {
-  nurse: "Infirmier", psychologist: "Psychologue", yoga_instructor: "Yoga", physiotherapist: "Kiné",
+const specialtyLabelKeys: Record<string, string> = {
+  nurse: "nurse", psychologist: "psychologist", yoga_instructor: "yoga", physiotherapist: "pay_kine_short",
 };
 
 type Convo = {
@@ -34,7 +33,7 @@ const timeAgo = (iso: string) => {
   const sameDay = d.toDateString() === now.toDateString();
   if (sameDay) return d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" });
   const yest = new Date(); yest.setDate(now.getDate() - 1);
-  if (d.toDateString() === yest.toDateString()) return "Hier";
+  if (d.toDateString() === yest.toDateString()) return tr("yesterday");
   return d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
 };
 
@@ -62,7 +61,7 @@ export default function PatientMessagesScreen() {
       // shared with the same pro so the same person never shows up twice.
       const groups = new Map<string, typeof chatReady>();
       for (const b of chatReady) {
-        const key = isDemoBookingId(b.id) ? `demo:${DEMO_PRO_1_ID}` : b.professional_id;
+        const key = b.professional_id;
         if (!key) continue; // open request, no pro assigned yet → nobody to chat with
         const arr = groups.get(key) ?? [];
         arr.push(b);
@@ -71,35 +70,32 @@ export default function PatientMessagesScreen() {
 
       const items = await Promise.all(
         Array.from(groups.entries()).map(async ([key, bs]): Promise<Convo> => {
-          const isDemo = key.startsWith("demo:");
           const rep = [...bs].sort((a, z) => +new Date(z.created_at) - +new Date(a.created_at))[0];
           const ids = bs.map((b) => b.id);
-          const proId = isDemo ? DEMO_PRO_1_ID : (rep.professional_id as string);
-          const profile = isDemo ? buildDemoProfile(DEMO_PRO_1_ID) : await db.profiles.get(proId).catch(() => null);
+          const proId = rep.professional_id as string;
+          const profile = await db.profiles.get(proId).catch(() => null);
 
           let lastBody: string | null = null, lastMine = false, lastTime: string | null = null, unread = false;
-          if (!isDemo) {
-            const { data } = await supabase
-              .from("messages")
-              .select("body, sender_id, created_at")
-              .in("booking_id", ids)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (data) { lastBody = data.body; lastMine = data.sender_id === user.id; lastTime = data.created_at; }
-            const { count } = await supabase
-              .from("messages")
-              .select("id", { count: "exact", head: true })
-              .in("booking_id", ids)
-              .neq("sender_id", user.id)
-              .is("read_at", null);
-            unread = (count ?? 0) > 0;
-          }
+          const { data } = await supabase
+            .from("messages")
+            .select("body, sender_id, created_at")
+            .in("booking_id", ids)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (data) { lastBody = data.body; lastMine = data.sender_id === user.id; lastTime = data.created_at; }
+          const { count } = await supabase
+            .from("messages")
+            .select("id", { count: "exact", head: true })
+            .in("booking_id", ids)
+            .neq("sender_id", user.id)
+            .is("read_at", null);
+          unread = (count ?? 0) > 0;
           return {
             bookingId: rep.id,
-            name: profile?.full_name ?? "Professionnel",
+            name: profile?.full_name ?? tr("professional"),
             avatar: profile?.avatar_url ?? null,
-            specialty: specialtyLabels[rep.specialty] ?? rep.specialty.replaceAll("_", " "),
+            specialty: specialtyLabelKeys[rep.specialty] ? tr(specialtyLabelKeys[rep.specialty]) : rep.specialty.replaceAll("_", " "),
             active: bs.some((b) => b.status === "matched" || b.status === "in_progress"),
             lastBody, lastMine, lastTime, unread,
           };

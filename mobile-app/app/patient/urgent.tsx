@@ -38,6 +38,17 @@ export default function UrgentScreen() {
   const [note, setNote] = useState("");
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      db.pros.countAvailableForSpecialty("nurse").then((n) => { if (active) setOnlineCount(n); }).catch(() => {});
+    };
+    load();
+    const iv = setInterval(load, 30000);
+    return () => { active = false; clearInterval(iv); };
+  }, []);
 
   const isEmergency = level === "emergency";
   const accent = isEmergency ? RED : AMBER;
@@ -78,6 +89,12 @@ export default function UrgentScreen() {
     if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
+      const availablePros = await db.pros.countAvailableForSpecialty("nurse").catch(() => 1);
+      if (availablePros === 0) {
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
       let gps = coords;
       if (!gps) { try { gps = await geo.getCurrentPosition(); } catch { /* address only */ } }
       const symptomText = symptoms.map((k) => t(k)).join(", ");
@@ -89,7 +106,10 @@ export default function UrgentScreen() {
       });
       if (gps) { try { await geo.setBookingLocation(booking.id, gps.lat, gps.lng); } catch { /* ignore */ } }
       toastSuccess(t("urgent_sent"));
-      router.replace(`/patient/waiting/${booking.id}`);
+      // No bidding for urgent/emergency: the hold is placed now, broadcast to
+      // every online nurse is instant, first to claim wins. Payment first,
+      // then the waiting screen (which redirects on to tracking once claimed).
+      router.replace(`/patient/payment/${booking.id}`);
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("cannot_create_booking"));
     } finally { setSubmitting(false); }
@@ -107,10 +127,12 @@ export default function UrgentScreen() {
         </View>
         <Text style={s.heroTitle}>{t("urgent_title")}</Text>
         <Text style={s.heroSub}>{t("urgent_subtitle")}</Text>
-        <View style={s.livePill}>
-          <View style={s.liveDot} />
-          <Text style={s.liveTxt}>7 {t("pros_available_now")}</Text>
-        </View>
+        {onlineCount != null ? (
+          <View style={s.livePill}>
+            <View style={s.liveDot} />
+            <Text style={s.liveTxt}>{onlineCount} {t("pros_available_now")}</Text>
+          </View>
+        ) : null}
       </LinearGradient>
 
       <ScrollView style={s.sheet} contentContainerStyle={{ padding: 20, paddingBottom: 30 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { tracking } from "./tracking";
 import type {
   Address,
   Bid,
@@ -81,6 +82,20 @@ export const pros = {
         .select("*")
         .single()
     );
+  },
+
+  /**
+   * How many approved, online pros currently serve this specialty — used to
+   * block a patient from posting a request nobody is around to see.
+   */
+  async countAvailableForSpecialty(specialty: ProSpecialty): Promise<number> {
+    const { count, error } = await supabase
+      .from("v_pros_public")
+      .select("id", { count: "exact", head: true })
+      .eq("specialty", specialty)
+      .eq("is_available", true);
+    if (error) throw error;
+    return count ?? 0;
   },
 
 };
@@ -246,6 +261,18 @@ export const bookings = {
     );
   },
 
+  /**
+   * Urgent/emergency requests skip bidding entirely: a pro calls this instead
+   * of submitting a bid, and the server-side claim_open_demand() RPC (0034)
+   * does an atomic compare-and-swap so only the first pro to reach Postgres
+   * wins — everyone else's call throws "Déjà pris en charge...".
+   */
+  async claimOpenDemand(bookingId: UUID): Promise<Booking> {
+    const { data, error } = await supabase.rpc("claim_open_demand", { p_booking_id: bookingId });
+    if (error) throw error;
+    return data as Booking;
+  },
+
   async acceptBid(bookingId: UUID, professionalId: UUID, finalPrice: number): Promise<Booking> {
     return unwrap(
       await supabase
@@ -271,10 +298,6 @@ export const bookings = {
     if (status === "completed") patch.completed_at = new Date().toISOString();
     if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
     return unwrap(await supabase.from("bookings").update(patch).eq("id", id).select("*").single());
-  },
-  // Nurse marks "I'm leaving / en route" (matched → en_route). Enables RULE #3.
-  async markEnRoute(id: UUID): Promise<Booking> {
-    return this.setStatus(id, "en_route");
   },
   // Cancel via the escrow-aware RPC. The RPC picks the cancellation rule (1-4)
   // from the booking status + who is cancelling (patient vs nurse), settles the
@@ -381,6 +404,22 @@ export const addresses = {
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
     );
+  },
+
+  /**
+   * The address a home visit should be sent to: the one marked default, or the
+   * most recent if none is. Null when the patient has saved none.
+   *
+   * Exists because two booking flows used to write the literal string
+   * "Meknès, Maroc" into `bookings.address` — so a professional in Fès was
+   * routed to a city an hour away, and the tracking map measured the whole
+   * journey against it. An address we do not have has to be asked for, never
+   * invented.
+   */
+  async defaultForUser(userId: UUID): Promise<Address | null> {
+    const rows = await addresses.listForUser(userId).catch(() => [] as Address[]);
+    if (rows.length === 0) return null;
+    return rows.find((a) => a.is_default) ?? rows[0];
   },
 
   async create(input: Omit<Address, "id" | "created_at" | "updated_at">): Promise<Address> {
@@ -550,6 +589,84 @@ export const payments = {
   },
 };
 
+// ── Disputes / complaints ────────────────────────────────────────────────
+export type DisputeCategory =
+  | "late_arrival"
+  | "no_show"
+  | "safety_incident"
+  | "poor_conduct"
+  | "quality_issue"
+  | "price_dispute"
+  | "property_damage"
+  | "harassment"
+  | "identity_mismatch"
+  | "payment_issue"
+  | "other";
+export type DisputeStatus = "open" | "under_review" | "resolved_refund" | "resolved_warning" | "resolved_dismissed";
+export type Dispute = {
+  id: UUID;
+  booking_id: UUID | null;
+  reporter_id: UUID;
+  reporter_role: "patient" | "professional";
+  against_id: UUID | null;
+  category: DisputeCategory;
+  description: string;
+  evidence_paths: string[];
+  status: DisputeStatus;
+  resolution_note: string | null;
+  refund_amount_mad: number | null;
+  resolved_by: UUID | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const disputes = {
+  // Files the dispute server-side (file_dispute RPC derives reporter_role +
+  // against_id from the booking itself — never trust the client for that).
+  async file(
+    bookingId: UUID,
+    category: DisputeCategory,
+    description: string,
+    evidencePaths: string[] = [],
+  ): Promise<Dispute> {
+    const { data, error } = await supabase.rpc("file_dispute", {
+      p_booking_id: bookingId,
+      p_category: category,
+      p_description: description,
+      p_evidence_paths: evidencePaths,
+    });
+    if (error) throw error;
+    return data as Dispute;
+  },
+  async listForReporter(userId: UUID): Promise<Dispute[]> {
+    return unwrap(
+      await supabase.from("disputes").select("*").eq("reporter_id", userId).order("created_at", { ascending: false }),
+    );
+  },
+  // Admin queue — RLS only lets an actual admin see rows beyond their own.
+  async listAll(status?: DisputeStatus): Promise<Dispute[]> {
+    let q = supabase.from("disputes").select("*").order("created_at", { ascending: false });
+    if (status) q = q.eq("status", status);
+    return unwrap(await q);
+  },
+  async resolve(
+    disputeId: UUID,
+    status: Extract<DisputeStatus, "under_review" | "resolved_refund" | "resolved_warning" | "resolved_dismissed">,
+    resolutionNote: string,
+    refundAmountMad?: number | null,
+  ): Promise<Dispute> {
+    const { data, error } = await supabase.rpc("resolve_dispute", {
+      p_dispute_id: disputeId,
+      p_status: status,
+      p_resolution_note: resolutionNote,
+      p_refund_amount_mad: refundAmountMad ?? null,
+    });
+    if (error) throw error;
+    return data as Dispute;
+  },
+};
+
 export const payouts = {
   async listForPro(proId: UUID): Promise<Payout[]> {
     return unwrap(
@@ -563,8 +680,11 @@ export const payouts = {
   },
 };
 
+export { tracking } from "./tracking";
+
 export const db = {
   profiles,
+  tracking,
   patients,
   pros,
   proDocuments,
@@ -576,4 +696,5 @@ export const db = {
   payments,
   payouts,
   payoutMethods,
+  disputes,
 };

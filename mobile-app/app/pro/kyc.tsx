@@ -20,10 +20,10 @@ import { supabase } from "@/lib/supabase";
 
 type DocKey = "diploma" | "license" | "id";
 
-const documentTypes: { key: DocKey; label: string }[] = [
-  { key: "diploma", label: "Diplôme" },
-  { key: "license", label: "Licence professionnelle" },
-  { key: "id", label: "Pièce d'identité" },
+const documentTypes: { key: DocKey; labelKey: string }[] = [
+  { key: "diploma", labelKey: "diploma" },
+  { key: "license", labelKey: "pro_license" },
+  { key: "id", labelKey: "id_document" },
 ];
 
 export default function KycUploaderScreen() {
@@ -53,7 +53,7 @@ export default function KycUploaderScreen() {
       setDocuments(docs);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_kyc");
-      Alert.alert("Erreur", message);
+      Alert.alert(t("error"), message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +121,7 @@ export default function KycUploaderScreen() {
       await loadData();
     } catch (error) {
       const message = error instanceof Error ? error.message : t("upload_failed");
-      Alert.alert("Erreur", message);
+      Alert.alert(t("error"), message);
     } finally {
       setUploadingType(null);
     }
@@ -150,7 +150,7 @@ export default function KycUploaderScreen() {
             return (
               <View key={item.key} style={styles.docCard}>
                 <View style={styles.docHead}>
-                  <Text style={styles.docTitle}>{item.label}</Text>
+                  <Text style={styles.docTitle}>{t(item.labelKey)}</Text>
                   <View style={styles.statusPill}>
                     {status === "verified" ? (
                       <CircleCheck size={14} color={Colors.success} />
@@ -170,10 +170,10 @@ export default function KycUploaderScreen() {
                       ]}
                     >
                       {status === "verified"
-                        ? "Vérifié"
+                        ? t("pro_verified")
                         : status === "rejected"
-                          ? "Rejeté"
-                          : "En attente"}
+                          ? t("pro_status_rejected")
+                          : t("pending_status")}
                     </Text>
                   </View>
                 </View>

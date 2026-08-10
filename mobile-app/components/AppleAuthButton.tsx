@@ -1,6 +1,7 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Svg, Path } from "react-native-svg";
 import { Colors } from "@/lib/colors";
+import { useI18n } from "@/lib/i18n";
 
 interface AppleAuthButtonProps {
   label?: string;
@@ -10,11 +11,12 @@ interface AppleAuthButtonProps {
 }
 
 export function AppleAuthButton({
-  label = "Continuer avec Apple",
+  label,
   loading = false,
   disabled = false,
   onPress,
 }: AppleAuthButtonProps) {
+  const { t } = useI18n();
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -33,7 +35,7 @@ export function AppleAuthButton({
               />
             </Svg>
           </View>
-          <Text style={styles.text}>{label}</Text>
+          <Text style={styles.text}>{label ?? t("continue_apple")}</Text>
         </>
       )}
     </TouchableOpacity>

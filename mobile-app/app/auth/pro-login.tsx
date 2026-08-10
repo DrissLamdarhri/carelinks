@@ -20,7 +20,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function ProLoginScreen() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple, sendPasswordReset, resendConfirmationEmail } = useAuth();
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +29,8 @@ export default function ProLoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const valid = email.trim().length > 0 && password.trim().length > 0;
 
@@ -49,13 +51,14 @@ export default function ProLoginScreen() {
   const handleRoleMismatch = (nextRole: string | null) => {
     if (!nextRole || nextRole === "pro") return;
     const label =
-      nextRole === "patient" ? "patient" : nextRole === "admin" ? "administrateur" : "utilisateur";
-    showToast(`Compte ${label} détecté. Redirection vers le bon espace.`);
+      nextRole === "patient" ? t("auth_role_patient") : nextRole === "admin" ? t("auth_role_admin") : t("auth_role_user");
+    showToast(t("auth_role_mismatch_toast").replace("%s", label));
   };
 
   const handleEmailSignIn = async () => {
     if (!valid || submitting) return;
     setErrorMessage(null);
+    setUnconfirmed(false);
     setSubmitting(true);
     try {
       const result = await signInWithEmail(email.trim(), password, "pro");
@@ -66,7 +69,12 @@ export default function ProLoginScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Identifiants incorrects.");
+      if (error instanceof Error && error.message === "EMAIL_NOT_CONFIRMED") {
+        setUnconfirmed(true);
+        setErrorMessage(t("email_not_confirmed"));
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : t("wrong_credentials"));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -106,7 +114,7 @@ export default function ProLoginScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Connexion Google impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("google_auth_failed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -125,7 +133,7 @@ export default function ProLoginScreen() {
       }
       routeByRole(result.role);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Connexion Apple impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("apple_auth_failed"));
     } finally {
       setAppleLoading(false);
     }
@@ -164,7 +172,7 @@ export default function ProLoginScreen() {
               value={email}
               onChangeText={setEmail}
               style={styles.input}
-              placeholder="karim@carelink.ma"
+              placeholder={t("auth_ph_carelink_email")}
               autoCapitalize="none"
               keyboardType="email-address"
               placeholderTextColor={Colors.textSubtle}
@@ -200,7 +208,7 @@ export default function ProLoginScreen() {
               await sendPasswordReset(email);
               showToast(t("reset_sent"));
             } catch (e) {
-              showToast(e instanceof Error ? e.message : "Envoi impossible");
+              showToast(e instanceof Error ? e.message : t("send_failed"));
             }
           }}
         >
@@ -223,6 +231,27 @@ export default function ProLoginScreen() {
         </TouchableOpacity>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {unconfirmed ? (
+          <TouchableOpacity
+            style={{ alignSelf: "center", marginTop: 6 }}
+            disabled={resending}
+            onPress={async () => {
+              setResending(true);
+              try {
+                await resendConfirmationEmail(email.trim());
+                showToast(t("confirm_email_resent"));
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : t("action_failed"));
+              } finally {
+                setResending(false);
+              }
+            }}
+          >
+            <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: "700" }}>
+              {resending ? t("sending") : t("resend_confirmation_email")}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         <View style={styles.noticeCard}>
           <Shield size={20} color={Colors.primary} />

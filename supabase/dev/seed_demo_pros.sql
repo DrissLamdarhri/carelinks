@@ -13,12 +13,16 @@ create extension if not exists pgcrypto;
 
 do $$
 declare
+  -- One seed pro per specialty (product owner request: the map looked
+  -- artificially crowded/fake with 3 nurses — keep just one per service
+  -- until real professionals sign up). The 2 extra nurses that used to be
+  -- here (Youssef Bennani, Nadia El Amrani) were removed live via
+  -- remove_extra_seed_pros.sql — trimmed here too so re-seeding a fresh DB
+  -- never recreates them.
   seed jsonb := '[
     {"id":"a1000000-0000-4000-8000-000000000001","name":"Fatima Zahra","email":"seed.fatima@carelink.test","spec":"nurse","lat":34.0421,"lng":-5.0081,"avatar":"https://randomuser.me/api/portraits/women/65.jpg","rate":180},
     {"id":"a1000000-0000-4000-8000-000000000002","name":"Karim Mansour","email":"seed.karim@carelink.test","spec":"physiotherapist","lat":34.0302,"lng":-4.9982,"avatar":"https://randomuser.me/api/portraits/men/32.jpg","rate":220},
-    {"id":"a1000000-0000-4000-8000-000000000003","name":"Samira Rifai","email":"seed.samira@carelink.test","spec":"psychologist","lat":34.0455,"lng":-5.0011,"avatar":"https://randomuser.me/api/portraits/women/44.jpg","rate":350},
-    {"id":"a1000000-0000-4000-8000-000000000004","name":"Youssef Bennani","email":"seed.youssef@carelink.test","spec":"nurse","lat":34.0281,"lng":-5.0124,"avatar":"https://randomuser.me/api/portraits/men/52.jpg","rate":160},
-    {"id":"a1000000-0000-4000-8000-000000000005","name":"Nadia El Amrani","email":"seed.nadia@carelink.test","spec":"nurse","lat":34.0389,"lng":-4.9951,"avatar":"https://randomuser.me/api/portraits/women/68.jpg","rate":170}
+    {"id":"a1000000-0000-4000-8000-000000000003","name":"Samira Rifai","email":"seed.samira@carelink.test","spec":"psychologist","lat":34.0455,"lng":-5.0011,"avatar":"https://randomuser.me/api/portraits/women/44.jpg","rate":350}
   ]';
   p jsonb;
 begin
@@ -71,7 +75,5 @@ from public.v_pros_public
 where id in (
   'a1000000-0000-4000-8000-000000000001',
   'a1000000-0000-4000-8000-000000000002',
-  'a1000000-0000-4000-8000-000000000003',
-  'a1000000-0000-4000-8000-000000000004',
-  'a1000000-0000-4000-8000-000000000005'
+  'a1000000-0000-4000-8000-000000000003'
 );

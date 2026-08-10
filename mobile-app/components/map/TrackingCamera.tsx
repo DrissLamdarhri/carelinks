@@ -1,0 +1,123 @@
+/**
+ * CareLink — the tracking camera.
+ * ────────────────────────────────────────────────────────────────────────────
+ * Applies the pure policy in `lib/tracking/camera.ts` to a real MapLibre
+ * camera. All the judgement lives in that module and is unit-tested; this file
+ * only owns the wiring — subscribing to the store, measuring the gap between
+ * marker and centre, and issuing `easeTo`.
+ *
+ * Like `LiveProMarker`, this subscribes to the animated store itself so the
+ * per-frame work stays on a leaf. It renders no visible output at all: it is a
+ * `<Camera>` and nothing else.
+ */
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import { Dimensions } from "react-native";
+import { Camera, type CameraRef } from "@maplibre/maplibre-react-native";
+import { distanceM } from "@/lib/tracking/route";
+import {
+  TRACKING_PITCH,
+  initialCameraState,
+  nextCameraCommand,
+  withRecenterRequest,
+  withUserGesture,
+  type CameraState,
+} from "@/lib/tracking/camera";
+import type { TrackingStore } from "@/lib/tracking/store";
+
+export type TrackingCameraHandle = {
+  /** Called when the user pans/zooms — suspends following. */
+  notifyUserGesture(): void;
+  /** Explicit recentre affordance. */
+  recenter(): void;
+};
+
+type Props = {
+  store: TrackingStore;
+  /** Initial framing before the first fix lands. */
+  fallbackCenter: { lat: number; lng: number };
+  /**
+   * Pixels of the map obscured at the bottom (the sheet, the action row).
+   *
+   * Passed to MapLibre as camera padding rather than nudged by hand: padding
+   * insets the viewport the camera frames against, so the tracked position
+   * settles in the middle of the VISIBLE map instead of the middle of the map
+   * view. Faking it with a coordinate offset would drift with zoom and break
+   * the moment the sheet is dragged.
+   */
+  paddingBottom?: number;
+};
+
+export const TrackingCamera = forwardRef<TrackingCameraHandle, Props>(function TrackingCamera(
+  { store, fallbackCenter, paddingBottom = 0 },
+  ref,
+) {
+  const cameraRef = useRef<CameraRef>(null);
+  // Read through a ref so a sheet drag does not re-create the apply callback
+  // and tear down the store subscription mid-journey.
+  const paddingBottomRef = useRef(paddingBottom);
+  paddingBottomRef.current = paddingBottom;
+  const state = useRef<CameraState>(initialCameraState());
+
+  useImperativeHandle(ref, () => ({
+    notifyUserGesture: () => {
+      state.current = withUserGesture(state.current, Date.now());
+    },
+    recenter: () => {
+      state.current = withRecenterRequest(state.current);
+      // Re-evaluate immediately rather than waiting for the next fix: a
+      // recentre tap that does nothing for two seconds feels broken.
+      apply();
+    },
+  }));
+
+  const apply = useCallback(() => {
+    const sample = store.getSnapshot();
+    const cam = cameraRef.current;
+    if (!sample || !cam) return;
+
+    const target = { lat: sample.lat, lng: sample.lng };
+    const { state: next, command } = nextCameraCommand(state.current, {
+      now: Date.now(),
+      target,
+      speedMps: store.latestFix?.speed ?? null,
+      // The map is full-width; its shorter side is the window width.
+      viewportPx: Dimensions.get("window").width,
+      obscuredPx: paddingBottomRef.current,
+      distanceFromCenterM: state.current.center
+        ? distanceM(state.current.center, target)
+        : Number.POSITIVE_INFINITY,
+    });
+    state.current = next;
+    if (!command) return; // the common case, and the point of the policy
+
+    cam.easeTo({
+      center: [command.center.lng, command.center.lat],
+      zoom: command.zoom,
+      pitch: command.pitch,
+      duration: command.durationMs,
+      padding: { top: 0, left: 0, right: 0, bottom: paddingBottomRef.current },
+    });
+  }, [store]);
+
+  // Driven by the store rather than a timer: the camera is only ever asked to
+  // reconsider when the marker actually moved.
+  useEffect(() => store.subscribe(apply), [store, apply]);
+
+  return (
+    <Camera
+      ref={cameraRef}
+      initialViewState={{
+        center: [fallbackCenter.lng, fallbackCenter.lat],
+        zoom: 17.1,
+        bearing: 0,
+        pitch: TRACKING_PITCH,
+      }}
+    />
+  );
+});

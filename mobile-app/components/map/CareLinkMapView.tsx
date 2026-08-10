@@ -34,6 +34,8 @@ export type CareLinkMapViewProps = {
   center: LatLng;
   /** Patient ("Vous") pin + radius origin. */
   patient?: LatLng;
+  /** Live compass heading (0–360°) for the "you are here" pin's facing cone. */
+  meHeading?: number | null;
   /** Destination drop-pin (e.g. the patient's home on the nurse's navigation map). */
   destination?: LatLng;
   /** Nearby professionals to plot. */
@@ -45,6 +47,8 @@ export type CareLinkMapViewProps = {
     initials?: string;
     specialty?: string;
     name?: string;
+    /** Real device heading (deg, from GPS course) — preferred over the route-derived bearing when available. */
+    heading?: number | null;
   };
   /** Road-following route polyline. */
   route?: LatLng[];
@@ -69,6 +73,48 @@ export type CareLinkMapViewProps = {
   fitAllKey?: number;
   /** Navigation mode — camera continuously follows `center` (tight zoom + pitch). */
   follow?: boolean;
+  /**
+   * Live tracking (native only). When provided, the professional's marker and
+   * the camera are driven by the animated store instead of by props: the marker
+   * subscribes on its own leaf and the screen no longer re-renders per frame.
+   * `pro` should still be passed as the RAW position — it is what splits the
+   * route into traversed and remaining, which does not need frame precision.
+   */
+  trackingStore?: import("@/lib/tracking/store").TrackingStore | null;
+  /** Booking-level arrival; outranks anything inferred from the position. */
+  trackingArrived?: boolean;
+  /** "self" draws your own heading arrow instead of a professional's avatar. */
+  trackingVariant?: "pro" | "self";
+  /**
+   * Pixels at the bottom of the map that are covered, or that should simply be
+   * left free of the subject. The tracked marker settles above this, so the
+   * road AHEAD stays visible — which is where someone actually looks.
+   */
+  trackingPaddingBottom?: number;
+  /**
+   * Metres travelled along the route, used to split it into travelled and
+   * remaining.
+   *
+   * A DISTANCE, not an index. The screen previously computed an index against
+   * its own copy of the coordinates while the map sliced the array it actually
+   * draws; the two only agree if neither has been cleaned or resampled, and
+   * when they disagree the travelled portion silently stops advancing — the
+   * route appears frozen while the marker drives on.
+   */
+  trackingProgressM?: number | null;
+  /**
+   * Take the traversed/remaining split from the tracking store's RENDERED
+   * offset instead of the `trackingProgressM` prop.
+   *
+   * The prop is sampled by the screen once per GPS fix, from the newest raw
+   * position — a different instant from the one the marker is drawn at, and
+   * frozen between fixes. Both errors push the colour seam ahead of the
+   * avatar. Reading the store's per-frame render offset removes both, and
+   * keeps the work on this leaf rather than re-rendering the screen.
+   *
+   * Opt-in so the patient's screen keeps its existing behaviour untouched.
+   */
+  trackingProgressFromStore?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -113,6 +159,7 @@ export function CareLinkMapView(props: CareLinkMapViewProps) {
 function FallbackMap({
   center,
   patient,
+  meHeading,
   destination,
   pros = [],
   pro,
@@ -178,7 +225,7 @@ function FallbackMap({
 
       {patient ? (
         <View pointerEvents="none" style={[fb.pin, { left: toXY(patient).x - 13, top: toXY(patient).y - 13 }]}>
-          <MeMarker />
+          <MeMarker heading={meHeading} />
         </View>
       ) : null}
 

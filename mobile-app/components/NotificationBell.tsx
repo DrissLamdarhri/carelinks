@@ -402,7 +402,7 @@ export function NotificationBell() {
       setItems((data ?? []) as AppNotification[]);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("notifications_unavailable");
-      Alert.alert("Erreur", message);
+      Alert.alert(t("error"), message);
     } finally {
       setLoading(false);
     }
@@ -461,7 +461,7 @@ export function NotificationBell() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("cannot_mark_read");
-      Alert.alert("Erreur", message);
+      Alert.alert(t("error"), message);
     } finally {
       setMarking(false);
     }

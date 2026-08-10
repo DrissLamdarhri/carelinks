@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 import { supabase } from "@/lib/supabase";
 import type { NearbyPro } from "./types";
+import { tr } from "../i18n";
 
 /** Real approved professional with coordinates, ready to plot on the map. */
 export type NearbyProMapItem = {
@@ -13,6 +14,9 @@ export type NearbyProMapItem = {
   lat: number;
   lng: number;
   distanceKm: number;
+  /** Available AND seen in the last 30 minutes AND has a position (0054). */
+  is_online: boolean;
+  last_seen_at: string | null;
 };
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -67,6 +71,22 @@ export const geo = {
     if (error) throw error;
   },
 
+  async setYogaSessionLocation(sessionId: string, lat: number, lng: number) {
+    const { error } = await supabase.rpc("set_yoga_session_location", {
+      p_session_id: sessionId,
+      p_lat: lat,
+      p_lng: lng,
+    });
+    if (error) throw error;
+  },
+
+  async getYogaSessionCoords(sessionId: string): Promise<{ lat: number; lng: number } | null> {
+    const { data, error } = await supabase.rpc("get_yoga_session_coords", { p_session_id: sessionId });
+    if (error) throw error;
+    const row: any = Array.isArray(data) ? data[0] : data;
+    return row?.lat != null && row?.lng != null ? { lat: row.lat, lng: row.lng } : null;
+  },
+
   /**
    * Live-tracking coords for a matched booking: the patient destination and the
    * matched pro's current origin, both as plain lat/lng (from PostGIS). Either
@@ -112,19 +132,30 @@ export const geo = {
   },
 
   /**
-   * Real approved pros with coordinates, nearest first, for plotting on the
-   * booking map. Reads the public v_pros_public view and filters/sorts by
-   * haversine distance from the patient. Returns [] when none — callers must
-   * never fall back to fake people in production.
+   * Professionals to plot on the patient's map, nearest first.
+   *
+   * ONLINE ONLY, and that is the whole point of this function. It used to
+   * select every approved pro who had ever recorded a position and plot them
+   * all, so the map showed people who were not working — a patient looking at
+   * six pins had no idea that five of them were asleep. `is_online` is computed
+   * by the view (available + seen in the last 30 min + has a position), so the
+   * freshness rule lives in one place instead of being re-derived per screen.
+   *
+   * Returns [] when nobody is online. That is a real answer and the callers
+   * render an empty state for it — never fall back to fake people.
    */
   async findNearbyProsForMap(
     lat: number,
     lng: number,
-    opts?: { specialty?: string; radiusKm?: number; limit?: number }
+    opts?: { specialty?: string; radiusKm?: number; limit?: number; includeOffline?: boolean }
   ): Promise<NearbyProMapItem[]> {
-    const { data, error } = await supabase
+    let query = supabase
       .from("v_pros_public")
-      .select("id, full_name, avatar_url, specialty, rating_avg, hourly_rate_mad, lat, lng");
+      .select(
+        "id, full_name, avatar_url, specialty, rating_avg, hourly_rate_mad, lat, lng, is_online, last_seen_at",
+      );
+    if (!opts?.includeOffline) query = query.eq("is_online", true);
+    const { data, error } = await query;
     if (error) throw error;
 
     const radiusKm = opts?.radiusKm ?? 15;
@@ -138,6 +169,11 @@ export const geo = {
       .slice(0, limit) as NearbyProMapItem[];
   },
 
+  /** Stamp the signed-in professional as present. See migration 0054. */
+  async heartbeat(): Promise<void> {
+    await supabase.rpc("pro_heartbeat");
+  },
+
   async findProsNearBooking(bookingId: string, radiusKm = 15): Promise<NearbyPro[]> {
     const { data, error } = await supabase.rpc("find_pros_within", {
       p_booking_id: bookingId,
@@ -148,9 +184,13 @@ export const geo = {
   },
 
   async getCurrentPosition(): Promise<{ lat: number; lng: number }> {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) {
-      throw new Error("Permission de localisation refusée.");
+    // Read before asking. This is called on a 3-minute timer while a pro is
+    // online, and an unconditional request there is how a permission dialog
+    // ends up reappearing long after the user answered it.
+    let { granted } = await Location.getForegroundPermissionsAsync();
+    if (!granted) granted = (await Location.requestForegroundPermissionsAsync()).granted;
+    if (!granted) {
+      throw new Error(tr("cmp_location_permission_denied"));
     }
 
     const current = await Location.getCurrentPositionAsync({

@@ -219,7 +219,7 @@ export default function MfaSetupScreen() {
           </View>
           <Text style={styles.title}>{t("enable_2fa")}</Text>
           <Text style={styles.subtitle}>
-            Scannez le QR code puis saisissez le code à 6 chiffres pour confirmer.
+            {t("auth_scan_qr_hint")}
           </Text>
         </View>
 
@@ -237,7 +237,7 @@ export default function MfaSetupScreen() {
                 <View style={styles.secretHeader}>
                   <Text style={styles.secretLabel}>{t("manual_key")}</Text>
                   <TouchableOpacity onPress={handleCopySecret} style={styles.copyBtn}>
-                    <Text style={styles.copyText}>{secretCopied ? "Copié" : t("copy")}</Text>
+                    <Text style={styles.copyText}>{secretCopied ? t("auth_copied") : t("copy")}</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.secretValue}>{secret}</Text>
@@ -267,7 +267,7 @@ export default function MfaSetupScreen() {
           <View style={styles.backupCard}>
             <Text style={styles.backupTitle}>{t("backup_codes")}</Text>
             <Text style={styles.backupHint}>
-              Notez ces codes dans un endroit sûr. Chaque code est utilisable une seule fois.
+              {t("auth_backup_codes_hint")}
             </Text>
             <View style={styles.backupGrid}>
               {backupCodes.map((item) => (
@@ -285,7 +285,7 @@ export default function MfaSetupScreen() {
         {!backupCodes.length ? (
           <TouchableOpacity onPress={handleContinue} style={styles.skipBtn}>
             <Text style={styles.skipText}>
-              {isEnabled ? "Continuer" : "Configurer plus tard"}
+              {isEnabled ? t("continue_btn") : t("auth_setup_later")}
             </Text>
           </TouchableOpacity>
         ) : null}

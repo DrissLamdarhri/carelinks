@@ -41,7 +41,7 @@ export default function MfaSettingsScreen() {
         const verified = factors.find((factor) => factor.status === "verified");
         if (mounted) setTotpFactorId(verified?.id ?? null);
       } catch (error) {
-        if (mounted) setErrorMessage(error instanceof Error ? error.message : "MFA indisponible.");
+        if (mounted) setErrorMessage(error instanceof Error ? error.message : t("auth_mfa_unavailable"));
       } finally {
         if (mounted) setCheckingFactors(false);
       }
@@ -175,8 +175,8 @@ export default function MfaSettingsScreen() {
               <>
                 <Text style={styles.cardBody}>
                   {smsEnabled
-                    ? "Activé : un SMS peut être demandé si aucun TOTP n'est configuré."
-                    : "Activez un SMS de secours si vous ne configurez pas de TOTP."}
+                    ? t("auth_sms_backup_on_desc")
+                    : t("auth_sms_backup_off_desc")}
                 </Text>
                 {!profile?.phone ? (
                   <Text style={styles.cardHint}>{t("phone_missing_profile")}</Text>
@@ -226,8 +226,7 @@ export default function MfaSettingsScreen() {
               </>
             ) : (
               <Text style={styles.cardHint}>
-                Le SMS nécessite un fournisseur payant (Twilio). Utilisez plutôt l’application
-                d’authentification (TOTP).
+                {t("auth_sms_needs_paid_provider")}
               </Text>
             )}
           </View>

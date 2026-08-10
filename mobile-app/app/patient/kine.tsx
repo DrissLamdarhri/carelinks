@@ -16,12 +16,13 @@ const KINE = "#059669";
 const KINE_DARK = "#065F46";
 const PRICE = 150; // MAD per rééducation session
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+
 function buildDates() {
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
   const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
   return Array.from({ length: 60 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i);
-    return { day: days[d.getDay()], num: String(d.getDate()).padStart(2, "0"), month: months[d.getMonth()], iso: d.toISOString().split("T")[0] };
+    return { dayKey: DAY_KEYS[d.getDay()], num: String(d.getDate()).padStart(2, "0"), month: months[d.getMonth()], iso: d.toISOString().split("T")[0] };
   });
 }
 const dates = buildDates();
@@ -33,12 +34,7 @@ const FREQ: { key: Exclude<Recurrence, "none">; label: string }[] = [
   { key: "monthly", label: "recurrence_monthly" },
 ];
 const PRESETS = [6, 10, 12];
-type Kine = { id: string; name: string; focus: string; real: boolean };
-const DEMO_KINE: Kine[] = [
-  { id: "demo-kine-1", name: "Dr. Hamza Alami", focus: "Rééducation motrice", real: false },
-  { id: "demo-kine-2", name: "Dr. Leila Saïdi", focus: "Kiné respiratoire", real: false },
-  { id: "demo-kine-3", name: "Dr. Omar Tazi", focus: "Drainage & sport", real: false },
-];
+type Kine = { id: string; name: string; focus: string };
 const initialsOf = (n: string) => n.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 
 export default function KineScreen() {
@@ -47,8 +43,14 @@ export default function KineScreen() {
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const [mode, setMode] = useState<"single" | "program">("program");
-  const [kines, setKines] = useState<Kine[]>(DEMO_KINE);
-  const [kineId, setKineId] = useState<string>(DEMO_KINE[0].id);
+  // Real, approved physiotherapists only. This list used to be seeded with
+  // three invented practitioners ("Dr. Hamza Alami" and friends) that real
+  // pros were merely appended to — so a patient could build a ten-session
+  // rehabilitation programme around a person who does not exist, and the
+  // booking was created with professional_id = null.
+  const [kines, setKines] = useState<Kine[]>([]);
+  const [kinesLoading, setKinesLoading] = useState(true);
+  const [kineId, setKineId] = useState<string | null>(null);
   const [focus, setFocus] = useState(0);
   const [sessions, setSessions] = useState(10);
   const [freq, setFreq] = useState<Exclude<Recurrence, "none">>("weekly");
@@ -58,17 +60,24 @@ export default function KineScreen() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const { data: pros } = await supabase.from("professionals").select("id").eq("specialty", "physiotherapist").eq("verification_status", "approved");
-      if (!pros?.length) return;
-      const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", pros.map((p) => p.id));
-      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name as string]));
-      const real: Kine[] = pros.map((p) => ({ id: p.id, name: nameById.get(p.id) ?? "Kinésithérapeute", focus: t("spec_physio"), real: true }));
-      if (active) setKines([...real, ...DEMO_KINE]);
+      try {
+        const { data: pros } = await supabase.from("professionals").select("id").eq("specialty", "physiotherapist").eq("verification_status", "approved");
+        const ids = (pros ?? []).map((p) => p.id);
+        if (!ids.length) return;
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+        const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name as string]));
+        const real: Kine[] = ids.map((id) => ({ id, name: nameById.get(id) ?? t("spec_physio"), focus: t("spec_physio") }));
+        if (!active) return;
+        setKines(real);
+        setKineId((cur) => cur ?? real[0]?.id ?? null);
+      } finally {
+        if (active) setKinesLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []);
 
-  const chosen = useMemo(() => kines.find((k) => k.id === kineId) ?? kines[0], [kines, kineId]);
+  const chosen = useMemo(() => kines.find((k) => k.id === kineId) ?? kines[0] ?? null, [kines, kineId]);
   const total = sessions * PRICE;
 
   const reserve = async () => {
@@ -77,14 +86,38 @@ export default function KineScreen() {
     if (!(await ensureVerified())) return;
     setSubmitting(true);
     try {
+      // No practitioner, no programme. There is no "null professional"
+      // fallback any more, because there are no invented practitioners to
+      // fall back from.
+      const realId = chosen?.id ?? null;
+      if (!realId) {
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
+      const realPro = await db.pros.get(realId).catch(() => null);
+      if (!realPro?.is_available) {
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
+      // The professional will be routed to whatever goes in `address`. It used
+      // to be the literal string "Meknès, Maroc" regardless of where the
+      // patient lived.
+      const home = await db.addresses.defaultForUser(user.id);
+      if (!home) {
+        toastError(t("address_required_booking"));
+        setSubmitting(false);
+        return;
+      }
+      const homeAddress = [home.street, home.city].filter(Boolean).join(", ");
       const [h, m] = ["10", "00"];
       const firstISO = new Date(`${dates[startDay].iso}T${h}:${m}:00`).toISOString();
-      const realId = chosen && chosen.real ? chosen.id : null;
       const rows = await db.bookings.createSeries(
         {
           patient_id: user.id, specialty: "physiotherapist", status: "matched",
-          professional_id: realId, address: "Meknès, Maroc",
-          notes: `${chosen?.name ?? "Kiné"} · ${t(FOCUS[focus])}`,
+          professional_id: realId, address: homeAddress,
+          notes: `${chosen?.name ?? t("spec_physio")} · ${t(FOCUS[focus])}`,
           budget_min_mad: PRICE, budget_max_mad: PRICE, final_price_mad: PRICE,
           session_mode: "in_person", plan_type: "subscription", recurrence: freq,
         },
@@ -135,6 +168,11 @@ export default function KineScreen() {
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
           {/* Kiné picker (same practitioner across the program) */}
           <Text style={s.label}>{t("choose_kine")}</Text>
+          {kinesLoading ? (
+            <ActivityIndicator color={KINE} style={{ alignSelf: "flex-start", marginVertical: 12 }} />
+          ) : kines.length === 0 ? (
+            <View style={s.emptyKine}><Text style={s.emptyKineTxt}>{t("no_pros_nearby")}</Text></View>
+          ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 20 }}>
             {kines.map((k) => {
               const on = k.id === kineId;
@@ -148,6 +186,7 @@ export default function KineScreen() {
               );
             })}
           </ScrollView>
+          )}
 
           {/* Focus */}
           <Text style={s.label}>{t("reeducation_type")}</Text>
@@ -200,7 +239,7 @@ export default function KineScreen() {
               const on = i === startDay;
               return (
                 <TouchableOpacity key={d.iso} onPress={() => setStartDay(i)} style={[s.dayChip, on && { backgroundColor: KINE, borderColor: KINE }]}>
-                  <Text style={[s.dayTxt, on && { color: "#fff" }]}>{d.day}</Text>
+                  <Text style={[s.dayTxt, on && { color: "#fff" }]}>{t(d.dayKey)}</Text>
                   <Text style={[s.dayNum, on && { color: "#fff" }]}>{d.num}</Text>
                 </TouchableOpacity>
               );
@@ -210,7 +249,7 @@ export default function KineScreen() {
           {/* Summary */}
           <View style={s.summary}>
             <Text style={s.summaryTitle}>{t("program_summary")}</Text>
-            <View style={s.summaryRow}><Text style={s.summaryK}>{sessions} × {PRICE} MAD</Text><Text style={s.summaryV}>{total} MAD</Text></View>
+            <View style={s.summaryRow}><Text style={s.summaryK}>{sessions} × {PRICE} {t("mad")}</Text><Text style={s.summaryV}>{total} {t("mad")}</Text></View>
             <Text style={s.summaryNote}>{t("first_session_charged")}</Text>
           </View>
 
@@ -218,7 +257,7 @@ export default function KineScreen() {
             {submitting ? <ActivityIndicator color="#fff" /> : (
               <>
                 <Text style={s.ctaTxt}>{t("reserve_program")}</Text>
-                <Text style={s.ctaSub}>{PRICE} MAD · {t("session_short")} 1/{sessions}</Text>
+                <Text style={s.ctaSub}>{PRICE} {t("mad")} · {t("session_short")} 1/{sessions}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -255,6 +294,8 @@ const s = StyleSheet.create({
   kineAvatarTxt: { color: KINE_DARK, fontSize: 15, fontWeight: "800" },
   kineName: { color: Colors.textPrimary, fontSize: 13, fontWeight: "800" },
   kineFocus: { color: Colors.textMuted, fontSize: 11, marginTop: 1 },
+  emptyKine: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16, marginVertical: 4 },
+  emptyKineTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
   kineCheck: { position: "absolute", top: 10, right: 10 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1.5, borderColor: "#ECECEC", backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },

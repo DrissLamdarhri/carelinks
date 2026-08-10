@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,8 @@ import {
   X,
 } from "lucide-react-native";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
@@ -43,43 +45,25 @@ import { toDbSpecialty } from "@/lib/db/types";
 import { CareLinkMapView, HAS_NATIVE_MAPS } from "../../components/map/CareLinkMapView";
 import { BookingMap } from "../../components/BookingMap";
 import type { ProPinData } from "../../components/map/Pins";
-import { DEMO_PRO_AVATARS } from "@/lib/demo-avatars";
 import { useServiceTypes } from "@/lib/service-types";
+import { careTypeLabel } from "@/lib/care-label";
 import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 // Default map center (Fès) used until the patient's GPS resolves.
 const DEFAULT_CENTER = { lat: 34.037, lng: -5.004 };
 
-// Demo mode is OFF in production. Set EXPO_PUBLIC_DEMO=true only for demo builds
-// (shows fallback photo-pros + a wide search radius so the map is never empty).
-const DEMO = process.env.EXPO_PUBLIC_DEMO === "true";
-const SEARCH_RADIUS_KM = DEMO ? 80 : 15;
+// ── Draggable sheet: drag the handle down to see the full map, back up to
+// return to the form. Same default position as before (sheet top at 42% of
+// the screen); collapsing just slides it down toward the bottom edge,
+// leaving a small peek strip (handle + title) so it's obvious how to bring
+// it back up.
+const SCREEN_H = Dimensions.get("window").height;
+const SHEET_EXPANDED_TOP = SCREEN_H * 0.42;
+const SHEET_PEEK_HEIGHT = 132;
+const SHEET_COLLAPSED_TOP = SCREEN_H - SHEET_PEEK_HEIGHT;
+const SHEET_MAX_TRANSLATE = SHEET_COLLAPSED_TOP - SHEET_EXPANDED_TOP;
 
-// Demo professionals positioned AROUND the map center so the map is never empty
-// during the demo (no real approved pros are seeded yet). Once real pros exist,
-// `mapPros` from findNearbyProsForMap takes over automatically.
-function demoProsAround(c: { lat: number; lng: number }): ProPinData[] {
-  const base = [
-    { id: "fz", initials: "FZ", name: "Fatima Zahra", specialty: "Infirmière", rating: 4.9, priceMad: 180, dLat: 0.006, dLng: 0.004, avatar: "https://randomuser.me/api/portraits/women/65.jpg" },
-    { id: "km", initials: "KM", name: "Karim Mansour", specialty: "Kinésithérapeute", rating: 4.8, priceMad: 220, dLat: 0.003, dLng: -0.007, avatar: "https://randomuser.me/api/portraits/men/32.jpg" },
-    { id: "sr", initials: "SR", name: "Samira Rifai", specialty: "Psychologue", rating: 4.7, priceMad: 350, dLat: -0.005, dLng: 0.006, avatar: "https://randomuser.me/api/portraits/women/44.jpg" },
-    { id: "yb", initials: "YB", name: "Youssef Bennani", specialty: "Infirmier", rating: 4.6, priceMad: 160, dLat: -0.007, dLng: -0.004, avatar: "https://randomuser.me/api/portraits/men/52.jpg" },
-  ];
-  return base.map((p) => ({
-    id: p.id,
-    initials: p.initials,
-    name: p.name,
-    shortName: p.name.split(" ")[0],
-    specialty: p.specialty,
-    rating: p.rating,
-    priceMad: p.priceMad,
-    avatarSource: DEMO_PRO_AVATARS[p.id],
-    avatarUrl: p.avatar,
-    lat: c.lat + p.dLat,
-    lng: c.lng + p.dLng,
-    distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
-  }));
-}
+const SEARCH_RADIUS_KM = 15;
 
 // Display-only declutter: on a discovery map, pros seeded/located at nearly the
 // same point stack into a single unreadable blob. Fan any near-duplicates out on
@@ -128,18 +112,22 @@ const fallbackKineCareTypes = [
   "Prévention des blessures",
 ];
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+const MONTH_KEYS = [
+  "pat_mon_jan", "pat_mon_feb", "pat_mon_mar", "pat_mon_apr", "pat_mon_may", "pat_mon_jun",
+  "pat_mon_jul", "pat_mon_aug", "pat_mon_sep", "pat_mon_oct", "pat_mon_nov", "pat_mon_dec",
+];
+
 function buildDates() {
-  const result: { day: string; num: string; month: string; isoDate: string }[] = [];
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+  const result: { dayKey: string; num: string; monthKey: string; isoDate: string }[] = [];
   // Générer plusieurs jours pour permettre la réservation sur plusieurs mois (ex: 90 jours)
   for (let i = 0; i < 90; i += 1) {
     const date = new Date();
     date.setDate(date.getDate() + i);
     result.push({
-      day: days[date.getDay()],
+      dayKey: DAY_KEYS[date.getDay()],
       num: String(date.getDate()).padStart(2, "0"),
-      month: months[date.getMonth()],
+      monthKey: MONTH_KEYS[date.getMonth()],
       isoDate: date.toISOString().split("T")[0],
     });
   }
@@ -147,12 +135,15 @@ function buildDates() {
 }
 
 const dates = buildDates();
-const times = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+// "now" is a sentinel, not a real HH:mm slot — on-demand requests default to
+// ASAP (scheduled_at: null), not a fixed 14:00 the patient never chose.
+const NOW_SLOT = "now";
+const times = [NOW_SLOT, "08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
 export default function PatientRequestScreen() {
   const router = useRouter();
   const { t } = useI18n();
-  const params = useLocalSearchParams<{ service?: string }>();
+  const params = useLocalSearchParams<{ service?: string; care?: string }>();
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const initialService = typeof params.service === "string" ? params.service : "infirmier";
@@ -181,10 +172,22 @@ export default function PatientRequestScreen() {
   }), [isKine]);
   
   const [careType, setCareType] = useState(0);
+  // Coming from the home screen's "Pansement" / "Injection" quick chips: jump
+  // straight to that care type instead of leaving the picker on its default.
+  const careParamAppliedRef = useRef(false);
+  useEffect(() => {
+    if (careParamAppliedRef.current || !params.care || careTypes.length === 0) return;
+    const wanted = params.care.toLowerCase();
+    const idx = careTypes.findIndex((c) => c.toLowerCase().includes(wanted));
+    if (idx >= 0) {
+      setCareType(idx);
+      careParamAppliedRef.current = true;
+    }
+  }, [params.care, careTypes]);
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
-  const [selectedTime, setSelectedTime] = useState(4);
+  const [selectedTime, setSelectedTime] = useState(0);
   const [price, setPrice] = useState(isKine ? 120 : 80);
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
@@ -208,8 +211,6 @@ export default function PatientRequestScreen() {
     }
     return Array.from(map.values());
   }, [dates]);
-  const demoMode = DEMO;
-
   const canSubmit = useMemo(
     () => address.trim().length > 3 || coords !== null,
     [address, coords]
@@ -231,7 +232,7 @@ export default function PatientRequestScreen() {
       try {
         const rows = await geo.findNearbyProsForMap(c.lat, c.lng, {
           specialty: toDbSpecialty(serviceKey),
-          radiusKm: SEARCH_RADIUS_KM, // 15 km in prod; wide only in demo builds
+          radiusKm: SEARCH_RADIUS_KM,
         });
         if (cancelled) return;
         setMapPros(
@@ -245,7 +246,7 @@ export default function PatientRequestScreen() {
                 .join("")
                 .slice(0, 2)
                 .toUpperCase() || "Pr",
-            name: r.full_name ?? "Professionnel",
+            name: r.full_name ?? t("professional"),
             shortName: (r.full_name ?? "Pro").split(" ")[0],
             specialty: r.specialty,
             distanceKm: r.distanceKm,
@@ -269,7 +270,7 @@ export default function PatientRequestScreen() {
   // Reverse-geocode a coordinate and reflect it in the address field.
   const syncAddressFromCoords = async (lat: number, lng: number) => {
     const label = await geo.reverseGeocodeAddress(lat, lng);
-    setAddress(label ?? "Ma position");
+    setAddress(label ?? t("pat_my_position"));
   };
 
   const handleLocate = async () => {
@@ -308,7 +309,7 @@ export default function PatientRequestScreen() {
       setCoords(current);
       await syncAddressFromCoords(current.lat, current.lng);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Position GPS indisponible.");
+      setErrorMessage(error instanceof Error ? error.message : t("pat_gps_unavailable"));
     } finally {
       setLocating(false);
     }
@@ -324,16 +325,35 @@ export default function PatientRequestScreen() {
       // Block suspended patients (too many late cancellations).
       const profile = await db.profiles.get(user.id).catch(() => null);
       if (profile?.is_suspended) {
-        setErrorMessage("Votre compte est suspendu suite à des annulations tardives. Contactez le support.");
+        setErrorMessage(t("pat_suspended_late_cancels"));
         setSubmitting(false);
         return;
       }
 
       // Real reverse-bidding loop: create an OPEN booking that nearby pros can bid on.
+      const specialty = toDbSpecialty(serviceKey);
+
+      // Don't let a patient post into a void — check someone is actually online first.
+      const availablePros = await db.pros.countAvailableForSpecialty(specialty).catch(() => 1);
+      if (availablePros === 0) {
+        setErrorMessage(t("no_pros_online_block"));
+        toastError(t("no_pros_online_block"));
+        setSubmitting(false);
+        return;
+      }
+
       await db.patients.upsert({ id: user.id });
 
-      const [hour, minute] = times[selectedTime].split(":");
-      const scheduledAt = new Date(`${dates[selectedDate].isoDate}T${hour}:${minute}:00`).toISOString();
+      // "Maintenant" means exactly that — no fake future slot the patient
+      // never picked. Matches how urgent/emergency requests already work
+      // (scheduled_at stays null, waiting screen shows "Flexible").
+      const scheduledAt =
+        times[selectedTime] === NOW_SLOT
+          ? null
+          : (() => {
+              const [hour, minute] = times[selectedTime].split(":");
+              return new Date(`${dates[selectedDate].isoDate}T${hour}:${minute}:00`).toISOString();
+            })();
 
       let gps = coords;
       if (!gps) {
@@ -347,7 +367,8 @@ export default function PatientRequestScreen() {
 
       const booking = await db.bookings.create({
         patient_id: user.id,
-        specialty: toDbSpecialty(serviceKey),
+        specialty,
+        care_type: careTypes[careType] ?? null,
         notes: notes.trim() || null,
         address: address.trim(),
         budget_min_mad: Math.max(50, price - 20),
@@ -366,22 +387,24 @@ export default function PatientRequestScreen() {
       }
 
       toastSuccess(t("request_sent_searching"));
-      router.push(`/patient/waiting/${booking.id}`);
+      // replace, not push: a real booking now exists — the empty request
+      // form must leave the back-stack here, matching every later step in
+      // this chain (waiting → offers → payment → tracking all already use
+      // replace). Otherwise the back button/gesture could walk a patient who
+      // already paid straight back into a blank "new request" screen.
+      router.replace(`/patient/waiting/${booking.id}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "La demande n'a pas pu être créée.");
+      setErrorMessage(error instanceof Error ? error.message : t("request_create_failed"));
       toastError(t("request_create_failed"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Prefer REAL nearby pros from the DB; fall back to demo photo-pros only when
-  // none are found (so seeding real pros makes them appear automatically).
-  const effectivePros = declutterPros(
-    mapPros.length > 0 ? mapPros : demoMode ? demoProsAround(coords ?? DEFAULT_CENTER) : [],
-  );
-
-  const usingRealPros = mapPros.length > 0;
+  // Real online professionals, or nothing. The fallback to four invented
+  // photo-pros ("Fatima Zahra", "Karim Mansour", …) is gone — an empty map is
+  // an honest answer and the map renders an empty state for it.
+  const effectivePros = declutterPros(mapPros);
   // Tapped pro → small detail card (clean, doesn't cover the map).
   const selectedPro = effectivePros.find((p) => p.id === selectedProId) ?? null;
 
@@ -400,9 +423,36 @@ export default function PatientRequestScreen() {
       .join(" ");
   }, [price, SPARK_W]);
 
+  // Sheet drag: 0 = expanded (default), SHEET_MAX_TRANSLATE = collapsed (map
+  // fully visible). Dragged via the handle only, so it never fights the
+  // form's own ScrollView or its buttons/inputs.
+  const sheetTranslateY = useSharedValue(0);
+  const sheetDragStart = useSharedValue(0);
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      sheetDragStart.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const next = sheetDragStart.value + e.translationY;
+      sheetTranslateY.value = Math.max(0, Math.min(SHEET_MAX_TRANSLATE, next));
+    })
+    .onEnd((e) => {
+      const shouldCollapse =
+        sheetTranslateY.value > SHEET_MAX_TRANSLATE / 2 || e.velocityY > 800;
+      sheetTranslateY.value = withSpring(shouldCollapse ? SHEET_MAX_TRANSLATE : 0, {
+        damping: 22,
+        stiffness: 220,
+      });
+    });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
   return (
     <View style={styles.root}>
-      <View style={styles.mapZone}>
+      {/* Map fills the whole screen now — dragging the sheet down reveals it,
+          not just the old fixed 42% strip. */}
+      <View style={styles.mapFull}>
         {HAS_NATIVE_MAPS ? (
           <CareLinkMapView
             center={coords ?? DEFAULT_CENTER}
@@ -425,7 +475,6 @@ export default function PatientRequestScreen() {
             initialLat={coords?.lat ?? DEFAULT_CENTER.lat}
             initialLng={coords?.lng ?? DEFAULT_CENTER.lng}
             pros={effectivePros}
-            demo={demoMode}
             primaryColor={theme.primary}
             showChrome={false}
             onChange={(lat, lng) => {
@@ -434,7 +483,12 @@ export default function PatientRequestScreen() {
             }}
           />
         )}
+      </View>
 
+      {/* Chrome overlay (search bar, buttons, pro card) — same footprint as
+          before; `box-none` lets taps on the empty parts fall through to the
+          map underneath. */}
+      <View style={styles.mapChrome} pointerEvents="box-none">
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft size={20} color={Colors.textPrimary} />
@@ -466,17 +520,19 @@ export default function PatientRequestScreen() {
           style={styles.fitAllBtn}
           onPress={() => setFitAllKey((k) => k + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Voir tous les professionnels"
+          accessibilityLabel={t("pat_see_all_pros")}
         >
           <Users size={18} color={theme.primary} />
         </TouchableOpacity>
 
-        {/* Debug/confidence chip: how many pros loaded + real vs demo */}
+        {/* How many professionals are online around this point. Was a
+            debug chip reading "N pros (réel)" or "N démo"; there is no démo
+            any more, and neither label was written for a patient to read. */}
         {effectivePros.length > 0 ? (
           <View style={styles.countChip}>
-            <View style={[styles.countDot, { backgroundColor: usingRealPros ? "#22C55E" : "#F59E0B" }]} />
+            <View style={[styles.countDot, { backgroundColor: "#22C55E" }]} />
             <Text style={styles.countChipText}>
-              {effectivePros.length} {usingRealPros ? "pros (réel)" : "démo"}
+              {effectivePros.length} {t("pros_available_now")}
             </Text>
           </View>
         ) : null}
@@ -525,13 +581,13 @@ export default function PatientRequestScreen() {
             </View>
             <View style={styles.proCardPrice}>
               <Text style={[styles.proCardPriceVal, { color: theme.primary }]}>{selectedPro.priceMad}</Text>
-              <Text style={styles.proCardPriceUnit}>MAD</Text>
+              <Text style={styles.proCardPriceUnit}>{t("mad")}</Text>
             </View>
             <TouchableOpacity
               onPress={() => setSelectedProId(null)}
               style={styles.proCardClose}
               accessibilityRole="button"
-              accessibilityLabel="Fermer"
+              accessibilityLabel={t("close")}
             >
               <X size={16} color="#6B7280" />
             </TouchableOpacity>
@@ -539,15 +595,22 @@ export default function PatientRequestScreen() {
         ) : null}
       </View>
 
-      <ScrollView
-        style={styles.sheet}
-        contentContainerStyle={styles.sheetContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets
-      >
-        <View style={styles.grabber} />
+      <Animated.View style={[styles.sheet, sheetAnimatedStyle]}>
+        {/* Drag handle — always visible/reachable regardless of scroll
+            position, so the sheet can be pulled down to the map at any time. */}
+        <GestureDetector gesture={sheetPan}>
+          <View style={styles.grabberZone}>
+            <View style={styles.grabber} />
+          </View>
+        </GestureDetector>
 
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+        >
         {/* ── Title row ── */}
         <Text style={styles.sheetTitle}>{t("your_request")}</Text>
         {isKine && (
@@ -582,7 +645,7 @@ export default function PatientRequestScreen() {
                     style={[styles.kineCareText, active && styles.kineCareTextActive]}
                     numberOfLines={2}
                   >
-                    {item}
+                    {careTypeLabel(item, t)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -595,7 +658,7 @@ export default function PatientRequestScreen() {
               style={styles.selector}
               onPress={() => setShowCareMenu((v) => !v)}
             >
-              <Text style={styles.selectorText}>{careTypes[careType]}</Text>
+              <Text style={styles.selectorText}>{careTypeLabel(careTypes[careType], t)}</Text>
               <ChevronDown size={18} color={Colors.textMuted} />
             </TouchableOpacity>
             {showCareMenu ? (
@@ -620,7 +683,7 @@ export default function PatientRequestScreen() {
                         index === careType && { color: theme.primary },
                       ]}
                     >
-                      {item}
+                      {careTypeLabel(item, t)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -683,13 +746,13 @@ export default function PatientRequestScreen() {
                       onPress={() => setSelectedDate(globalIndex)}
                     >
                       <Text style={[styles.dateDay, selectedDate === globalIndex && styles.dateTextActive]}>
-                        {date.day}
+                        {t(date.dayKey)}
                       </Text>
                       <Text style={[styles.dateNum, selectedDate === globalIndex && styles.dateTextActive]}>
                         {date.num}
                       </Text>
                       <Text style={[styles.dateMonth, selectedDate === globalIndex && styles.dateTextActive]}>
-                        {date.month}
+                        {t(date.monthKey)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -714,7 +777,7 @@ export default function PatientRequestScreen() {
                 onPress={() => setSelectedTime(index)}
               >
                 <Text style={[styles.timeText, selectedTime === index && styles.timeTextActive]}>
-                  {time}
+                  {time === NOW_SLOT ? t("time_now") : time}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -729,19 +792,14 @@ export default function PatientRequestScreen() {
           style={styles.notesInput}
           multiline
           numberOfLines={2}
-          placeholder={
-            isKine
-              ? "Ex: ordonnance disponible, zone douloureuse, allergie…"
-              : "Ex: ordonnance disponible, allergie…"
-          }
+          placeholder={t(isKine ? "pat_notes_ph_kine" : "pat_notes_ph_nurse")}
           placeholderTextColor={Colors.textSubtle}
         />
 
         {/* ── Prix ── */}
-        <Text style={styles.label}>
-          Votre prix proposé{" "}
-          <Text style={{ color: theme.primary }}>(enchère inversée)</Text>
-        </Text>
+        {/* One key, not two sibling <Text> nodes: the parenthetical is part of
+            the sentence and Arabic reverses the visual order. */}
+        <Text style={styles.label}>{t("pat_your_proposed_price")}</Text>
         <View style={styles.priceCard}>
           <TouchableOpacity
             style={styles.priceBtn}
@@ -751,7 +809,7 @@ export default function PatientRequestScreen() {
           </TouchableOpacity>
           <View style={styles.priceCenter}>
             <Text style={[styles.priceValue, { color: theme.primary }]}>{price}</Text>
-            <Text style={styles.priceUnit}>MAD</Text>
+            <Text style={styles.priceUnit}>{t("mad")}</Text>
           </View>
           <TouchableOpacity
             style={styles.priceBtn}
@@ -777,9 +835,7 @@ export default function PatientRequestScreen() {
         </View>
 
         <Text style={styles.priceHint}>
-          {isKine
-            ? "Prix moyen dans votre zone : 100–150 MAD"
-            : "Prix moyen dans votre zone : 60–120 MAD"}
+          {t("pat_avg_price_zone").replace("%s", isKine ? "100–150" : "60–120")}
         </Text>
 
         {/* ── GPS locate ── */}
@@ -790,16 +846,14 @@ export default function PatientRequestScreen() {
         >
           <LocateFixed size={14} color={Colors.primary} />
           <Text style={styles.locateText}>
-            {coords ? "Position GPS détectée" : "Utiliser ma position actuelle"}
+            {coords ? t("pat_gps_detected") : t("use_my_location")}
           </Text>
         </TouchableOpacity>
 
         {/* ── Info hint (kiné only) ── */}
         {isKine && (
           <View style={styles.kineInfoStrip}>
-            <Text style={styles.kineInfoText}>
-              💡 Les kinés certifiés de votre zone verront votre offre et pourront répondre en moins de 5 min.
-            </Text>
+            <Text style={styles.kineInfoText}>💡 {t("pat_kine_offer_hint")}</Text>
           </View>
         )}
 
@@ -826,18 +880,18 @@ export default function PatientRequestScreen() {
         </TouchableOpacity>
 
         <Text style={styles.submitHint}>
-          {isKine
-            ? "Les kinésithérapeutes de votre zone verront votre offre et pourront répondre."
-            : "Les professionnels de votre zone verront votre offre et pourront répondre."}
+          {t(isKine ? "pat_submit_hint_kine" : "pat_submit_hint_pros")}
         </Text>
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWarm },
-  mapZone: { height: "42%", paddingTop: 6 },
+  mapFull: { ...StyleSheet.absoluteFillObject },
+  mapChrome: { height: "42%", paddingTop: 6 },
   fitAllBtn: {
     position: "absolute",
     right: 14,
@@ -1009,13 +1063,23 @@ const styles = StyleSheet.create({
 
   // Sheet
   sheet: {
-    flex: 1,
-    marginTop: -16,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: SHEET_EXPANDED_TOP,
+    height: SCREEN_H - SHEET_EXPANDED_TOP,
     backgroundColor: "white",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 14,
   },
-  sheetContent: { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 8 },
+  sheetScroll: { flex: 1 },
+  grabberZone: { paddingTop: 10, paddingBottom: 8, alignItems: "center" },
+  sheetContent: { paddingHorizontal: 20, paddingBottom: 24 },
   grabber: {
     alignSelf: "center",
     width: 42,

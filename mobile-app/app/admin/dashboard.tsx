@@ -39,7 +39,7 @@ export default function AdminDashboardScreen() {
         countOf("professionals", (q) => q.eq("verification_status", "pending")),
         countOf("profiles", (q) => q.eq("is_suspended", true)),
         supabase.from("professionals").select("rating_avg").gt("rating_count", 0),
-        countOf("disputes", (q) => q.in("status", ["open", "pending"])).catch(() => 0),
+        countOf("disputes", (q) => q.in("status", ["open", "under_review"])).catch(() => 0),
       ]);
       const rated = (ratingRows.data ?? []).map((r: any) => Number(r.rating_avg)).filter((n) => n > 0);
       const avg = rated.length ? (rated.reduce((s, n) => s + n, 0) / rated.length).toFixed(1) : "—";
@@ -68,12 +68,12 @@ export default function AdminDashboardScreen() {
     { label: t("avg_rating"), value: stats.rating, icon: Star },
   ];
 
-  const alerts: { text: string; kind: "warn" | "ok"; onPress?: () => void }[] = [
+  const alerts: { text: string; kind: "warn" | "ok" | "suspended"; onPress?: () => void }[] = [
     stats.pendingKyc > 0
-      ? { text: `${stats.pendingKyc} document(s) KYC en attente`, kind: "warn", onPress: () => router.push("/admin/kyc") }
+      ? { text: t("admin_kyc_docs_pending_n").replace("{n}", String(stats.pendingKyc)), kind: "warn", onPress: () => router.push("/admin/kyc") }
       : { text: t("no_pending_kyc"), kind: "ok" },
-    ...(stats.suspended > 0 ? [{ text: `${stats.suspended} compte(s) suspendu(s)`, kind: "warn" as const }] : []),
-    ...(stats.disputes > 0 ? [{ text: `${stats.disputes} litige(s) à traiter`, kind: "warn" as const }] : []),
+    ...(stats.suspended > 0 ? [{ text: t("admin_accounts_suspended_n").replace("{n}", String(stats.suspended)), kind: "suspended" as const }] : []),
+    ...(stats.disputes > 0 ? [{ text: t("admin_disputes_to_handle_n").replace("{n}", String(stats.disputes)), kind: "warn" as const, onPress: () => router.push("/admin/disputes") }] : []),
   ];
 
   return (
@@ -101,7 +101,7 @@ export default function AdminDashboardScreen() {
             <Text style={styles.panelTitle}>{t("priority_actions")}</Text>
             {alerts.map((a) => (
               <TouchableOpacity key={a.text} style={styles.alertRow} disabled={!a.onPress} onPress={a.onPress}>
-                {a.kind === "ok" ? <ShieldCheck size={15} color="#16A34A" /> : a.text.includes("suspendu") ? <UserX size={15} color="#E24B4A" /> : <AlertTriangle size={15} color="#D97706" />}
+                {a.kind === "ok" ? <ShieldCheck size={15} color="#16A34A" /> : a.kind === "suspended" ? <UserX size={15} color="#E24B4A" /> : <AlertTriangle size={15} color="#D97706" />}
                 <Text style={styles.alertText}>{a.text}</Text>
                 {a.onPress ? <Text style={styles.alertGo}>›</Text> : null}
               </TouchableOpacity>
@@ -112,15 +112,25 @@ export default function AdminDashboardScreen() {
             <Text style={styles.panelTitle}>{t("management")}</Text>
             <View style={styles.ctaRow}>
               <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/kyc")}>
-                <Text style={styles.ctaText}>File KYC{stats.pendingKyc > 0 ? ` (${stats.pendingKyc})` : ""}</Text>
+                <Text style={styles.ctaText}>{t("kyc_queue")}{stats.pendingKyc > 0 ? ` (${stats.pendingKyc})` : ""}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/bookings")}>
                 <Text style={styles.ctaText}>{t("bookings_lbl")}</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.ctaBtn, styles.ctaWide]} onPress={() => router.push("/admin/metrics")}>
-              <Text style={styles.ctaText}>{t("view_metrics")}</Text>
-            </TouchableOpacity>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/disputes")}>
+                <Text style={styles.ctaText}>{t("admin_disputes")}{stats.disputes > 0 ? ` (${stats.disputes})` : ""}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.ctaBtn} onPress={() => router.push("/admin/metrics")}>
+                <Text style={styles.ctaText}>{t("view_metrics")}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={[styles.ctaBtn, styles.ctaWide]} onPress={() => router.push("/admin/yoga-sessions")}>
+                <Text style={styles.ctaText}>{t("yoga_sessions")}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}

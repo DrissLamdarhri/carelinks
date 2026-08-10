@@ -15,13 +15,14 @@ const DEFAULT_PRICE = 200; // MAD per session
 const DEFAULT_MEET = "https://meet.google.com/new";
 const DEFAULT_ZOOM = "https://zoom.us/join";
 
+const DAY_KEYS = ["day_sun", "day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat"];
+
 function buildDates() {
-  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
   const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
   return Array.from({ length: 90 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() + i);
-    return { day: days[date.getDay()], num: String(date.getDate()).padStart(2, "0"), month: months[date.getMonth()], isoDate: date.toISOString().split("T")[0] };
+    return { dayKey: DAY_KEYS[date.getDay()], num: String(date.getDate()).padStart(2, "0"), month: months[date.getMonth()], isoDate: date.toISOString().split("T")[0] };
   });
 }
 const dates = buildDates();
@@ -48,12 +49,12 @@ export default function PsychologistBookingScreen() {
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
   const params = useLocalSearchParams<{ proId?: string; name?: string; price?: string }>();
-  const psyName = (typeof params.name === "string" && params.name) || "Dr. Dalila Mansouri";
+  const psyName = (typeof params.name === "string" && params.name) || t("clinical_psychologist");
   const psyInitials = psyName.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "DM";
   const PRICE = Number(params.price) || DEFAULT_PRICE;
-  // A real professional_id when the psychologist came from the DB directory;
-  // null for the built-in demo entries.
-  const chosenProId = typeof params.proId === "string" && !params.proId.startsWith("demo") ? params.proId : null;
+  // Always a real professional_id now — the "demo-psy-*" placeholders the
+  // directory used to inject are gone, so there is nothing to filter out.
+  const chosenProId = typeof params.proId === "string" && params.proId ? params.proId : null;
   const [confirming, setConfirming] = useState(false);
   const [plan, setPlan] = useState<PlanType>("single");
   const [recurrence, setRecurrence] = useState<Exclude<Recurrence, "none">>("weekly");
@@ -91,17 +92,37 @@ export default function PsychologistBookingScreen() {
       const firstISO = new Date(`${dates[selectedDay].isoDate}T${hour}:${minute}:00`).toISOString();
 
       // Resolve the psychologist: the one chosen from the directory, else the
-      // first approved (demo entries fall back to placeholder links).
+      // first approved AND currently online one — never match a patient to
+      // someone who isn't around to see the booking.
       const { data: psy } = chosenProId
-        ? await supabase.from("professionals").select("id, meet_link, zoom_link").eq("id", chosenProId).maybeSingle()
-        : await supabase.from("professionals").select("id, meet_link, zoom_link").eq("specialty", "psychologist").eq("verification_status", "approved").limit(1).maybeSingle();
+        ? await supabase.from("professionals").select("id, meet_link, zoom_link, is_available").eq("id", chosenProId).maybeSingle()
+        : await supabase.from("professionals").select("id, meet_link, zoom_link, is_available").eq("specialty", "psychologist").eq("verification_status", "approved").eq("is_available", true).limit(1).maybeSingle();
+
+      if (!psy || !psy.is_available) {
+        Alert.alert(t("error"), t("no_pros_online_block"));
+        setConfirming(false);
+        return;
+      }
+
+      // Only an in-person session needs somewhere to go. It used to be sent to
+      // the literal string "Meknès, Maroc" whatever the patient's real address.
+      let homeAddress: string | null = null;
+      if (mode === "in_person") {
+        const home = await db.addresses.defaultForUser(user.id);
+        if (!home) {
+          Alert.alert(t("error"), t("address_required_booking"));
+          setConfirming(false);
+          return;
+        }
+        homeAddress = [home.street, home.city].filter(Boolean).join(", ");
+      }
 
       const base = {
         patient_id: user.id,
         specialty: "psychologist" as const,
         status: "matched" as const,
         professional_id: psy?.id ?? null,
-        address: mode === "in_person" ? "Meknès, Maroc" : null,
+        address: homeAddress,
         notes: psyName, // shown as the practitioner on the confirmation page
 
         budget_min_mad: PRICE,
@@ -161,7 +182,7 @@ export default function PsychologistBookingScreen() {
             </View>
             <View style={styles.priceTag}>
               <Text style={styles.priceTagVal}>{PRICE}</Text>
-              <Text style={styles.priceTagUnit}>MAD/{t("per_session")}</Text>
+              <Text style={styles.priceTagUnit}>{t("mad_per_session")}</Text>
             </View>
           </View>
         </View>
@@ -203,7 +224,7 @@ export default function PsychologistBookingScreen() {
               <TouchableOpacity style={styles.counterBtn} onPress={() => setSessionCount((n) => Math.min(12, n + 1))}>
                 <Text style={styles.counterBtnTxt}>+</Text>
               </TouchableOpacity>
-              <Text style={styles.counterHint}>{sessionCount} × {PRICE} = {sessionCount * PRICE} MAD</Text>
+              <Text style={styles.counterHint}>{sessionCount} × {PRICE} = {sessionCount * PRICE} {t("mad")}</Text>
             </View>
           </>
         ) : null}
@@ -246,7 +267,7 @@ export default function PsychologistBookingScreen() {
                 const active = selectedDay === gi;
                 return (
                   <TouchableOpacity key={date.isoDate} style={[styles.dayChip, active && styles.dayChipActive]} onPress={() => setSelectedDay(gi)}>
-                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{date.day}</Text>
+                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{t(date.dayKey)}</Text>
                     <Text style={[styles.dayNum, active && styles.dayTextActive]}>{date.num}</Text>
                   </TouchableOpacity>
                 );
@@ -274,7 +295,7 @@ export default function PsychologistBookingScreen() {
           style={[styles.confirmBtn, (!canConfirm || confirming) && styles.confirmBtnDisabled]}>
           {confirming ? <ActivityIndicator size="small" color="white" /> : (
             <Text style={[styles.confirmBtnText, (!canConfirm || confirming) && styles.confirmBtnTextDisabled]}>
-              {t("pay_and_book")} — {PRICE} MAD{isSeries ? ` · ${t("session_short")} 1/${count}` : ""}
+              {t("pay_and_book")} — {PRICE} {t("mad")}{isSeries ? ` · ${t("session_short")} 1/${count}` : ""}
             </Text>
           )}
         </TouchableOpacity>

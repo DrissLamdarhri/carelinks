@@ -17,9 +17,9 @@ import { db } from "@/lib/db/dal";
 import type { ProDocument } from "@/lib/db/types";
 
 const docTypes = [
-  { key: "diploma", label: "Diplôme" },
-  { key: "license", label: "Licence" },
-  { key: "id", label: "CIN / ID" },
+  { key: "diploma", labelKey: "diploma" },
+  { key: "license", labelKey: "license" },
+  { key: "id", labelKey: "pro_doc_cin_id" },
 ];
 
 export default function ProDocumentsScreen() {
@@ -99,7 +99,7 @@ export default function ProDocumentsScreen() {
                 onPress={() => setDocType(item.key)}
                 style={[styles.chip, active && styles.chipActive]}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{item.label}</Text>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{t(item.labelKey)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -147,7 +147,7 @@ export default function ProDocumentsScreen() {
             <View style={styles.statusWrap}>
               <BadgeCheck size={14} color={doc.is_verified ? Colors.success : Colors.warning} />
               <Text style={[styles.statusText, { color: doc.is_verified ? Colors.success : Colors.warning }]}>
-                {doc.is_verified ? "Vérifié" : "En attente"}
+                {doc.is_verified ? t("pro_verified") : t("pending_status")}
               </Text>
             </View>
           </View>

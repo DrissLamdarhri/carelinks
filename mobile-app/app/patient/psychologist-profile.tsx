@@ -15,20 +15,22 @@ export default function PsychologistProfileScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const p = useLocalSearchParams<{ id?: string; name?: string; price?: string; focus?: string; rating?: string; reviews?: string }>();
-  const name = (typeof p.name === "string" && p.name) || "Dr. Dalila Mansouri";
-  const price = Number(p.price) || 200;
+  const name = (typeof p.name === "string" && p.name) || t("clinical_psychologist");
+  const price = Number(p.price) || 0;
   const focus = (typeof p.focus === "string" && p.focus) || t("clinical_psychologist");
   // Real credentials, read from the professional's record. These used to be
   // hardcoded ("4.9", "42 reviews", "8+" years, "320" sessions) — the same
   // invented figures shown for every psychologist, which is not something we
   // can put in front of a patient choosing who enters their care.
   const [stats, setStats] = useState<{ rating: number; reviews: number; years: number; sessions: number } | null>(null);
+  const [bio, setBio] = useState<string | null>(null);
   useEffect(() => {
     if (!p.id) return;
     let alive = true;
     void (async () => {
       const pro = await db.pros.get(p.id as string).catch(() => null);
       if (alive && pro) {
+        setBio(pro.bio ?? null);
         setStats({
           rating: Number(pro.rating_avg ?? 0),
           reviews: Number(pro.rating_count ?? 0),
@@ -44,7 +46,7 @@ export default function PsychologistProfileScreen() {
   const reviews = stats?.reviews ?? Number(p.reviews) ?? 0;
 
   const book = () =>
-    router.push(`/patient/psychologist?proId=${encodeURIComponent(p.id ?? "demo")}&name=${encodeURIComponent(name)}&price=${price}`);
+    router.push(`/patient/psychologist?proId=${encodeURIComponent(String(p.id ?? ""))}&name=${encodeURIComponent(name)}&price=${price}`);
 
   return (
     <View style={s.root}>
@@ -84,15 +86,16 @@ export default function PsychologistProfileScreen() {
         <View style={s.body}>
           {/* About */}
           <Text style={s.h}>{t("about_label")}</Text>
-          <Text style={s.p}>
-            {t("psy_bio_demo")}
-          </Text>
+          {/* The professional's own words, or nothing. This was a fixed
+              paragraph of invented biography (`psy_bio_demo`) rendered
+              identically under every psychologist's name. */}
+          {bio ? <Text style={s.p}>{bio}</Text> : null}
 
           {/* Specialties */}
           <Text style={s.h}>{t("specialties_label")}</Text>
           <View style={s.chips}>
-            {["Anxiété", "Dépression", "TCC", "Stress", "Confiance en soi"].map((c) => (
-              <View key={c} style={s.chip}><Text style={s.chipTxt}>{c}</Text></View>
+            {["pat_topic_anxiety", "pat_topic_depression", "pat_topic_cbt", "pat_topic_stress", "pat_topic_self_confidence"].map((c) => (
+              <View key={c} style={s.chip}><Text style={s.chipTxt}>{t(c)}</Text></View>
             ))}
           </View>
 
@@ -106,7 +109,7 @@ export default function PsychologistProfileScreen() {
           {/* Price */}
           <View style={s.priceCard}>
             <View><Text style={s.priceLbl}>{t("consultation")}</Text><Text style={s.priceSub}>{t("per_session")}</Text></View>
-            <Text style={s.priceVal}>{price} MAD</Text>
+            <Text style={s.priceVal}>{price} {t("mad")}</Text>
           </View>
 
           {/* Reviews — real data only. Fabricated testimonials were being shown
@@ -118,7 +121,7 @@ export default function PsychologistProfileScreen() {
 
       {/* Sticky CTA */}
       <View style={s.footer}>
-        <View style={s.footerPrice}><Text style={s.footerPriceVal}>{price} MAD</Text><Text style={s.footerPriceUnit}>/{t("per_session")}</Text></View>
+        <View style={s.footerPrice}><Text style={s.footerPriceVal}>{price} {t("mad")}</Text><Text style={s.footerPriceUnit}>/{t("per_session")}</Text></View>
         <TouchableOpacity style={s.cta} onPress={book} activeOpacity={0.9}>
           <CalendarClock size={17} color="#fff" />
           <Text style={s.ctaTxt}>{t("book_appointment_short")}</Text>

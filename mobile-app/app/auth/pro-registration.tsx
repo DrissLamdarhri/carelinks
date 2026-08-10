@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -39,9 +40,26 @@ import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
 import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
 import { showToast } from "@/lib/toast";
+import { careTypeLabel } from "@/lib/care-label";
 
 const professions = ["Psychologue", "Infirmier", "Kinésithérapeute"];
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+// The arrays above are DATA, not copy: their values key `frenchToKey`, are compared
+// against `profession`, and are persisted on the professionals row. Translating them
+// in place would break the lookups, so the French stays and only the label is
+// localised through these maps.
+const professionLabelKey: Record<string, string> = {
+  Psychologue: "psychologist",
+  Infirmier: "nurse",
+  Kinésithérapeute: "physio",
+};
+const dayLabelKey: Record<string, string> = {
+  Lun: "day_mon", Mar: "day_tue", Mer: "day_wed", Jeu: "day_thu",
+  Ven: "day_fri", Sam: "day_sat", Dim: "day_sun",
+};
+// Shown greyed-out as the example coverage city until the pro types their own.
+const DEFAULT_CITY = "Fès";
 const startTimes = ["06:00", "07:00", "08:00", "09:00", "10:00"];
 const endTimes = ["16:00", "17:00", "18:00", "19:00", "20:00", "22:00"];
 
@@ -61,7 +79,7 @@ const kineServices = ["Rééducation motrice", "Traitement anti-douleur", "Trait
 export default function ProRegistrationScreen() {
   const { t } = useI18n();
   const router = useRouter();
-  const { signUpWithEmail } = useAuth();
+  const { signUpWithEmail, resendConfirmationEmail } = useAuth();
   const [step, setStep] = useState(0);
 
   // servicesMap state moved inside component so hooks are valid in component body
@@ -96,6 +114,8 @@ export default function ProRegistrationScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -220,10 +240,13 @@ export default function ProRegistrationScreen() {
   };
 
   const getDiplomaTitle = (): string => {
-    if (profession === "Infirmier") return "Diplôme d'infirmier";
-    if (profession === "Kinésithérapeute") return "Diplôme de kinésithérapeute";
-    return "Diplôme de psychologue";
+    if (profession === "Infirmier") return t("reg_diploma_nurse");
+    if (profession === "Kinésithérapeute") return t("reg_diploma_physio");
+    return t("reg_diploma_psy");
   };
+
+  // Service names are the same catalogue as the patient care types.
+  const serviceLabel = (name: string): string => careTypeLabel(name, t);
 
   const handleSubmit = async () => {
     if (submitting || !stepValid[3]) return;
@@ -231,7 +254,8 @@ export default function ProRegistrationScreen() {
     setErrorMessage(null);
     try {
       // 1) Sign up the user (create auth user + profile + professionals row)
-      const newUserId = await signUpWithEmail(form.email.trim(), form.password, fullName, "pro", {
+      const { userId: newUserId, needsEmailConfirmation } = await signUpWithEmail(
+        form.email.trim(), form.password, fullName, "pro", {
         phone: form.phone.trim(),
         city: form.city.trim(),
         profession: getProfessionSpecialty(),
@@ -240,7 +264,17 @@ export default function ProRegistrationScreen() {
       });
 
       const uid = newUserId ?? (await supabase.auth.getUser()).data?.user?.id;
-      if (!uid) throw new Error("Impossible de récupérer l'ID utilisateur après inscription");
+      if (!uid) throw new Error(t("reg_no_user_id"));
+
+      if (needsEmailConfirmation) {
+        // No session exists yet — uploading now would be rejected by RLS.
+        // Stash the picked documents locally; fetchProfile's bootstrap
+        // uploads them the moment this pro confirms and logs in for real.
+        await AsyncStorage.setItem(`pending_pro_docs_${uid}`, JSON.stringify(pendingUploads));
+        setNeedsConfirmation(true);
+        setSubmitting(false);
+        return;
+      }
 
       const sessionData = await supabase.auth.getSession();
       const token = sessionData.data?.session?.access_token;
@@ -325,7 +359,7 @@ export default function ProRegistrationScreen() {
       // 3) Check if all uploads succeeded
       if (failedUploads.length > 0) {
         const failedList = failedUploads.join(", ");
-        const errorMsg = `Les documents suivants n'ont pas pu être envoyés:\n${failedList}\n\nVeuillez réessayer.`;
+        const errorMsg = t("reg_docs_failed").replace("%s", failedList);
         console.error(`❌ Upload failures detected: ${failedList}`);
         Alert.alert(t("doc_upload_error"), errorMsg);
         setSubmitting(false);
@@ -339,11 +373,45 @@ export default function ProRegistrationScreen() {
       const msg = error instanceof Error ? error.message : t("signup_error");
       console.error("Signup error:", msg);
       setErrorMessage(msg);
-      Alert.alert("Erreur", msg);
+      Alert.alert(t("error"), msg);
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (needsConfirmation) {
+    return (
+      <View style={styles.successRoot}>
+        <View style={styles.successIconWrap}>
+          <Mail size={50} color={Colors.primary} />
+        </View>
+        <Text style={styles.successTitle}>{t("confirm_email_title")}</Text>
+        <Text style={styles.successSubtitle}>
+          {t("confirm_email_sub").replace("%s", form.email.trim())}
+        </Text>
+        <TouchableOpacity
+          style={[styles.successBtn, resending && { opacity: 0.6 }]}
+          disabled={resending}
+          onPress={async () => {
+            setResending(true);
+            try {
+              await resendConfirmationEmail(form.email.trim());
+              showToast(t("confirm_email_resent"));
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("action_failed"));
+            } finally {
+              setResending(false);
+            }
+          }}
+        >
+          {resending ? <ActivityIndicator color="white" /> : <Text style={styles.successBtnText}>{t("resend")}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: 14, padding: 8 }} onPress={() => router.replace("/auth/pro-login")}>
+          <Text style={{ color: Colors.textMuted, fontSize: 13.5, fontWeight: "600" }}>{t("back_to_login")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (submitted) {
     return (
@@ -352,9 +420,7 @@ export default function ProRegistrationScreen() {
           <CheckCircle2 size={50} color={Colors.primary} />
         </View>
         <Text style={styles.successTitle}>{t("request_sent_excl")}</Text>
-        <Text style={styles.successSubtitle}>
-          Votre dossier est en cours de vérification. Vous recevrez une notification après validation.
-        </Text>
+        <Text style={styles.successSubtitle}>{t("reg_under_review")}</Text>
         <View style={styles.successList}>
           <SuccessRow label={t("step_personal_info")} ok />
           <SuccessRow label={t("docs_verified")} ok />
@@ -405,7 +471,7 @@ export default function ProRegistrationScreen() {
                   value={form.firstName}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, firstName: value }))}
                   style={styles.input}
-                  placeholder="Karim"
+                  placeholder={t("reg_ph_first_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -415,7 +481,7 @@ export default function ProRegistrationScreen() {
                   value={form.lastName}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, lastName: value }))}
                   style={styles.input}
-                  placeholder="Benali"
+                  placeholder={t("reg_ph_last_name")}
                   placeholderTextColor={Colors.textSubtle}
                 />
               </View>
@@ -428,7 +494,7 @@ export default function ProRegistrationScreen() {
                 value={form.phone}
                 onChangeText={(value) => setForm((prev) => ({ ...prev, phone: value }))}
                 style={styles.phoneInput}
-                placeholder="6 12 34 56 78"
+                placeholder={t("auth_ph_phone_local")}
                 placeholderTextColor={Colors.textSubtle}
                 keyboardType="phone-pad"
                 textContentType="telephoneNumber"
@@ -444,7 +510,7 @@ export default function ProRegistrationScreen() {
                 value={form.email}
                 onChangeText={(value) => setForm((prev) => ({ ...prev, email: value }))}
                 style={styles.inputInner}
-                placeholder="karim@email.com"
+                placeholder={t("reg_ph_email")}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholderTextColor={Colors.textSubtle}
@@ -485,7 +551,7 @@ export default function ProRegistrationScreen() {
                         setSelectedServices([]);
                       }}
                     >
-                      <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{item}</Text>
+                      <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{t(professionLabelKey[item] ?? item)}</Text>
                       {active ? <Check size={16} color={Colors.primary} /> : null}
                     </TouchableOpacity>
                   );
@@ -499,7 +565,7 @@ export default function ProRegistrationScreen() {
                 <TouchableOpacity style={styles.inputWithIcon} onPress={() => setShowServiceMenu((v) => !v)}>
                   <Briefcase size={16} color={Colors.textMuted} />
                   <Text style={[styles.inputInner, { color: selectedServices.length ? Colors.textPrimary : Colors.textMuted }]}>
-                    {selectedServices.length ? `${selectedServices.length} sélectionnés` : t("choose_dots")}
+                    {selectedServices.length ? t("reg_n_selected").replace("{n}", String(selectedServices.length)) : t("choose_dots")}
                   </Text>
                   <ChevronDown size={16} color={Colors.textMuted} />
                 </TouchableOpacity>
@@ -515,7 +581,7 @@ export default function ProRegistrationScreen() {
                             setSelectedServices((prev) => (active ? prev.filter((x) => x !== item) : [...prev, item]))
                           }
                         >
-                          <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{item}</Text>
+                          <Text style={[styles.specText, active && { color: Colors.primary, fontWeight: "600" }]}>{serviceLabel(item)}</Text>
                           {active ? <Check size={16} color={Colors.primary} /> : null}
                         </TouchableOpacity>
                       );
@@ -573,13 +639,11 @@ export default function ProRegistrationScreen() {
 
             <View style={styles.warningCard}>
               <AlertTriangle size={18} color={Colors.accent} />
-              <Text style={styles.warningText}>
-                Les informations doivent correspondre entre votre CIN et votre diplôme.
-              </Text>
+              <Text style={styles.warningText}>{t("reg_cin_diploma_match")}</Text>
             </View>
 
             <UploadCard
-              title={diploma ? `${getDiplomaTitle()} téléchargé ✓` : getDiplomaTitle()}
+              title={diploma ? `${getDiplomaTitle()} ${t("reg_uploaded_ok")}` : getDiplomaTitle()}
               subtitle={t("doc_format_hint")}
               done={diploma}
               loading={uploading === "diploma"}
@@ -587,7 +651,7 @@ export default function ProRegistrationScreen() {
               onPress={() => handleUpload("diploma")}
             />
             <UploadCard
-              title={cin ? "CIN téléchargée ✓" : t("national_id")}
+              title={cin ? `${t("national_id")} ${t("reg_uploaded_ok")}` : t("national_id")}
               subtitle={t("doc_format_hint")}
               done={cin}
               loading={uploading === "cin"}
@@ -642,7 +706,7 @@ export default function ProRegistrationScreen() {
                       setAvailDays((prev) => (active ? prev.filter((value) => value !== day) : [...prev, day]))
                     }
                   >
-                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{day}</Text>
+                    <Text style={[styles.dayText, active && styles.dayTextActive]}>{t(dayLabelKey[day] ?? day)}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -651,7 +715,7 @@ export default function ProRegistrationScreen() {
             <Text style={styles.sectionLabel}>{t("work_hours")}</Text>
             <View style={styles.row}>
               <View style={styles.col}>
-                <Text style={styles.label}>De</Text>
+                <Text style={styles.label}>{t("reg_from")}</Text>
                 <View style={styles.selectWrap}>
                   <Clock size={16} color={Colors.textMuted} />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -694,7 +758,7 @@ export default function ProRegistrationScreen() {
             </View>
 
             <Text style={styles.sectionLabel}>{t("min_rate_accepted")}</Text>
-            <CounterCard value={`${minPrice} MAD`} onMinus={() => setMinPrice((v) => Math.max(40, v - 10))} onPlus={() => setMinPrice((v) => Math.min(300, v + 10))} />
+            <CounterCard value={`${minPrice} ${t("mad")}`} onMinus={() => setMinPrice((v) => Math.max(40, v - 10))} onPlus={() => setMinPrice((v) => Math.min(300, v + 10))} />
 
             <Text style={styles.sectionLabel}>{t("max_distance")}</Text>
             <CounterCard value={`${maxDistance} km`} onMinus={() => setMaxDistance((v) => Math.max(1, v - 1))} onPlus={() => setMaxDistance((v) => Math.min(30, v + 1))} />
@@ -706,7 +770,7 @@ export default function ProRegistrationScreen() {
               <View>
                 <Text style={styles.zoneTitle}>{t("coverage_zone")}</Text>
                 <Text style={styles.zoneText}>
-                  {form.city || "Fès"} — rayon de {maxDistance} km
+                  {t("reg_radius_around").replace("%s", form.city || DEFAULT_CITY).replace("{n}", String(maxDistance))}
                 </Text>
               </View>
             </View>
@@ -724,21 +788,24 @@ export default function ProRegistrationScreen() {
                   <User size={20} color={Colors.primary} />
                 </View>
                 <View>
-                  <Text style={styles.summaryName}>{fullName || "Karim Benali"}</Text>
-                  <Text style={styles.summaryMeta}>{form.email || "karim@email.com"}</Text>
-                  <Text style={styles.summaryMeta}>+212 {form.phone || "6 12 34 56 78"}</Text>
+                  <Text style={styles.summaryName}>{fullName || "—"}</Text>
+                  <Text style={styles.summaryMeta}>{form.email || t("reg_ph_email")}</Text>
+                  <Text style={styles.summaryMeta}>+212 {form.phone || t("auth_ph_phone_local")}</Text>
                 </View>
               </View>
 
-              <SummaryRow label="Ville" value={form.city || "Fès"} />
-              <SummaryRow label={t("experience")} value={`${form.experience || "6"} ans`} />
-              <SummaryRow label={t("profession")} value={profession || t("not_selected_f")} />
+              <SummaryRow label={t("city")} value={form.city || DEFAULT_CITY} />
+              <SummaryRow label={t("experience")} value={t("reg_n_years").replace("{n}", form.experience || "6")} />
+              <SummaryRow label={t("profession")} value={profession ? t(professionLabelKey[profession] ?? profession) : t("not_selected_f")} />
               {profession && (profession === "Infirmier" || profession === "Kinésithérapeute") ? (
-                <SummaryRow label={t("service_types")} value={selectedServices.length ? selectedServices.join(", ") : t("not_selected_m")} />
+                <SummaryRow label={t("service_types")} value={selectedServices.length ? selectedServices.map(serviceLabel).join(", ") : t("not_selected_m")} />
               ) : null}
-              <SummaryRow label={t("availability")} value={`${availDays.join(", ")} · ${startTime}-${endTime}`} />
-              <SummaryRow label={t("min_rate")} value={`${minPrice} MAD`} />
-              <SummaryRow label="Zone" value={`${maxDistance} km autour de ${form.city || "Fès"}`} />
+              <SummaryRow label={t("availability")} value={`${availDays.map((d) => t(dayLabelKey[d] ?? d)).join(", ")} · ${startTime}-${endTime}`} />
+              <SummaryRow label={t("min_rate")} value={`${minPrice} ${t("mad")}`} />
+              <SummaryRow
+                label={t("reg_zone")}
+                value={t("reg_radius_around").replace("%s", form.city || DEFAULT_CITY).replace("{n}", String(maxDistance))}
+              />
             </View>
 
             <View style={styles.docsStatusCard}>

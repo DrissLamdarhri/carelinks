@@ -1,8 +1,7 @@
 // import { useCallback, useEffect, useRef, useState } from "react";
 // import { useFocusEffect } from "expo-router";
 // import { supabase } from "@/lib/supabase";
-// import { isDemoBookingId } from "@/lib/demo-booking";
-// import { db } from "./dal";
+// // import { db } from "./dal";
 // import type { Bid, Booking, Message, ProSpecialty, UUID } from "./types";
 
 // type AsyncListState<T> = {
@@ -42,8 +41,7 @@
 // }
 
 // export function useBookingBids(bookingId: UUID | null) {
-//   const isDemo = isDemoBookingId(bookingId);
-//   const { data, setData, loading, error, refresh } = useAsyncList<Bid>(
+// //   const { data, setData, loading, error, refresh } = useAsyncList<Bid>(
 //     () => (bookingId && !isDemo ? db.bids.listForBooking(bookingId) : Promise.resolve([])),
 //     [bookingId, isDemo]
 //   );
@@ -51,7 +49,7 @@
 //   useFocusEffect(
 //     useCallback(() => {
 //       // Skip realtime subscription for demo bookings
-//       if (!bookingId || isDemo) return;
+//       if (!bookingId) return;
 
 //       const channel = supabase
 //         .channel(`bids:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
@@ -82,7 +80,7 @@
 //       return () => {
 //         void supabase.removeChannel(channel);
 //       };
-//     }, [bookingId, isDemo, setData])
+//     }, [bookingId, setData])
 //   );
 
 //   const pendingBids = data.filter((item) => item.status === "pending");
@@ -182,8 +180,7 @@
 // }
 
 // export function useBookingMessages(bookingId: UUID | null) {
-//   const isDemo = isDemoBookingId(bookingId);
-//   const { data, setData, loading, error, refresh } = useAsyncList<Message>(
+// //   const { data, setData, loading, error, refresh } = useAsyncList<Message>(
 //     () => (bookingId && !isDemo ? db.messages.listForBooking(bookingId) : Promise.resolve([])),
 //     [bookingId, isDemo]
 //   );
@@ -191,7 +188,7 @@
 //   useFocusEffect(
 //     useCallback(() => {
 //       // Skip realtime subscription for demo bookings
-//       if (!bookingId || isDemo) return;
+//       if (!bookingId) return;
 
 //       const channel = supabase
 //         .channel(`messages:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
@@ -215,7 +212,7 @@
 //       return () => {
 //         void supabase.removeChannel(channel);
 //       };
-//     }, [bookingId, isDemo, setData])
+//     }, [bookingId, setData])
 //   );
 
 //   return { messages: data, setMessages: setData, loading, error, refresh };
@@ -223,7 +220,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { isDemoBookingId } from "@/lib/demo-booking";
 import { db } from "./dal";
 import type { Bid, Booking, Message, OpenDemand, ProSpecialty, UUID } from "./types";
 
@@ -264,16 +260,15 @@ function useAsyncList<T>(loader: () => Promise<T[]>, deps: React.DependencyList)
 }
 
 export function useBookingBids(bookingId: UUID | null) {
-  const isDemo = isDemoBookingId(bookingId);
   const { data, setData, loading, error, refresh } = useAsyncList<Bid>(
-    () => (bookingId && !isDemo ? db.bids.listForBooking(bookingId) : Promise.resolve([])),
-    [bookingId, isDemo]
+    () => (bookingId ? db.bids.listForBooking(bookingId) : Promise.resolve([])),
+    [bookingId]
   );
 
   useFocusEffect(
     useCallback(() => {
       // Skip realtime subscription for demo bookings
-      if (!bookingId || isDemo) return;
+      if (!bookingId) return;
 
       const channel = supabase
         .channel(`bids:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
@@ -304,7 +299,7 @@ export function useBookingBids(bookingId: UUID | null) {
       return () => {
         void supabase.removeChannel(channel);
       };
-    }, [bookingId, isDemo, setData])
+    }, [bookingId, setData])
   );
 
   const pendingBids = data.filter((item) => item.status === "pending");
@@ -490,16 +485,15 @@ export function useOpenBookingsBySpecialty(
 }
 
 export function useBookingMessages(bookingId: UUID | null) {
-  const isDemo = isDemoBookingId(bookingId);
   const { data, setData, loading, error, refresh } = useAsyncList<Message>(
-    () => (bookingId && !isDemo ? db.messages.listForBooking(bookingId) : Promise.resolve([])),
-    [bookingId, isDemo]
+    () => (bookingId ? db.messages.listForBooking(bookingId) : Promise.resolve([])),
+    [bookingId]
   );
 
   useFocusEffect(
     useCallback(() => {
       // Skip realtime subscription for demo bookings
-      if (!bookingId || isDemo) return;
+      if (!bookingId) return;
 
       const channel = supabase
         .channel(`messages:booking:${bookingId}:${Math.random().toString(36).slice(2)}`)
@@ -523,7 +517,7 @@ export function useBookingMessages(bookingId: UUID | null) {
       return () => {
         void supabase.removeChannel(channel);
       };
-    }, [bookingId, isDemo, setData])
+    }, [bookingId, setData])
   );
 
   return { messages: data, setMessages: setData, loading, error, refresh };

@@ -15,15 +15,12 @@ import { useI18n } from "@/lib/i18n";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { db } from "@/lib/db/dal";
 import { geo } from "@/lib/db/geo";
+import { supabase } from "@/lib/supabase";
+import { toastError } from "@/lib/toast";
 import type { Booking } from "@/lib/db/types";
 import { useBookingBids } from "@/lib/db/realtime";
-import {
-  buildDemoBids,
-  buildDemoBooking,
-  getDemoSpecialty,
-  isDemoBookingId,
-  normalizeRouteParam,
-} from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
+import { CANCEL_REASON_NO_PRO } from "@/lib/care-label";
 import { LiveBidsFeed } from "../../../components/LiveBidsFeed";
 
 export default function WaitingOffersScreen() {
@@ -31,20 +28,14 @@ export default function WaitingOffersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemoBooking = isDemoBookingId(bookingId);
-
-  const { pendingBids: livePendingBids } = useBookingBids(isDemoBooking ? null : bookingId);
-  const pendingBids = useMemo(
-    () => (isDemoBooking && bookingId ? buildDemoBids(bookingId) : livePendingBids),
-    [bookingId, isDemoBooking, livePendingBids]
-  );
+  const { pendingBids } = useBookingBids(bookingId);
   const offersCount = pendingBids.length;
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const serviceKey = booking?.specialty ?? (isDemoBooking && bookingId ? getDemoSpecialty(bookingId) : null);
+  const serviceKey = booking?.specialty ?? null;
   const isKine = isKineService(serviceKey);
   const theme = useMemo(() => getServiceTheme(serviceKey) ?? ({
     primary: Colors.primary,
@@ -100,11 +91,6 @@ export default function WaitingOffersScreen() {
       }
 
       try {
-        if (isDemoBooking) {
-          if (!cancelled) setBooking(buildDemoBooking(bookingId));
-          return;
-        }
-
         const next = await db.bookings.get(bookingId);
         if (!cancelled) setBooking(next);
       } catch (loadError) {
@@ -117,13 +103,96 @@ export default function WaitingOffersScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
+
+  // ── Urgent/emergency: no bidding, no patient action needed. A pro claims
+  // directly (0034_urgent_auto_dispatch.sql), so watch the booking row itself
+  // — the moment it's matched, the payment hold from before this screen is
+  // already in place, so we go straight to tracking.
+  const isUrgentFlow = !!booking && booking.urgency != null && booking.urgency !== "normal";
+  const EXPIRY_MS = 5 * 60 * 1000;
+
+  // Covers BOTH cases: a pro claims while this screen is open (subscription
+  // below updates `booking`, re-running this effect), AND a pro claimed it
+  // during the checkout steps on the payment screen — this screen only loads
+  // the booking fresh once we get here, so an already-`matched` row must
+  // redirect immediately too, or the patient would be stuck watching a radar
+  // animation for a request that's already been picked up.
+  useEffect(() => {
+    if (!bookingId || !booking) return;
+    if (!booking.urgency || booking.urgency === "normal") return;
+    if (booking.status === "matched") {
+      router.replace(`/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`);
+    } else if (booking.status === "cancelled") {
+      toastError(t("urgent_no_pro_refunded"));
+      router.replace("/patient");
+    }
+  }, [bookingId, booking?.urgency, booking?.status, router, t]);
+
+  useEffect(() => {
+    if (!bookingId || !isUrgentFlow || booking?.status !== "open") return;
+    const channel = supabase
+      .channel(`booking:claim:${bookingId}:${Math.random().toString(36).slice(2)}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${bookingId}` },
+        (payload) => setBooking(payload.new as Booking)
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [bookingId, isUrgentFlow, booking?.status]);
+
+  // Nobody claimed it in time → auto-release the hold (RULE #1: still `open`,
+  // so cancelBooking() is a full, fee-free refund) and let the patient know.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const expiringRef = useRef(false);
+  useEffect(() => {
+    if (!bookingId || !isUrgentFlow || booking?.status !== "open" || !booking?.created_at) {
+      setSecondsLeft(null);
+      return;
+    }
+    const deadline = new Date(booking.created_at).getTime() + EXPIRY_MS;
+    // Declared before first use: the very first tick() call below runs
+    // synchronously, and if the deadline has already passed (e.g. checkout
+    // took over 5 minutes) it calls expireNow() immediately — referencing
+    // `iv` there before a `const` declared further down would throw.
+    let iv: ReturnType<typeof setInterval> | undefined;
+
+    const expireNow = async () => {
+      // The 1s tick keeps firing while this resolves — a single in-flight
+      // call is enough, a second concurrent cancelBooking() could otherwise
+      // race the first and double-refund before either commits.
+      if (expiringRef.current) return;
+      expiringRef.current = true;
+      if (iv) clearInterval(iv);
+      try {
+        const fresh = await db.bookings.get(bookingId);
+        if (fresh.status !== "open") { setBooking(fresh); return; }
+        await db.bookings.cancelBooking(bookingId, CANCEL_REASON_NO_PRO);
+        toastError(t("urgent_no_pro_refunded"));
+        router.replace("/patient");
+      } catch {
+        // best-effort — the patient can still cancel manually below
+        expiringRef.current = false;
+      }
+    };
+
+    const tick = () => {
+      const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0) void expireNow();
+    };
+    tick();
+    iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [bookingId, isUrgentFlow, booking?.status, booking?.created_at, router, t]);
 
   useEffect(() => {
     let cancelled = false;
     const loadNearby = async () => {
       if (!bookingId) return;
-      if (isDemoBooking) return;
       try {
         await geo.findProsNearBooking(bookingId, 15);
       } catch {
@@ -133,26 +202,20 @@ export default function WaitingOffersScreen() {
       }
     };
     void loadNearby();
-    const iv = isDemoBooking
-      ? null
-      : setInterval(() => {
-          void loadNearby();
-        }, 8000);
+    const iv = setInterval(() => {
+      void loadNearby();
+    }, 8000);
     return () => {
       cancelled = true;
-      if (iv) clearInterval(iv);
+      clearInterval(iv);
     };
-  }, [bookingId, isDemoBooking]);
+  }, [bookingId]);
 
   const handleCancel = async () => {
     if (!bookingId) return;
     setCancelError(null);
     setCancelling(true);
     try {
-      if (isDemoBooking) {
-        router.replace("/patient");
-        return;
-      }
       // RULE #1 — no nurse assigned yet → standard full refund, no fees.
       await db.bookings.cancelBooking(bookingId);
       router.replace("/patient");
@@ -216,13 +279,18 @@ export default function WaitingOffersScreen() {
 
         <Text style={styles.searchTitle}>{t("searching_pros")}</Text>
         <Text style={styles.searchSubtitle}>
-          {t("searching_pros_zone")}
+          {isUrgentFlow ? t("urgent_hold_notice") : t("searching_pros_zone")}
         </Text>
+        {isUrgentFlow && secondsLeft != null ? (
+          <Text style={styles.countdownText}>
+            {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:{String(secondsLeft % 60).padStart(2, "0")}
+          </Text>
+        ) : null}
 
         <View style={styles.realtimeRow}>
           <View style={[styles.realtimeDot, { backgroundColor: theme.primary }]} />
           <Text style={[styles.realtimeText, { color: theme.primary }]}>
-            {isDemoBooking ? t("demo_mode_active") : t("realtime_active")}
+            {t("realtime_active")}
           </Text>
         </View>
 
@@ -255,7 +323,7 @@ export default function WaitingOffersScreen() {
               <View>
                 <Text style={styles.summaryLabel}>{t("your_budget")}</Text>
                 <Text style={[styles.summaryPrice, { color: theme.primary }]}>
-                  {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} MAD
+                  {booking.budget_max_mad ?? booking.budget_min_mad ?? "—"} {t("mad")}
                 </Text>
               </View>
             </View>
@@ -278,7 +346,6 @@ export default function WaitingOffersScreen() {
             </View>
             <LiveBidsFeed
               bookingId={bookingId ?? ""}
-              mockBids={isDemoBooking ? pendingBids : undefined}
               onAccepted={() => {
                 // Escrow first, always: route to payment so the agreed price is
                 // held (InHold) BEFORE the nurse travels — identical to the
@@ -360,6 +427,7 @@ const styles = StyleSheet.create({
   },
   searchTitle: { color: Colors.textPrimary, fontSize: 21, fontWeight: "700", marginBottom: 4, textAlign: "center" },
   searchSubtitle: { color: Colors.textMuted, fontSize: 14, textAlign: "center", marginBottom: 16 },
+  countdownText: { color: Colors.textPrimary, fontSize: 22, fontWeight: "800", marginTop: -8, marginBottom: 16, fontVariant: ["tabular-nums"] },
   realtimeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 },
   realtimeDot: {
     width: 8,

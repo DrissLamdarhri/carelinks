@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "ma.carelink.app"
+      "bundleIdentifier": "ma.carelink.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"]
+      }
     },
     "android": {
       "package": "ma.carelink.app",
@@ -18,13 +21,25 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-location",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "CareLink partage votre position avec le patient uniquement pendant que vous êtes en route vers lui.",
+          "locationWhenInUsePermission": "CareLink utilise votre position pour vous localiser sur la carte et calculer votre trajet."
+        }
+      ],
+      "expo-task-manager",
       "expo-web-browser",
       "expo-image-picker",
       "expo-dev-client",

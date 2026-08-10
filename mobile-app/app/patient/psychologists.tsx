@@ -16,47 +16,59 @@ const SCREEN_W = Dimensions.get("window").width;
 const CARD_W = SCREEN_W - 56;
 const GAP = 12;
 
-type Psy = { id: string; name: string; focus: string; price: number; rating: number; reviews: number; dLat: number; dLng: number };
-const DEMO: Psy[] = [
-  { id: "demo-psy-1", name: "Dr. Dalila Mansouri", focus: "Anxiété & stress", price: 200, rating: 4.9, reviews: 42, dLat: 0.004, dLng: 0.005 },
-  { id: "demo-psy-2", name: "Dr. Younes Fassi", focus: "Thérapie de couple", price: 250, rating: 4.8, reviews: 31, dLat: -0.003, dLng: 0.006 },
-  { id: "demo-psy-3", name: "Dr. Salma Idrissi", focus: "Dépression & TCC", price: 180, rating: 5.0, reviews: 18, dLat: 0.005, dLng: -0.004 },
-];
+type Psy = { id: string; name: string; focus: string; price: number; rating: number; reviews: number; lat: number; lng: number };
 const initials = (n: string) => n.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 const shortOf = (n: string) => n.replace(/^Dr\.?\s*/i, "").split(" ")[0] ?? n;
 
 export default function PsychologistsMapScreen() {
   const { t } = useI18n();
   const router = useRouter();
+  // Real approved psychologists only. This screen used to merge three invented
+  // ones ("Dr. Dalila Mansouri" and friends) into the list, AND scatter the
+  // real ones around a hardcoded Meknès centre with fabricated offsets — so
+  // every pin on the map was in the wrong place, whether the person existed or
+  // not. Positions now come from the professional's own recorded location, and
+  // anyone without one is simply not plotted.
   const [extra, setExtra] = useState<Psy[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      const { data: pros } = await supabase
-        .from("professionals").select("id, rating_avg, rating_count, hourly_rate_mad")
-        .eq("specialty", "psychologist").eq("verification_status", "approved");
-      if (!pros?.length) return;
-      const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", pros.map((p) => p.id));
-      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name as string]));
-      const mapped: Psy[] = pros.map((p, i) => ({
-        id: p.id, name: nameById.get(p.id) ?? "Psychologue", focus: t("clinical_psychologist"),
-        price: p.hourly_rate_mad ?? 200, rating: p.rating_avg ?? 0, reviews: p.rating_count ?? 0,
-        dLat: 0.0025 * (i + 1) * (i % 2 ? 1 : -1), dLng: 0.0035 * (i + 1) * (i % 2 ? -1 : 1),
-      }));
-      if (active) setExtra(mapped);
+      try {
+        const { data } = await supabase
+          .from("v_pros_public")
+          .select("id, full_name, rating_avg, rating_count, hourly_rate_mad, lat, lng")
+          .eq("specialty", "psychologist");
+        const mapped: Psy[] = (data ?? [])
+          .filter((p: any) => p.lat != null && p.lng != null)
+          .map((p: any) => ({
+            id: p.id,
+            name: p.full_name ?? t("clinical_psychologist"),
+            focus: t("clinical_psychologist"),
+            price: p.hourly_rate_mad ?? 0,
+            rating: p.rating_avg ?? 0,
+            reviews: p.rating_count ?? 0,
+            lat: p.lat,
+            lng: p.lng,
+          }));
+        if (active) setExtra(mapped);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []);
 
-  const all = useMemo(() => [...extra, ...DEMO], [extra]);
+  const all = extra;
   const pins: ProPinData[] = useMemo(
     () => all.map((p) => ({
       id: p.id, initials: initials(p.name), name: p.name, shortName: shortOf(p.name), specialty: p.focus,
-      rating: p.rating, priceMad: p.price, distanceKm: Math.round(Math.hypot(p.dLat * 111, p.dLng * 95) * 10) / 10,
-      lat: CENTER.lat + p.dLat, lng: CENTER.lng + p.dLng,
+      rating: p.rating, priceMad: p.price,
+      distanceKm: Math.round(Math.hypot((p.lat - CENTER.lat) * 111, (p.lng - CENTER.lng) * 95) * 10) / 10,
+      lat: p.lat, lng: p.lng,
     })),
     [all]
   );
@@ -108,6 +120,14 @@ export default function PsychologistsMapScreen() {
           if (p) setSelectedId(p.id);
         }}
       >
+        {/* An empty carousel with an empty map used to be impossible, because
+            three invented psychologists guaranteed content. Now it can happen,
+            and saying so is better than a blank strip. */}
+        {!loading && all.length === 0 ? (
+          <View style={[s.card, s.cardEmpty]}>
+            <Text style={s.cardFocus}>{t("no_pros_nearby")}</Text>
+          </View>
+        ) : null}
         {all.map((p) => {
           const on = p.id === selectedId;
           return (
@@ -128,7 +148,7 @@ export default function PsychologistsMapScreen() {
               </View>
               <View style={s.cardRight}>
                 <Text style={s.price}>{p.price}</Text>
-                <Text style={s.priceUnit}>MAD/{t("per_session")}</Text>
+                <Text style={s.priceUnit}>{t("mad_per_session")}</Text>
                 <View style={s.viewChip}>
                   <Text style={s.viewChipTxt}>{t("about_label")}</Text>
                   <ChevronRight size={13} color="#fff" />
@@ -158,6 +178,7 @@ const s = StyleSheet.create({
   cardAvatar: { width: 54, height: 54, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   cardAvatarTxt: { color: "#fff", fontSize: 18, fontWeight: "800" },
   cardName: { color: Colors.textPrimary, fontSize: 15, fontWeight: "800" },
+  cardEmpty: { alignItems: "center", justifyContent: "center" },
   cardFocus: { color: Colors.textMuted, fontSize: 12, marginTop: 1 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
   rating: { color: Colors.textPrimary, fontSize: 12.5, fontWeight: "700" },

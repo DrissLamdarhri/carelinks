@@ -28,15 +28,15 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { toastSuccess } from "@/lib/toast";
 import { usePickImage, uploadAvatarToSupabase, updateProfileAvatar } from "@/lib/hooks/useImageUpload";
 
-const menuItems: { icon: typeof User; label: string; color: string; route?: string; action?: string }[] = [
-  { icon: User, label: "Informations personnelles", color: "#0D0870", route: "/pro/profile-infos" },
-  { icon: FileText, label: "Mes documents", color: "#3B82F6", route: "/pro/kyc" },
-  { icon: Globe, label: "Langue / اللغة", color: "#0D0870", action: "language" },
-  { icon: CreditCard, label: "Compte bancaire", color: "#6BB8C8" },
-  { icon: MapPin, label: "Zone de couverture", color: "#8B5CF6" },
-  { icon: Clock, label: "Disponibilités", color: "#6BB8C8" },
-  { icon: Bell, label: "Notifications", color: "#0D0870", route: "/pro/notifications" },
-  { icon: Shield, label: "Vérification", color: "#0D0870", route: "/pro/kyc" },
+const menuItems: { icon: typeof User; labelKey: string; color: string; route?: string; action?: string }[] = [
+  { icon: User, labelKey: "personal_info", color: "#0D0870", route: "/pro/profile-infos" },
+  { icon: FileText, labelKey: "my_documents", color: "#3B82F6", route: "/pro/kyc" },
+  { icon: Globe, labelKey: "language", color: "#0D0870", action: "language" },
+  { icon: CreditCard, labelKey: "pro_bank_account", color: "#6BB8C8" },
+  { icon: MapPin, labelKey: "coverage_zone", color: "#8B5CF6" },
+  { icon: Clock, labelKey: "availability", color: "#6BB8C8" },
+  { icon: Bell, labelKey: "notifications", color: "#0D0870", route: "/pro/notifications" },
+  { icon: Shield, labelKey: "pro_verification_menu", color: "#0D0870", route: "/pro/kyc" },
 ];
 
 export default function ProProfileScreen() {
@@ -90,7 +90,7 @@ export default function ProProfileScreen() {
           setPro(created);
         }
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Profil professionnel indisponible.");
+        setErrorMessage(error instanceof Error ? error.message : t("pro_profile_unavailable"));
       } finally {
         setLoading(false);
       }
@@ -106,7 +106,7 @@ export default function ProProfileScreen() {
       const coords = await geo.getCurrentPosition();
       await geo.setProLocation(user.id, coords.lat, coords.lng);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Mise à jour GPS impossible.");
+      setErrorMessage(error instanceof Error ? error.message : t("pro_gps_update_failed"));
     } finally {
       setLocating(false);
     }
@@ -120,7 +120,7 @@ export default function ProProfileScreen() {
     );
   }
 
-  const displayName = profile ? `${profile.firstName} ${profile.lastName}` : "Professionnel";
+  const displayName = profile ? `${profile.firstName} ${profile.lastName}` : t("professional");
   const avatar =
     profile?.avatar ||
     DEFAULT_AVATAR;
@@ -129,12 +129,12 @@ export default function ProProfileScreen() {
   const city = profile?.city ?? "";
   const rating = pro?.rating_avg ?? 0;
   const isVerified = pro?.verification_status === "approved";
-  const specialty = pro?.specialty ? String(pro.specialty).replaceAll("_", " ") : "Professionnel de santé";
+  const specialty = pro?.specialty ? String(pro.specialty).replaceAll("_", " ") : t("health_professional");
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <ProfileHeaderCard
-        title="Mon profil pro"
+        title={t("pro_my_pro_profile")}
         name={displayName}
         email={email}
         phone={phone}
@@ -144,9 +144,9 @@ export default function ProProfileScreen() {
         uploading={uploadingAvatar}
         onEditAvatar={handleUploadAvatar}
         stats={[
-          { value: rating > 0 ? rating.toFixed(1) : "—", label: "Note", star: true },
-          { value: pro?.total_bookings ?? 0, label: "Missions" },
-          { value: isVerified ? "Vérifié" : "En attente", label: "Statut", accent: isVerified },
+          { value: rating > 0 ? rating.toFixed(1) : "—", label: t("pro_rating_short"), star: true },
+          { value: pro?.total_bookings ?? 0, label: t("missions") },
+          { value: isVerified ? t("pro_verified") : t("pending_status"), label: t("pro_status_label"), accent: isVerified },
         ]}
       />
 
@@ -154,7 +154,7 @@ export default function ProProfileScreen() {
       <View style={styles.menuStack}>
         {menuItems.map((item) => (
           <TouchableOpacity
-            key={item.label}
+            key={item.labelKey}
             style={styles.menuItem}
             onPress={() => {
               if (item.action === "language") setLangOpen(true);
@@ -164,7 +164,7 @@ export default function ProProfileScreen() {
             <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}18` }]}>
               <item.icon size={16} color={item.color} />
             </View>
-            <Text style={styles.menuText}>{item.label}</Text>
+            <Text style={styles.menuText}>{t(item.labelKey)}</Text>
             <ChevronRight size={16} color="#D0D0D0" />
           </TouchableOpacity>
         ))}
@@ -178,11 +178,11 @@ export default function ProProfileScreen() {
             <LocateFixed size={18} color="white" />
           )}
           <Text style={styles.locationText}>
-            {locating ? "Enregistrement…" : "Définir ma position GPS actuelle"}
+            {locating ? t("saving") : t("pro_set_gps_now")}
           </Text>
         </TouchableOpacity>
         <Text style={styles.locationHint}>
-          Permet aux patients de votre rayon de vous trouver via le matching géographique.
+          {t("pro_gps_matching_hint")}
         </Text>
         {user?.id && pro ? (
           <RadiusSlider

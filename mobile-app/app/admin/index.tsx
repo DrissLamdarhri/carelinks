@@ -6,15 +6,28 @@ import { Shield, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { showToast } from "@/lib/toast";
 
 export default function AdminLoginScreen() {
   const { t } = useI18n();
   const router = useRouter();
+  const { sendPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) { showToast(t("enter_email_first")); return; }
+    try {
+      await sendPasswordReset(email.trim());
+      showToast(t("reset_sent"));
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : t("action_failed"));
+    }
+  };
 
   const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !submitting;
 
@@ -86,7 +99,9 @@ export default function AdminLoginScreen() {
 
           <View style={styles.passwordHeader}>
             <Text style={styles.label}>{t("password")}</Text>
-            <Text style={styles.forgot}>{t("forgot_password")}</Text>
+            <TouchableOpacity onPress={handleForgotPassword}>
+              <Text style={styles.forgot}>{t("forgot_password")}</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.inputWrap}>
             <Lock size={18} color={Colors.textMuted} />
@@ -160,19 +175,6 @@ const styles = StyleSheet.create({
   },
   title: { color: Colors.textPrimary, fontSize: 28, fontWeight: "700" },
   subtitle: { color: Colors.textMuted, fontSize: 13, marginTop: 2, marginBottom: 14 },
-  demoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    backgroundColor: Colors.surfaceWarm,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(13,8,112,0.1)",
-    padding: 12,
-    marginBottom: 14,
-  },
-  demoTitle: { color: Colors.primary, fontSize: 12, fontWeight: "600", marginBottom: 4 },
-  demoText: { color: "rgba(13,8,112,0.72)", fontSize: 12, fontFamily: "Courier" },
   label: { fontSize: 12, color: Colors.textPrimary, fontWeight: "500", marginBottom: 8 },
   passwordHeader: { marginTop: 12, marginBottom: 8, flexDirection: "row", justifyContent: "space-between" },
   forgot: { color: Colors.primary, fontSize: 12, fontWeight: "500" },

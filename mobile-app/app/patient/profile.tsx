@@ -113,7 +113,7 @@ export default function PatientProfileScreen() {
 
   const displayName = profile
     ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
-    : "Mon profil";
+    : t("pay_my_profile");
   const avatar = profile?.avatar ?? "";
   const email = profile?.email || "—";
   const phone = profile?.phone || "—";
@@ -130,7 +130,7 @@ export default function PatientProfileScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <ProfileHeaderCard
-        title="Mon profil"
+        title={t("pay_my_profile")}
         name={displayName}
         email={email}
         phone={phone}
@@ -140,9 +140,9 @@ export default function PatientProfileScreen() {
         uploading={uploadingAvatar}
         onEditAvatar={handleUploadAvatar}
         stats={[
-          { value: bookingsLabel, label: "Réservations" },
-          { value: ratingLabel, label: "Note moyenne", star: true },
-          { value: spentLabel, label: "MAD dépensés", accent: true },
+          { value: bookingsLabel, label: t("bookings_lbl") },
+          { value: ratingLabel, label: t("avg_rating"), star: true },
+          { value: spentLabel, label: t("pay_mad_spent"), accent: true },
         ]}
       />
 

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { useFocusEffect } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
+import { showAppAlert } from "@/lib/app-alert";
 
 type MetricsState = {
   gmv: number;
@@ -63,9 +63,9 @@ export default function AdminMetricsScreen() {
           .eq("verification_status", "approved")
           .eq("is_available", true),
         supabase
-          .from("bookings")
+          .from("disputes")
           .select("*", { count: "exact", head: true })
-          .eq("dispute_open", true),
+          .in("status", ["open", "under_review"]),
         supabase
           .from("professionals")
           .select("*", { count: "exact", head: true })
@@ -90,14 +90,14 @@ export default function AdminMetricsScreen() {
       });
 
       if (paymentsRes.error) {
-        Alert.alert(
-          "Info",
+        showAppAlert(
+          t("admin_info"),
           t("payments_unavailable")
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t("cannot_load_metrics");
-      Alert.alert("Erreur", message);
+      showAppAlert(t("error"), message);
     }
   }, []);
 
@@ -116,16 +116,16 @@ export default function AdminMetricsScreen() {
 
   const cards = useMemo(
     () => [
-      { key: "gmv", label: "GMV (30j)", value: `${metrics.gmv.toLocaleString("fr-MA")} MAD` },
+      { key: "gmv", label: t("admin_gmv_30d"), value: `${metrics.gmv.toLocaleString("fr-MA")} ${t("mad")}` },
       {
         key: "commission",
         label: t("commission"),
-        value: `${metrics.commission.toLocaleString("fr-MA")} MAD`,
+        value: `${metrics.commission.toLocaleString("fr-MA")} ${t("mad")}`,
       },
       { key: "bookings", label: t("bookings_lbl"), value: String(metrics.totalBookings) },
       { key: "activePros", label: t("active_pros"), value: String(metrics.activePros) },
       { key: "disputes", label: t("open_disputes"), value: String(metrics.openDisputes) },
-      { key: "pendingKyc", label: "KYC en attente", value: String(metrics.pendingKyc) },
+      { key: "pendingKyc", label: t("admin_pending_kyc"), value: String(metrics.pendingKyc) },
     ],
     [metrics]
   );

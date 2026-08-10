@@ -1,99 +1,122 @@
 import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
-import * as Location from "expo-location";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { tr } from "@/lib/i18n";
+import {
+  onLivePosition,
+  startLiveLocation,
+  stopLiveLocation,
+  type LivePosition,
+} from "@/lib/live-location";
+import { proStreamTopic } from "@/lib/db/tracking";
 
-type LiveTrackingPayload = {
-  lat: number;
-  lng: number;
-  at: string;
-};
+type LiveTrackingPayload = LivePosition;
 
 type LiveTrackingChannelProps = {
   bookingId: string;
   mode: "broadcast" | "watch";
   onPosition: (position: LiveTrackingPayload) => void;
+  /**
+   * Broadcast mode only. Position is published ONLY while this is true (i.e.
+   * while the booking is `en_route`). Sharing someone's location outside the
+   * window they agreed to is not a feature.
+   */
+  active?: boolean;
 };
 
+/**
+ * Bridges one side of a trip to the other.
+ *
+ *  • `watch`     — the patient. Subscribes to the booking's realtime channel.
+ *  • `broadcast` — the pro. Starts the background location task (see
+ *                  `lib/live-location.ts`, which owns the GPS and the sending)
+ *                  and mirrors each fix back for the pro's own map.
+ *
+ * This component deliberately does NOT watch GPS itself any more. It used to,
+ * which meant tracking died whenever the pro's screen locked.
+ */
 export function LiveTrackingChannel({
   bookingId,
   mode,
   onPosition,
+  active = true,
 }: LiveTrackingChannelProps) {
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  /** Highest sequence number accepted so far — see the ordering guard below. */
+  const lastSeqRef = useRef(0);
 
+  // Keep the latest callback without making it a subscription dependency —
+  // an inline arrow from the parent would otherwise tear down and re-establish
+  // the channel (or restart the GPS service) on every render.
+  const onPositionRef = useRef(onPosition);
+  onPositionRef.current = onPosition;
+
+  // ── Patient: listen ───────────────────────────────────────────────────────
   useEffect(() => {
-    let active = true;
-
-    const setup = async () => {
-      const channel = supabase.channel(`tracking:${bookingId}`);
-      channelRef.current = channel;
-
-      channel.on("broadcast", { event: "position" }, ({ payload }) => {
-        const typed = payload as LiveTrackingPayload;
-        if (!typed?.lat || !typed?.lng) return;
-        onPosition(typed);
-      });
-
-      await channel.subscribe();
-
-      if (mode === "watch") return;
-
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(tr("allow_location_title"), tr("allow_location_broadcast"));
-        return;
+    if (mode !== "watch" || !bookingId) return;
+    // PRIVATE channel. The server evaluates `can_receive_pro_stream()`
+    // (migration 0052) at join time: a client that is not the patient or the
+    // assigned professional on a live session is refused by Postgres. Knowing
+    // the booking UUID is not sufficient, which is the whole point.
+    const channel = supabase.channel(proStreamTopic(bookingId), {
+      config: { private: true },
+    });
+    channelRef.current = channel;
+    channel.on("broadcast", { event: "position" }, ({ payload }) => {
+      const typed = payload as LiveTrackingPayload;
+      if (typeof typed?.lat !== "number" || typeof typed?.lng !== "number") return;
+      // Realtime does not guarantee ordering. A packet that overtook another
+      // must never drag the marker backwards, so anything older than the
+      // newest fix already seen is dropped outright.
+      const seq = typeof typed.seq === "number" ? typed.seq : null;
+      if (seq != null) {
+        if (seq <= lastSeqRef.current) return;
+        lastSeqRef.current = seq;
       }
-
-      const sendLocation = async () => {
-        try {
-          const location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          });
-          const payload: LiveTrackingPayload = {
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
-            at: new Date().toISOString(),
-          };
-
-          onPosition(payload);
-          await channel.send({
-            type: "broadcast",
-            event: "position",
-            payload,
-          });
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Impossible de récupérer la position GPS.";
-          Alert.alert("Erreur GPS", message);
-        }
-      };
-
-      await sendLocation();
-      if (!active) return;
-      intervalRef.current = setInterval(() => {
-        void sendLocation();
-      }, 10000);
+      onPositionRef.current(typed);
+    });
+    void channel.subscribe();
+    return () => {
+      lastSeqRef.current = 0;
+      void supabase.removeChannel(channel);
+      channelRef.current = null;
     };
+  }, [bookingId, mode]);
 
-    void setup();
+  // ── Pro: publish ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (mode !== "broadcast" || !bookingId) return;
+
+    if (!active) {
+      void stopLiveLocation();
+      return;
+    }
+
+    let cancelled = false;
+    const unsubscribe = onLivePosition((p) => {
+      if (!cancelled) onPositionRef.current(p);
+    });
+
+    void (async () => {
+      const result = await startLiveLocation(bookingId);
+      if (cancelled || result.ok) return;
+      Alert.alert(
+        tr("allow_location_title"),
+        result.reason === "permission-denied"
+          ? tr("allow_location_broadcast")
+          : tr("cmp_location_share_failed"),
+      );
+    })();
 
     return () => {
-      active = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      cancelled = true;
+      unsubscribe();
+      // The trip is over (or this screen closed): stop the service so the
+      // foreground notification goes away and we stop draining the battery.
+      void stopLiveLocation();
     };
-  }, [bookingId, mode, onPosition]);
+  }, [bookingId, mode, active]);
 
   return null;
 }
-

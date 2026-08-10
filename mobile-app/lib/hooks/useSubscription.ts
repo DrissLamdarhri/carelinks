@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import type { Subscription } from "@/lib/db/types";
 import { supabase } from "@/lib/supabase";
+import { tr } from "../i18n";
 
 type SubscriptionEventPayload = {
   type: "SUBSCRIPTION_UPDATED" | "SUBSCRIPTION_ROLLBACK";
@@ -90,7 +91,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de charger l'abonnement.");
+      setError(err instanceof Error ? err.message : tr("cmp_subscription_load_failed"));
     } finally {
       setLoading(false);
     }
@@ -103,7 +104,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.id) return;
 
-    const channel = supabase.channel(`private-user-${user.id}`);
+    // The topic was named "private-user-…" but the channel was PUBLIC: broadcast
+    // on a public channel bypasses RLS entirely, so anyone holding the (bundled)
+    // anon key could listen to another user's subscription events by guessing
+    // their user id. `private: true` makes the server evaluate
+    // `carelink_private_user_receive` (migration 0052) at join time instead.
+    const channel = supabase.channel(`private-user-${user.id}`, {
+      config: { private: true },
+    });
 
     channel.on("broadcast", { event: "subscription.updated" }, ({ payload }) => {
       const message = payload as SubscriptionEventPayload;

@@ -15,7 +15,6 @@ import { useI18n } from "@/lib/i18n";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
-import { isDemoBookingId } from "@/lib/demo-booking";
 
 type RatingFormProps = {
   bookingId: string;
@@ -38,7 +37,6 @@ export function RatingForm({
   onSubmitted,
 }: RatingFormProps) {
   const { user } = useAuth();
-  const isDemoBooking = isDemoBookingId(bookingId);
   const [stars, setStars] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedTip, setSelectedTip] = useState<number | null>(null);
@@ -47,8 +45,8 @@ export function RatingForm({
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = useMemo(
-    () => stars >= 1 && (isDemoBooking || !!user?.id),
-    [isDemoBooking, stars, user?.id]
+    () => stars >= 1 && !!user?.id,
+    [stars, user?.id]
   );
 
   const toggleTag = (tag: string) => {
@@ -59,12 +57,6 @@ export function RatingForm({
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      if (isDemoBooking) {
-        toastSuccess(t("rating_thanks_check"));
-        onSubmitted();
-        return;
-      }
-
       if (!user?.id) {
         throw new Error(t("user_not_connected"));
       }
@@ -148,7 +140,7 @@ export function RatingForm({
               style={[styles.tip, selectedTip === tip && styles.tipActive]}
               onPress={() => setSelectedTip((prev) => (prev === tip ? null : tip))}
             >
-              <Text style={[styles.tipText, selectedTip === tip && styles.tipTextActive]}>{tip} MAD</Text>
+              <Text style={[styles.tipText, selectedTip === tip && styles.tipTextActive]}>{tip} {t("mad")}</Text>
             </TouchableOpacity>
           ))}
         </View>

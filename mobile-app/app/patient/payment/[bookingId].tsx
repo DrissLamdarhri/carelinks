@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,8 +17,10 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
-import { DEMO_PRO_1_ID, isDemoBookingId, normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { showAppAlert } from "@/lib/app-alert";
+import { confirmYogaPayment } from "@/lib/db/yoga";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
@@ -46,7 +47,6 @@ export default function PaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
   const bookingId = normalizeRouteParam(params.bookingId);
-  const isDemo = isDemoBookingId(bookingId);
   const { user } = useAuth();
   const { t } = useI18n();
   const STEPS = [t("step_summary"), t("payment_title"), t("step_confirmation")];
@@ -58,12 +58,17 @@ export default function PaymentScreen() {
   const [prestation, setPrestation] = useState(0);
   const [proId, setProId] = useState<string | null>(null);
   const [isProgram, setIsProgram] = useState(false); // scheduled series/subscription → confirmation, not tracking
-  const [proName, setProName] = useState("Professionnel");
+  const [proName, setProName] = useState(t("professional"));
   const [specialty, setSpecialty] = useState("nurse");
+  const [urgency, setUrgency] = useState<string>("normal");
   const [city, setCity] = useState("");
-  const [service, setService] = useState("Soin à domicile");
+  const [service, setService] = useState(t("soin_domicile"));
   const [txId, setTxId] = useState("");
 
+  // Empty, like any real checkout. These used to ship pre-filled with
+  // 4242 4242 4242 4242 / TEST CARELINK / 12-29 / 123 and an OTP of 1234, so a
+  // patient could reach "Payer" without entering anything — convenient while
+  // testing, indistinguishable from a broken payment form in front of a user.
   const [cardNum, setCardNum] = useState("");
   const [cardName, setCardName] = useState("");
   const [exp, setExp] = useState("");
@@ -75,17 +80,12 @@ export default function PaymentScreen() {
     void (async () => {
       if (!bookingId) { setLoading(false); return; }
       try {
-        if (isDemo) {
-          if (!active) return;
-          setPrestation(150); setProId(DEMO_PRO_1_ID); setProName("Salma B."); setCity("Casablanca");
-          setService("Injection à domicile"); setSpecialty("nurse");
-          return;
-        }
         const b = await db.bookings.get(bookingId);
         if (!active) return;
         setPrestation(Math.round(Number(b.final_price_mad ?? b.budget_max_mad ?? b.budget_min_mad ?? 0)));
         setProId(b.professional_id);
         setSpecialty(b.specialty);
+        setUrgency(b.urgency ?? "normal");
         setIsProgram(!!b.series_id || b.plan_type === "subscription" || b.plan_type === "recurring");
         setCity((b.address ?? "").split(",").pop()?.trim() || (b.address ?? ""));
         if (b.professional_id) {
@@ -95,13 +95,13 @@ export default function PaymentScreen() {
           } catch { /* keep default */ }
         }
       } catch (error) {
-        Alert.alert(t("error"), error instanceof Error ? error.message : t("reservation_not_found"));
+        showAppAlert(t("error"), error instanceof Error ? error.message : t("reservation_not_found"));
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
-  }, [bookingId, isDemo]);
+  }, [bookingId]);
 
   const total = prestation + SERVICE_FEE;
   const commission = Math.round(prestation * COMMISSION_RATE);
@@ -114,17 +114,27 @@ export default function PaymentScreen() {
   );
 
   // Where a paid booking goes next: psychologist/subscription → appointment
-  // confirmation (Meet/Zoom links); yoga → bookings (a class has no live map);
-  // everything else → the live tracking map.
+  // confirmation (Meet/Zoom links); yoga → its own recap screen (a class has
+  // no live map, but the patient should still see instructor/address/time
+  // right after paying, not just land back on the list); everything else →
+  // the live tracking map.
   const goAfterPayment = useCallback(() => {
     if (!bookingId) return router.replace("/patient/bookings");
-    if (specialty === "yoga_instructor") return router.replace("/patient/bookings");
+    if (specialty === "yoga_instructor") {
+      return router.replace(`/patient/yoga-confirmation/${encodeURIComponent(bookingId)}`);
+    }
+    // Urgent/emergency: the hold is placed before any pro has claimed the
+    // request, so there's nothing to track yet — wait for the first pro to
+    // accept (waiting screen redirects on to tracking once matched).
+    if (urgency !== "normal" && !proId) {
+      return router.replace(`/patient/waiting/${encodeURIComponent(bookingId)}`);
+    }
     router.replace(
       specialty === "psychologist" || isProgram
         ? `/patient/appointment/${encodeURIComponent(bookingId)}`
         : `/patient/tracking?bookingId=${encodeURIComponent(bookingId)}`,
     );
-  }, [bookingId, specialty, isProgram, router]);
+  }, [bookingId, specialty, isProgram, urgency, proId, router]);
 
   // The receipt is confirmation, not a destination. Hold it just long enough to
   // be read, then continue on our own — leaving the patient parked on a screen
@@ -139,11 +149,45 @@ export default function PaymentScreen() {
     if (!bookingId || !user?.id || submitting) return;
     setSubmitting(true);
     try {
-      if (!isDemo) {
+      if (specialty === "yoga_instructor") {
+        // Paying IS what reserves the seat (migration 0043) — the enrollment,
+        // the payment row, and the booking's matched status are all created
+        // together, atomically, only here. If the class filled up while this
+        // patient was checking out, this raises before anything is charged.
+        try {
+          await confirmYogaPayment(bookingId, prestation, "cmi");
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : "";
+          if (msg.includes("complète") || msg.includes("complet")) {
+            // Nobody was charged. Clean up the now-pointless reservation
+            // immediately rather than leaving it for the 45-min sweep, and
+            // send the patient back to pick another session.
+            await db.bookings.cancelBooking(bookingId, "session_full").catch(() => {});
+            setSubmitting(false);
+            showAppAlert(
+              t("session_full"),
+              t("pay_session_taken_by_other"),
+              [{ text: "OK", onPress: () => router.replace("/patient/yoga") }],
+            );
+            return;
+          }
+          throw error;
+        }
+      } else {
+        // Re-read the booking right before charging: for urgent/emergency the
+        // hold is placed before any pro is matched, and checkout (card entry,
+        // 3-D Secure) takes long enough that a pro can claim the job in the
+        // meantime — using the stale `proId` from page-load would silently
+        // orphan this payment (it would never show up in the pro's earnings).
+        const currentProId = await db.bookings
+          .get(bookingId)
+          .then((b) => b.professional_id)
+          .catch(() => proId);
+        setProId(currentProId);
         await db.payments.create({
           booking_id: bookingId,
           patient_id: user.id,
-          professional_id: proId,
+          professional_id: currentProId,
           amount_mad: prestation,
           provider: "cmi",
         });
@@ -192,6 +236,12 @@ export default function PaymentScreen() {
             {/* ── Step 0: Résumé ── */}
             {step === 0 && (
               <>
+                {urgency !== "normal" && !proId ? (
+                  <View style={s.holdBanner}>
+                    <ShieldCheck size={16} color={NAVY} />
+                    <Text style={s.holdBannerTxt}>{t("urgent_hold_notice")}</Text>
+                  </View>
+                ) : null}
                 <View style={s.card}>
                   <View style={s.proRow}>
                     <View style={s.avatar}><User size={20} color={NAVY} /></View>
@@ -204,10 +254,10 @@ export default function PaymentScreen() {
 
                 <View style={s.card}>
                   <Text style={s.cardLabel}>{t("patient_charge_detail")}</Text>
-                  <Row label={t("prestation")} value={`${prestation} MAD`} />
-                  <Row label={t("service_fee")} value={`+${SERVICE_FEE} MAD`} muted />
+                  <Row label={t("prestation")} value={`${prestation} ${t("mad")}`} />
+                  <Row label={t("service_fee")} value={`+${SERVICE_FEE} ${t("mad")}`} muted />
                   <View style={s.divider} />
-                  <Row label={t("total_to_pay")} value={`${total} MAD`} bold />
+                  <Row label={t("total_to_pay")} value={`${total} ${t("mad")}`} bold />
                 </View>
 
                 <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={() => setStep(1)}>
@@ -221,7 +271,7 @@ export default function PaymentScreen() {
               <>
                 <View style={s.totalBanner}>
                   <Text style={s.totalBannerLbl}>{t("total_amount")}</Text>
-                  <Text style={s.totalBannerVal}>{total} MAD</Text>
+                  <Text style={s.totalBannerVal}>{total} {t("mad")}</Text>
                 </View>
 
                 <CmiCard number={cardNum} name={cardName} exp={exp} />
@@ -229,13 +279,13 @@ export default function PaymentScreen() {
                 <Field icon={<CreditCard size={17} color={Colors.textMuted} />} value={fmtCard(cardNum)} onChangeText={(t) => setCardNum(digits(t))} placeholder="4242 4242 4242 4242" keyboardType="number-pad" />
                 <Field value={cardName} onChangeText={setCardName} placeholder={t("cardholder_name")} autoCapitalize="characters" />
                 <View style={s.rowFields}>
-                  <View style={{ flex: 1 }}><Field value={fmtExp(exp)} onChangeText={(t) => setExp(digits(t))} placeholder="MM/AA" keyboardType="number-pad" /></View>
+                  <View style={{ flex: 1 }}><Field value={fmtExp(exp)} onChangeText={(t) => setExp(digits(t))} placeholder={t("expiry")} keyboardType="number-pad" /></View>
                   <View style={{ flex: 1 }}><Field icon={<Lock size={15} color={Colors.textMuted} />} value={cvv} onChangeText={(t) => setCvv(digits(t).slice(0, 3))} placeholder="CVV" keyboardType="number-pad" secureTextEntry /></View>
                 </View>
 
                 <TouchableOpacity style={[s.cta, !cardValid && s.ctaDisabled]} activeOpacity={0.9} disabled={!cardValid} onPress={() => setStep(2)}>
                   <Lock size={16} color="#FFF" />
-                  <Text style={s.ctaTxt}>Payer {total} MAD via CMI</Text>
+                  <Text style={s.ctaTxt}>{t("pay_pay_via_cmi_amount").replace("{n}", String(total))}</Text>
                 </TouchableOpacity>
                 <View style={s.secureRow}>
                   <ShieldCheck size={13} color={Colors.textMuted} />
@@ -249,7 +299,7 @@ export default function PaymentScreen() {
               <>
                 <View style={s.totalBanner}>
                   <Text style={s.totalBannerLbl}>{t("total_amount")}</Text>
-                  <Text style={s.totalBannerVal}>{total} MAD</Text>
+                  <Text style={s.totalBannerVal}>{total} {t("mad")}</Text>
                 </View>
                 <CmiCard number={cardNum} name={cardName} exp={exp} filled />
                 <View style={s.otpCard}>
@@ -281,22 +331,22 @@ export default function PaymentScreen() {
                 <View style={s.doneWrap}>
                   <View style={s.doneCircle}><Check size={30} color={NAVY} strokeWidth={3} /></View>
                   <Text style={s.doneTitle}>{t("payment_confirmed_short")}</Text>
-                  <Text style={s.doneSub}>Transaction CMI #{txId}</Text>
+                  <Text style={s.doneSub}>{t("pay_cmi_transaction").replace("%s", txId)}</Text>
                 </View>
 
                 <View style={s.card}>
                   <Text style={s.cardLabel}>{t("transaction_split")}</Text>
-                  <Row label={t("collected_patient")} value={`${total} MAD`} bold />
+                  <Row label={t("collected_patient")} value={`${total} ${t("mad")}`} bold />
                   <View style={s.divider} />
-                  <Row label={t("service_fee_carelink")} value={`${SERVICE_FEE} MAD`} muted />
-                  <Row label={`Commission (${Math.round(COMMISSION_RATE * 100)} %) · CareLink`} value={`${commission} MAD`} muted />
+                  <Row label={t("service_fee_carelink")} value={`${SERVICE_FEE} ${t("mad")}`} muted />
+                  <Row label={t("pay_commission_carelink").replace("{n}", String(Math.round(COMMISSION_RATE * 100)))} value={`${commission} ${t("mad")}`} muted />
                   <View style={[s.splitRow, { backgroundColor: NAVY }]}>
                     <Text style={[s.splitLbl, { color: "#FFF" }]}>{t("carelink_net")}</Text>
-                    <Text style={[s.splitVal, { color: "#FFF" }]}>{careLinkRevenue} MAD</Text>
+                    <Text style={[s.splitVal, { color: "#FFF" }]}>{careLinkRevenue} {t("mad")}</Text>
                   </View>
                   <View style={[s.splitRow, { backgroundColor: CREAM }]}>
                     <Text style={[s.splitLbl, { color: NAVY }]}>{t("paid_to_pro")}</Text>
-                    <Text style={[s.splitVal, { color: NAVY }]}>{proNet} MAD</Text>
+                    <Text style={[s.splitVal, { color: NAVY }]}>{proNet} {t("mad")}</Text>
                   </View>
                 </View>
 
@@ -349,6 +399,7 @@ function Field({
 }
 
 function CmiCard({ number, name, exp, filled }: { number: string; name: string; exp: string; filled?: boolean }) {
+  const { t } = useI18n();
   const shown = filled || digits(number).length > 0
     ? (fmtCard(number) || "1234 1234 1234 1234")
     : "••••  ••••  ••••  ••••";
@@ -361,12 +412,12 @@ function CmiCard({ number, name, exp, filled }: { number: string; name: string; 
       <Text style={s.cmiNum}>{shown}</Text>
       <View style={s.cmiBottom}>
         <View>
-          <Text style={s.cmiCap}>TITULAIRE</Text>
-          <Text style={s.cmiVal}>{name.trim() ? name.toUpperCase() : "PRÉNOM NOM"}</Text>
+          <Text style={s.cmiCap}>{t("cardholder").toUpperCase()}</Text>
+          <Text style={s.cmiVal}>{name.trim() ? name.toUpperCase() : t("pay_card_name_ph")}</Text>
         </View>
         <View>
-          <Text style={s.cmiCap}>EXPIRE</Text>
-          <Text style={s.cmiVal}>{fmtExp(exp) || "MM/AA"}</Text>
+          <Text style={s.cmiCap}>{t("pay_card_expires")}</Text>
+          <Text style={s.cmiVal}>{fmtExp(exp) || t("expiry")}</Text>
         </View>
       </View>
       <View style={s.cmiBlob} />
@@ -393,6 +444,8 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   body: { padding: 20, gap: 14, paddingBottom: 40 },
 
+  holdBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: CREAM, borderRadius: 14, padding: 13 },
+  holdBannerTxt: { flex: 1, color: NAVY, fontSize: 12.5, lineHeight: 17, fontWeight: "600" },
   card: { backgroundColor: "#FFF", borderRadius: 18, padding: 16, shadowColor: NAVY, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   cardLabel: { color: Colors.textMuted, fontSize: 12.5, fontWeight: "600", marginBottom: 10 },
   proRow: { flexDirection: "row", alignItems: "center", gap: 12 },

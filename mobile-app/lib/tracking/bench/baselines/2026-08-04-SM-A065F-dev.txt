@@ -1,0 +1,24 @@
+# CareLink bench 2026-08-04T07:24:50.182Z
+# samsung/SM-A065F android-36 dev=true
+# scenario|candidate|fps|p50|p95|p99|worst|>33ms|dropped|stalls100|marker|emit/supp
+urban-still|control|47.6|17|37|48|998|65|914|1|3316|3316/57
+urban-casual|control|47.0|17|38|49|1027|82|950|1|3305|3305/57
+walk-multipath|control|46.6|17|39|50|1056|93|967|3|3144|3144/179
+highway|control|45.9|18|38|44|1066|58|939|2|3159|3159/30
+signal-loss|control|49.0|16|38|55|1046|104|826|2|2257|2257/116
+stationary|control|48.6|17|40|50|1022|107|873|1|1569|1569/1802
+interaction-stress|control|46.9|18|37|44|1061|51|955|1|3341|3341/30
+urban-still|view-annotation|46.8|16|38|48|1027|77|931|1|3326|3326/57
+urban-casual|view-annotation|44.9|17|38|49|1035|83|1005|2|3167|3167/56
+walk-multipath|view-annotation|46.6|17|37|48|1022|68|921|1|3115|3115/192
+highway|view-annotation|45.7|17|37|48|1037|64|968|2|3189|3189/30
+signal-loss|view-annotation|48.3|16|37|57|1102|95|827|1|2313|2313/117
+stationary|view-annotation|48.3|17|38|49|1058|90|895|1|1571|1571/1830
+interaction-stress|view-annotation|47.0|16|37|46|980|52|917|2|3318|3318/55
+urban-still|symbol-layer|47.3|17|36|45|1031|43|949|1|3344|3344/56
+urban-casual|symbol-layer|45.9|17|38|49|1032|81|961|1|3225|3225/56
+walk-multipath|symbol-layer|46.7|17|37|48|1036|77|923|2|3114|3114/198
+highway|symbol-layer|46.5|16|37|49|1028|62|925|1|3231|3231/30
+signal-loss|symbol-layer|48.6|16|39|54|1033|101|808|1|2247|2247/117
+stationary|symbol-layer|48.3|17|40|50|1009|115|912|2|1606|1606/1786
+interaction-stress|symbol-layer|47.4|16|37|44|1026|47|911|1|3335|3335/55

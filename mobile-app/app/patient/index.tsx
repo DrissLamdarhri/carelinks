@@ -28,13 +28,13 @@ import { useI18n } from "@/lib/i18n";
 import { useFocusRefresh } from "@/lib/hooks/useFocusRefresh";
 import {
   MOROCCAN_CITIES,
-  mockPatientProfile,
   quickServices,
   primaryServices,
 } from "@/lib/mock-data";
 import { db } from "@/lib/db/dal";
 import { geo, type NearbyProMapItem } from "@/lib/db/geo";
-import type { Booking } from "@/lib/db/types";
+import { usePatientBookings } from "@/lib/db/realtime";
+import { SPEC_LABEL, careLabel } from "@/lib/care-label";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvatarWithDefault } from "@/components/AvatarWithDefault";
 import { useAuth } from "@/lib/auth-context";
@@ -50,25 +50,41 @@ const serviceIconMap = {
 // City default (Fès) used to find nearby pros before a patient location exists.
 const HOME_CENTER = { lat: 34.037, lng: -5.004 };
 
-// Raw DB specialty → i18n key for the French/Arabic label on pro cards.
-const SPEC_LABEL: Record<string, string> = {
-  nurse: "spec_nurse",
-  physiotherapist: "spec_physio",
-  psychologist: "spec_psy",
-  yoga_instructor: "spec_yoga",
-};
-
 export default function PatientHomeScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const { user, profile, refreshProfile } = useAuth();
 
-  // Real data behind "Proches de vous" and "Prochain rendez-vous" (was mock).
+  // Professionals who are online right now, near this patient.
   const [nearbyPros, setNearbyPros] = useState<NearbyProMapItem[]>([]);
   const [prosLoading, setProsLoading] = useState(true);
-  const [nextBooking, setNextBooking] = useState<Booking | null>(null);
   const [nextProName, setNextProName] = useState<string | null>(null);
-  const [workedWithIds, setWorkedWithIds] = useState<Set<string>>(new Set());
+
+  // "Prochain rendez-vous" — a live Supabase Realtime subscription (same hook
+  // patient/bookings.tsx uses), not a poll: any status/assignment change lands
+  // here the moment it happens, instead of waiting up to 30s or a tab switch.
+  const { bookings: myBookings } = usePatientBookings(user?.id ?? null);
+
+  const workedWithIds = useMemo(
+    () =>
+      new Set(
+        myBookings
+          .filter((b) => b.professional_id && ["completed", "in_progress", "en_route", "matched"].includes(b.status))
+          .map((b) => b.professional_id as string),
+      ),
+    [myBookings],
+  );
+
+  const nextBooking = useMemo(() => {
+    const upcoming = myBookings
+      .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
+      .sort((a, b) => {
+        const ta = a.scheduled_at ? Date.parse(a.scheduled_at) : Date.parse(a.created_at);
+        const tb = b.scheduled_at ? Date.parse(b.scheduled_at) : Date.parse(b.created_at);
+        return ta - tb;
+      });
+    return upcoming[0] ?? null;
+  }, [myBookings]);
 
   // Refresh profile when screen comes into focus
   // Profile changes rarely — refresh at most once a minute instead of on every
@@ -77,7 +93,7 @@ export default function PatientHomeScreen() {
     void refreshProfile();
   }, 60_000);
 
-  // Nearby professionals + the patient's next appointment, kept fresh on focus.
+  // Nearby professionals, kept fresh on focus.
   // (useFocusRefresh ignores any returned cleanup, so we guard setState with a
   // mounted ref rather than a per-run cancel flag.)
   const alive = useRef(true);
@@ -98,43 +114,25 @@ export default function PatientHomeScreen() {
         } finally {
           if (alive.current) setProsLoading(false);
         }
-
-        if (user?.id) {
-          try {
-            const all = await db.bookings.listForPatient(user.id);
-
-            // Pros the patient has actually dealt with before — surfaced first in
-            // "Proches de vous" (a familiar face is friendlier than a stranger).
-            const worked = new Set(
-              all
-                .filter((b) => b.professional_id && ["completed", "in_progress", "en_route", "matched"].includes(b.status))
-                .map((b) => b.professional_id as string),
-            );
-            if (alive.current) setWorkedWithIds(worked);
-
-            const upcoming = all
-              .filter((b) => ["matched", "en_route", "in_progress"].includes(b.status))
-              .sort((a, b) => {
-                const ta = a.scheduled_at ? Date.parse(a.scheduled_at) : Date.parse(a.created_at);
-                const tb = b.scheduled_at ? Date.parse(b.scheduled_at) : Date.parse(b.created_at);
-                return ta - tb;
-              });
-            const next = upcoming[0] ?? null;
-            if (alive.current) setNextBooking(next);
-            if (next?.professional_id) {
-              const pro = await db.profiles.get(next.professional_id).catch(() => null);
-              if (alive.current) setNextProName(pro?.full_name ?? null);
-            } else if (alive.current) {
-              setNextProName(null);
-            }
-          } catch {
-            if (alive.current) setNextBooking(null);
-          }
-        }
       })();
-    }, [user?.id]),
+    }, []),
     30_000,
   );
+
+  // Resolve the next appointment's pro name whenever it (or who it points at)
+  // changes — nextBooking itself now updates live via the realtime hook above.
+  useEffect(() => {
+    if (!nextBooking?.professional_id) {
+      setNextProName(null);
+      return;
+    }
+    let cancelled = false;
+    db.profiles
+      .get(nextBooking.professional_id)
+      .then((pro) => { if (!cancelled) setNextProName(pro?.full_name ?? null); })
+      .catch(() => { if (!cancelled) setNextProName(null); });
+    return () => { cancelled = true; };
+  }, [nextBooking?.professional_id]);
 
   // Keep "Proches de vous" short and friendly: at most 3 pros, familiar faces
   // (already consulted) first, then the nearest.
@@ -149,12 +147,11 @@ export default function PatientHomeScreen() {
       .slice(0, 3);
   }, [nearbyPros, workedWithIds]);
 
-  // Use real profile data, fallback to mock for display purposes
   const displayName = {
-    firstName: profile?.firstName || mockPatientProfile.firstName,
-    lastName: profile?.lastName || mockPatientProfile.lastName,
+    firstName: profile?.firstName || "",
+    lastName: profile?.lastName || "",
   };
-  const city = profile?.city || mockPatientProfile.city;
+  const city = profile?.city || "";
   const avatar = profile?.avatar;
 
   return (
@@ -204,10 +201,18 @@ export default function PatientHomeScreen() {
             <TouchableOpacity
               key={qs.id}
               style={[styles.quickBtn, { backgroundColor: qs.background }]}
-              onPress={() => router.push(qs.id === "q1" ? "/patient/urgent" : "/patient/request")}
+              onPress={() => {
+                if (qs.id === "q1") router.push("/patient/urgent");
+                // Pansement / Injection: jump straight into the nurse request
+                // form with that exact care type pre-selected, instead of
+                // dropping the patient on a blank "Type de soin" picker.
+                else if (qs.id === "q2") router.push("/patient/request?service=infirmier&care=pansement");
+                else if (qs.id === "q3") router.push("/patient/request?service=infirmier&care=injection");
+                else router.push("/patient/request");
+              }}
             >
               <Icon size={14} color={qs.color} />
-              <Text style={[styles.quickText, { color: qs.color }]}>{qs.label}</Text>
+              <Text style={[styles.quickText, { color: qs.color }]}>{t(qs.label)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -252,12 +257,12 @@ export default function PatientHomeScreen() {
                   <View style={styles.serviceIconWrap}>
                     <Icon size={18} color="white" />
                   </View>
-                  {s.tag ? <Text style={styles.tag}>{s.tag}</Text> : <View />}
+                  {s.tag ? <Text style={styles.tag}>{t(s.tag)}</Text> : <View />}
                 </View>
 
                 <View>
-                  <Text style={styles.serviceLabel}>{s.label}</Text>
-                  <Text style={styles.serviceSub}>{s.sub}</Text>
+                  <Text style={styles.serviceLabel}>{t(s.label)}</Text>
+                  <Text style={styles.serviceSub}>{t(s.sub)}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -273,11 +278,25 @@ export default function PatientHomeScreen() {
           <Text style={styles.ctaText}>{t("request_care_now")}</Text>
           <ChevronRight size={18} color="white" />
         </TouchableOpacity>
-        <Text style={styles.ctaHint}>⚡ Réponse en moins de 5 minutes</Text>
+        <Text style={styles.ctaHint}>⚡ {t("pat_reply_under_5min")}</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Proches de vous · {city}</Text>
+        {/* The count is the answer to "who can actually come right now?" — the
+            list itself only ever contains online pros now (see
+            geo.findNearbyProsForMap), but saying so out loud is the difference
+            between a patient trusting the list and guessing at it. */}
+        <View style={styles.sectionHeadRow}>
+          <Text style={styles.sectionTitle}>{t("pat_near_you").replace("%s", city)}</Text>
+          {!prosLoading && nearbyPros.length > 0 ? (
+            <View style={styles.onlineCount}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.onlineCountTxt}>
+                {nearbyPros.length} {t("pros_available_now")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         {prosLoading ? (
           <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primary} />
         ) : topPros.length === 0 ? (
@@ -296,10 +315,16 @@ export default function PatientHomeScreen() {
                 activeOpacity={0.85}
                 onPress={() => router.push(`/patient/provider/${n.id}`)}
               >
-                <Image
-                  source={n.avatar_url ? { uri: n.avatar_url } : DEFAULT_AVATAR}
-                  style={styles.proAvatar}
-                />
+                <View>
+                  <Image
+                    source={n.avatar_url ? { uri: n.avatar_url } : DEFAULT_AVATAR}
+                    style={styles.proAvatar}
+                  />
+                  {/* Presence badge. Only rendered when the server says online,
+                      never assumed from the row simply existing — that
+                      assumption is what put offline pros on the map. */}
+                  {n.is_online ? <View style={styles.proOnlineDot} /> : null}
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.proName} numberOfLines={1}>{name}</Text>
                   <View style={styles.proSpecRow}>
@@ -325,7 +350,9 @@ export default function PatientHomeScreen() {
 
                 <View style={{ alignItems: "flex-end" }}>
                   {n.hourly_rate_mad ? (
-                    <Text style={styles.proPrice}>Dès {n.hourly_rate_mad} MAD</Text>
+                    <Text style={styles.proPrice}>
+                      {t("pat_from_price").replace("{n}", String(n.hourly_rate_mad))}
+                    </Text>
                   ) : null}
                   <View style={styles.actionsRow}>
                     {/* Both actions stay inside the app: contact happens through a
@@ -349,23 +376,19 @@ export default function PatientHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("next_appointment")}</Text>
           <TouchableOpacity
-            onPress={() => {
-              // Only open the live map when the pro is actually moving/working —
-              // opening tracking for a future 'matched' booking would show a
-              // frozen, meaningless "live" session. Otherwise go to the booking.
-              const live = nextBooking.status === "en_route" || nextBooking.status === "in_progress";
-              router.push(
-                live
-                  ? `/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`
-                  : "/patient/bookings",
-              );
-            }}
+            onPress={() =>
+              // Straight back into tracking for any active status — including
+              // "matched", which now shows a real waiting-for-departure state
+              // rather than a blank screen. This is the patient's way back in
+              // if they close or accidentally leave the map mid-mission.
+              router.push(`/patient/tracking?bookingId=${encodeURIComponent(nextBooking.id)}`)
+            }
             activeOpacity={0.9}
           >
             <LinearGradient colors={Gradients.nurse} style={styles.bookingCard}>
               <View style={styles.bookingBadgeRow}>
                 <Text style={styles.bookingBadge}>
-                  {SPEC_LABEL[nextBooking.specialty] ? t(SPEC_LABEL[nextBooking.specialty]) : nextBooking.specialty}
+                  {careLabel(nextBooking, t)}
                 </Text>
                 <Text style={styles.bookingStatus}>
                   {nextBooking.status === "in_progress"
@@ -461,6 +484,10 @@ const styles = StyleSheet.create({
   quickText: { fontSize: 12, fontWeight: "600" },
   section: { paddingHorizontal: 20, marginBottom: 18 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginBottom: 10 },
+  sectionHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  onlineCount: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#16A34A" },
+  onlineCountTxt: { color: "#16A34A", fontSize: 11.5, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   serviceCard: {
     width: "48.5%",
@@ -539,6 +566,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   proAvatar: { width: 54, height: 54, borderRadius: 16 },
+  proOnlineDot: {
+    position: "absolute", right: -2, bottom: -2,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: "#16A34A", borderWidth: 2.5, borderColor: "#FFFFFF",
+  },
   proName: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600", marginBottom: 1 },
   proSpecialty: { color: Colors.textMuted, fontSize: 12, marginBottom: 4, textTransform: "capitalize" },
   proSpecRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },

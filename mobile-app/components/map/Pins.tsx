@@ -12,6 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useRef } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   Animated,
   Image,
@@ -155,6 +156,7 @@ type ProPinProps = {
 };
 
 export const ProPin = React.memo(function ProPin({ pro, isSelected, onSelect }: ProPinProps) {
+  const { t } = useI18n();
   const color = specialtyColor(pro.specialty);
   const badge = pro.isEnRoute ? "cyan" : "green";
 
@@ -193,7 +195,11 @@ export const ProPin = React.memo(function ProPin({ pro, isSelected, onSelect }: 
       style={pin.wrap}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={`${pro.name}, ${pro.specialty}, ${pro.distanceKm.toFixed(1)} kilomètres${pro.priceMad ? `, ${pro.priceMad} dirhams` : ""}`}
+      accessibilityLabel={
+        `${pro.name}, ${pro.specialty}, ` +
+        t("cmp_a11y_km").replace("%s", pro.distanceKm.toFixed(1)) +
+        (pro.priceMad ? `, ${t("cmp_a11y_price").replace("%s", String(pro.priceMad))}` : "")
+      }
     >
       <Animated.View style={{ transform: [{ translateY: floatV }] }}>
         {/* ── Popup card ── */}

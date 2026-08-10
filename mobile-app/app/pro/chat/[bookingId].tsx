@@ -16,7 +16,7 @@ import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
-import { normalizeRouteParam } from "@/lib/demo-booking";
+import { normalizeRouteParam } from "@/lib/route-params";
 import { LiveChat } from "@/components/LiveChat";
 import type { Profile } from "@/lib/db/types";
 
@@ -65,7 +65,7 @@ export default function ProChatScreen() {
     return () => { active = false; };
   }, [bookingId]);
 
-  const name = recipient?.full_name ?? "Patient";
+  const name = recipient?.full_name ?? t("patient");
   const initials = name.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 
   return (
