@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronRight, Landmark, Wallet } from "lucide-react-native";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Landmark, Wallet } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { showToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
 import { db, type Payment, type Payout, type PayoutMethod } from "@/lib/db/dal";
+import { MonthCalendarModal } from "@/components/MonthCalendarModal";
+import { intlLocale, startOfMonth } from "@/lib/date-utils";
 
 const NAVY = "#0D0870";
 const CREAM = "#EDE5CC";
@@ -37,7 +39,7 @@ type Move = {
 };
 
 export default function ProEarningsScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -107,6 +109,61 @@ export default function ProEarningsScreen() {
     }
     return list.sort((a, b) => b.date.localeCompare(a.date));
   }, [captured, activePayouts]);
+
+  // ── Period filter ──────────────────────────────────────────────────────────
+  // The ledger only ever grows: after a few months of work it is hundreds of
+  // rows on one scroll, and finding "what did I earn in August" means dragging
+  // past every month since. A month is the unit a wallet is actually read in.
+  //
+  // `null` means every movement — kept reachable, because a running total is
+  // sometimes exactly what you want.
+  const [monthFilter, setMonthFilter] = useState<Date | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [filterReady, setFilterReady] = useState(false);
+
+  // Open on the most recent month that HAS movements rather than on today: a
+  // pro who has not worked this month would otherwise land on an empty screen
+  // and conclude the wallet was broken.
+  useEffect(() => {
+    if (filterReady || movements.length === 0) return;
+    setMonthFilter(startOfMonth(new Date(movements[0].date)));
+    setFilterReady(true);
+  }, [movements, filterReady]);
+
+  const shownMovements = useMemo(() => {
+    if (!monthFilter) return movements;
+    const y = monthFilter.getFullYear();
+    const m = monthFilter.getMonth();
+    return movements.filter((mv) => {
+      const d = new Date(mv.date);
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
+  }, [movements, monthFilter]);
+
+  /** Net change over the period on screen — the number the filter exists for. */
+  const periodNet = useMemo(
+    () => shownMovements.reduce((sum, mv) => sum + mv.amount, 0),
+    [shownMovements],
+  );
+
+  /** Oldest month with activity, so the back arrow stops at real data. */
+  const earliestMonth = useMemo(
+    () =>
+      movements.length
+        ? startOfMonth(new Date(movements[movements.length - 1].date))
+        : startOfMonth(new Date()),
+    [movements],
+  );
+  const latestMonth = useMemo(
+    () => (movements.length ? startOfMonth(new Date(movements[0].date)) : startOfMonth(new Date())),
+    [movements],
+  );
+  const stepMonth = (delta: number) => {
+    const base = monthFilter ?? latestMonth;
+    setMonthFilter(startOfMonth(new Date(base.getFullYear(), base.getMonth() + delta, 1)));
+  };
+  const canGoBack = !!monthFilter && monthFilter > earliestMonth;
+  const canGoForward = !!monthFilter && monthFilter < latestMonth;
 
   const requestPayout = () => {
     if (!user?.id || requesting) return;
@@ -208,13 +265,72 @@ export default function ProEarningsScreen() {
 
       {/* Movements */}
       <Text style={s.sectionTitle}>{t("wallet_movements")}</Text>
+
+      {movements.length > 0 ? (
+        <View style={s.periodBar}>
+          <TouchableOpacity
+            style={[s.periodArrow, !canGoBack && s.periodArrowOff]}
+            disabled={!canGoBack}
+            onPress={() => stepMonth(-1)}
+            accessibilityLabel={t("previous_month")}
+            accessibilityRole="button"
+          >
+            <ChevronLeft size={18} color={canGoBack ? NAVY : Colors.textSubtle} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.periodLabelBtn}
+            onPress={() => setCalendarOpen(true)}
+            accessibilityRole="button"
+          >
+            <CalendarDays size={15} color={NAVY} />
+            <Text style={s.periodLabel} numberOfLines={1}>
+              {monthFilter
+                ? monthFilter.toLocaleDateString(intlLocale(locale), { month: "long", year: "numeric" })
+                : t("all_periods")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.periodArrow, !canGoForward && s.periodArrowOff]}
+            disabled={!canGoForward}
+            onPress={() => stepMonth(1)}
+            accessibilityLabel={t("next_month")}
+            accessibilityRole="button"
+          >
+            <ChevronRight size={18} color={canGoForward ? NAVY : Colors.textSubtle} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {movements.length > 0 ? (
+        <View style={s.periodSummary}>
+          <Text style={s.periodCount}>
+            {t("movements_count").replace("{n}", String(shownMovements.length))}
+          </Text>
+          <View style={{ flex: 1 }} />
+          <Text style={[s.periodNet, { color: periodNet >= 0 ? GREEN : RED }]}>
+            {periodNet >= 0 ? "+" : "−"}{Math.abs(periodNet)} {t("mad")}
+          </Text>
+          {monthFilter ? (
+            <TouchableOpacity onPress={() => setMonthFilter(null)} hitSlop={8}>
+              <Text style={s.periodAll}>{t("all_periods")}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
       {movements.length === 0 ? (
         <View style={s.emptyCard}>
           <Text style={s.emptyTxt}>{t("no_movements")}</Text>
           <Text style={s.emptySub}>{t("paid_services_hint")}</Text>
         </View>
+      ) : shownMovements.length === 0 ? (
+        <View style={s.emptyCard}>
+          <Text style={s.emptyTxt}>{t("no_movements_this_month")}</Text>
+        </View>
       ) : (
-        movements.map((m) => {
+        shownMovements.map((m) => {
           const credit = m.amount >= 0;
           return (
             <View key={m.id} style={s.moveRow}>
@@ -233,6 +349,18 @@ export default function ProEarningsScreen() {
         })
       )}
       <View style={{ height: 20 }} />
+
+      {/* Jump to any month. Reuses the picker the missions calendar opens — the
+          day tapped selects that day's MONTH, since a wallet is read by month. */}
+      <MonthCalendarModal
+        visible={calendarOpen}
+        initialDate={monthFilter ?? new Date()}
+        onClose={() => setCalendarOpen(false)}
+        onSelect={(d) => {
+          setMonthFilter(startOfMonth(d));
+          setCalendarOpen(false);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -274,6 +402,32 @@ const s = StyleSheet.create({
   statLbl: { color: Colors.textMuted, fontSize: 11.5, marginTop: 2 },
 
   sectionTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: "800", marginTop: 20, marginBottom: 10 },
+
+  // Period navigator. Same card language as the rest of the screen — white
+  // surface, existing border and navy accent; nothing new introduced.
+  periodBar: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: Colors.card, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 6, marginBottom: 8,
+  },
+  periodArrow: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
+  },
+  periodArrowOff: { opacity: 0.35 },
+  periodLabelBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7,
+    height: 34, borderRadius: 10, backgroundColor: Colors.background,
+  },
+  periodLabel: {
+    color: Colors.textPrimary, fontSize: 13.5, fontWeight: "800",
+    textTransform: "capitalize", flexShrink: 1,
+  },
+  periodSummary: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10, paddingHorizontal: 2 },
+  periodCount: { color: Colors.textMuted, fontSize: 12, fontWeight: "600" },
+  periodNet: { fontSize: 13.5, fontWeight: "800" },
+  periodAll: { color: NAVY, fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
   emptyCard: { backgroundColor: "#FFF", borderRadius: 16, padding: 20, alignItems: "center", gap: 4 },
   emptyTxt: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700" },
   emptySub: { color: Colors.textMuted, fontSize: 12.5 },

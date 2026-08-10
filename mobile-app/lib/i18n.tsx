@@ -1262,6 +1262,13 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     address_required_booking: "Add your address first — the professional needs to know where to go.",
+  
+    // --- extracted from hardcoded strings ---
+    all_periods: "All",
+    movements_count: "{n} movement(s)",
+    next_month: "Next month",
+    no_movements_this_month: "No movements this month",
+    previous_month: "Previous month",
   },
   ar: {
     confirm_email_title: "أكّد بريدك الإلكتروني",
@@ -1907,6 +1914,13 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     address_required_booking: "أضف عنوانك أولاً: يحتاج المهني إلى معرفة وجهته.",
+  
+    // --- extracted from hardcoded strings ---
+    all_periods: "الكل",
+    movements_count: "{n} حركة",
+    next_month: "الشهر التالي",
+    no_movements_this_month: "لا توجد حركات هذا الشهر",
+    previous_month: "الشهر السابق",
   },
   fr: {
     confirm_email_title: "Confirmez votre email",
@@ -2554,6 +2568,13 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     address_required_booking: "Ajoutez d'abord votre adresse : le professionnel doit savoir où se rendre.",
+  
+    // --- extracted from hardcoded strings ---
+    all_periods: "Tout",
+    movements_count: "{n} mouvement(s)",
+    next_month: "Mois suivant",
+    no_movements_this_month: "Aucun mouvement ce mois-ci",
+    previous_month: "Mois précédent",
   },
   dar: {
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",
