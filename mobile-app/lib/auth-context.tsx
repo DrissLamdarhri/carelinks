@@ -100,11 +100,13 @@ interface AuthContextValue {
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
+    options?: { phone?: string; city?: string; gender?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ) => Promise<SignUpResult>;
   resendConfirmationEmail: (email: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
+  /** True if `password` is the signed-in user's current password. */
+  verifyCurrentPassword: (password: string) => Promise<boolean>;
   enrollMfaTotp: () => Promise<{ factorId: string; qrCode: string; secret: string }>;
   verifyMfaTotp: (code: string, factorId?: string) => Promise<void>;
   challengeMfaSms: (phone: string) => Promise<void>;
@@ -127,6 +129,7 @@ const AuthContext = createContext<AuthContextValue>({
   resendConfirmationEmail: async () => {},
   sendPasswordReset: async () => {},
   updatePassword: async () => {},
+  verifyCurrentPassword: async () => false,
   enrollMfaTotp: async () => ({ factorId: "", qrCode: "", secret: "" }),
   verifyMfaTotp: async () => {},
   challengeMfaSms: async () => {},
@@ -203,6 +206,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const phone =
         (authUser.user_metadata?.phone as string | undefined) ?? "";
       const city = (authUser.user_metadata?.city as string | undefined) ?? "";
+      // Collected at registration as a civility (Mme / M.) and stored with the
+      // same vocabulary the profile editor already uses: female | male.
+      const gender = (authUser.user_metadata?.gender as string | undefined) ?? "";
       const { error: profileError } = await supabase.from("profiles").insert({
         id: authUser.id,
         role,
@@ -217,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (role === "patient") {
         const { error: patientError } = await supabase
           .from("patients")
-          .upsert({ id: authUser.id });
+          .upsert({ id: authUser.id, gender: gender || null });
         if (patientError) throw patientError;
       } else {
         // profession/experience come from user_metadata rather than being
@@ -495,13 +501,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  /**
+   * Proof that the person changing the password is the account holder.
+   *
+   * Supabase does NOT require the old password for `updateUser({ password })`
+   * — an unlocked phone would otherwise be enough to lock the real owner out
+   * of their own account and every booking in it. Re-signing in with the
+   * supplied password is the check: it fails cleanly on a wrong password, and
+   * on success simply re-issues a session for the same user, so there is no
+   * state to unwind either way.
+   */
+  const verifyCurrentPassword = async (password: string): Promise<boolean> => {
+    const email = session?.user?.email;
+    if (!email) return false;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return !error;
+  };
+
   // ── Email/password sign-up ──────────────────────────────────────────────────
   const signUpWithEmail = async (
     email: string,
     password: string,
     fullName: string,
     role: "patient" | "pro",
-    options?: { phone?: string; city?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
+    options?: { phone?: string; city?: string; gender?: string; profession?: string; services?: string[]; experience?: string; documents?: Array<{ doc_type: string; storage_path: string }> }
   ): Promise<SignUpResult> => {
     await AsyncStorage.setItem("carelink_intended_role", role);
     console.log("[Auth] Attempting signup with:", { email, password: "***", fullName, role });
@@ -514,6 +537,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           phone: options?.phone || null,
           city: options?.city || null,
+          gender: options?.gender || null,
           profession: options?.profession || null,
           services: options?.services || null,
           // Kept in user_metadata (survives the confirmation gap below) so the
@@ -561,7 +585,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (role === "patient") {
         const { error: patientError } = await supabase
           .from("patients")
-          .upsert({ id: data.user.id });
+          .upsert({ id: data.user.id, gender: options?.gender ?? null });
         if (patientError) throw patientError;
       } else {
         const { error: professionalError } = await supabase
@@ -667,6 +691,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithEmail,
         sendPasswordReset,
         updatePassword,
+        verifyCurrentPassword,
         signUpWithEmail,
         resendConfirmationEmail,
         enrollMfaTotp,

@@ -35,6 +35,7 @@ const menuSections: Array<{
       { icon: User, label: "personal_info", color: "#0D0870", route: "/patient/profile-infos" },
       { icon: CreditCard, label: "patient_policy", color: "#3B82F6", route: "/patient/patient-policy" },
       { icon: MapPin, label: "saved_addresses", color: "#6BB8C8", route: "/patient/addresses" },
+      { icon: Shield, label: "account_security", color: "#16A34A", route: "/patient/security" },
     ],
   },
   {

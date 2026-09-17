@@ -3,7 +3,8 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, Touc
 import { useRouter } from "expo-router";
 import { MessageCircle, Search } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
-import { useI18n, tr } from "@/lib/i18n";
+import { useI18n, tr, activeLocaleTag } from "@/lib/i18n";
+import { intlLocale } from "@/lib/date-utils";
 import { useAuth } from "@/lib/auth-context";
 import { usePatientBookings } from "@/lib/db/realtime";
 import { db } from "@/lib/db/dal";
@@ -31,10 +32,11 @@ const initialsOf = (name: string) => name.split(" ").map((p) => p[0] ?? "").join
 const timeAgo = (iso: string) => {
   const d = new Date(iso), now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return d.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" });
+  const lc = intlLocale(activeLocaleTag());
+  if (sameDay) return d.toLocaleTimeString(lc, { hour: "2-digit", minute: "2-digit" });
   const yest = new Date(); yest.setDate(now.getDate() - 1);
   if (d.toDateString() === yest.toDateString()) return tr("yesterday");
-  return d.toLocaleDateString("fr-MA", { day: "numeric", month: "short" });
+  return d.toLocaleDateString(lc, { day: "numeric", month: "short" });
 };
 
 export default function PatientMessagesScreen() {

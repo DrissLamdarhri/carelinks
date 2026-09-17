@@ -75,7 +75,7 @@ function PatientTabs() {
         }}
       />
       <Tabs.Screen
-        name="yoga"
+        name="explore"
         options={{
           title: t("explore"),
           tabBarIcon: ({ color, size, focused }) => (
@@ -122,6 +122,7 @@ function PatientTabs() {
 
       <Tabs.Screen name="request" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="kine" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="yoga" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="urgent" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="offers/[bookingId]" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="chat/[bookingId]" options={hiddenFullScreenOptions} />
@@ -130,6 +131,7 @@ function PatientTabs() {
       <Tabs.Screen name="profile-infos" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="patient-policy" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="addresses" options={hiddenFullScreenOptions} />
+      <Tabs.Screen name="security" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="notifications" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="psychologist" options={hiddenFullScreenOptions} />
       <Tabs.Screen name="psychologists" options={hiddenFullScreenOptions} />

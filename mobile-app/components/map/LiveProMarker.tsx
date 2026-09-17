@@ -16,11 +16,12 @@
  * Only ever rendered as a child of the MapLibre `Map` — `ViewAnnotation` is
  * meaningless outside it.
  */
-import React, { memo, useSyncExternalStore } from "react";
+import React, { memo, useRef, useSyncExternalStore } from "react";
 import { ViewAnnotation } from "@maplibre/maplibre-react-native";
 import type { ImageSourcePropType } from "react-native";
 import { MeMarker } from "./MapMarkers";
 import { TrackingMarker, type TrackingStatus } from "./TrackingMarker";
+import { holdHeading } from "@/lib/tracking/heading-hold";
 import { STALE_AFTER_MS, type TrackingStore } from "@/lib/tracking/store";
 
 export type LiveProMarkerProps = {
@@ -49,6 +50,22 @@ export const LiveProMarker = memo(function LiveProMarker({
   initials,
 }: LiveProMarkerProps) {
   const sample = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+
+  /**
+   * Last heading the "self" marker was drawn at, held through stops.
+   *
+   * Derived from the current snapshot only — no subscription of its own, no
+   * effect — so this stays the cheap leaf it was designed to be. Written during
+   * render for the same reason the snapshot is read during render: it is a
+   * function of the value we already have.
+   *
+   * Only the "self" variant consults it. The professional's marker as seen BY
+   * THE PATIENT still takes `bearing` and `moving` straight from the sample, so
+   * nothing about the patient's screen changes.
+   */
+  const heldHeadingRef = useRef<number | null>(null);
+  heldHeadingRef.current = holdHeading(heldHeadingRef.current, sample);
+
   if (!sample) return null;
 
   // Arrival is a fact the professional declared; it outranks anything inferred
@@ -64,7 +81,7 @@ export const LiveProMarker = memo(function LiveProMarker({
   return (
     <ViewAnnotation lngLat={[sample.lng, sample.lat]} anchor="center">
       {variant === "self" ? (
-        <MeMarker heading={sample.moving ? sample.bearing : null} />
+        <MeMarker heading={heldHeadingRef.current} />
       ) : (
       <TrackingMarker
         status={status}

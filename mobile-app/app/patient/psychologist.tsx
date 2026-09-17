@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CalendarDays, MapPin, Repeat, Star, Video } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { intlLocale } from "@/lib/date-utils";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { supabase } from "@/lib/supabase";
@@ -44,7 +45,7 @@ const modeOptions: { key: SessionMode; label: string; icon: typeof MapPin }[] = 
 ];
 
 export default function PsychologistBookingScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
@@ -72,7 +73,7 @@ export default function PsychologistBookingScreen() {
     for (const d of dates) {
       const dt = new Date(d.isoDate);
       const key = `${dt.getFullYear()}-${dt.getMonth()}`;
-      if (!map.has(key)) map.set(key, { key, label: dt.toLocaleString("fr-MA", { month: "long", year: "numeric" }), dates: [] as any });
+      if (!map.has(key)) map.set(key, { key, label: dt.toLocaleString(intlLocale(locale), { month: "long", year: "numeric" }), dates: [] as any });
       map.get(key)!.dates.push(d);
     }
     return Array.from(map.values());

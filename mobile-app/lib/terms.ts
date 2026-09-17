@@ -28,8 +28,14 @@ import { supabase } from "./supabase";
  * Do NOT bump for a typo fix or a re-translation: that re-prompts everyone for
  * nothing and trains them to tap through without reading, which is precisely
  * what destroys the value of having asked.
+ *
+ * 2026-09-17 — the gate now presents the terms in Arabic to everyone, whatever
+ * the interface language. That is not a re-translation: it changes which text
+ * a user is agreeing to, and anyone who accepted the French version accepted a
+ * different document. They are asked again, and the new acceptance is logged
+ * against `ar` so the record says which wording was on screen.
  */
-export const TERMS_VERSION = "2026-08-08";
+export const TERMS_VERSION = "2026-09-17";
 
 const localKey = (v: string) => `carelink.terms.accepted.${v}`;
 
@@ -49,6 +55,24 @@ export async function markAcceptedLocally(): Promise<void> {
     await AsyncStorage.setItem(localKey(TERMS_VERSION), new Date().toISOString());
   } catch {
     /* best-effort: the DB record below is the one that counts */
+  }
+}
+
+/**
+ * Clear this device's acceptance so the gate shows again. DEV builds only.
+ *
+ * Verifying a change to the gate otherwise means uninstalling the app or
+ * `adb shell pm clear`, which also destroys the session and every other bit of
+ * local state — enough friction that the screen ends up being changed without
+ * ever being looked at. Only the local cache is cleared; the durable
+ * `terms_acceptances` rows are evidence and are never touched.
+ */
+export async function resetAcceptanceForTesting(): Promise<void> {
+  if (!__DEV__) return;
+  try {
+    await AsyncStorage.removeItem(localKey(TERMS_VERSION));
+  } catch {
+    /* nothing to clear */
   }
 }
 
