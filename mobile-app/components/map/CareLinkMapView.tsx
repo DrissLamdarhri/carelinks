@@ -24,8 +24,9 @@ import {
 import Svg, { Path as SvgPath } from "react-native-svg";
 import { StaticMapLayer } from "./StaticMapLayer";
 import { type ProPinData } from "./Pins";
-import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
+import { ProAvatarMarker, MeMarker, DestinationPin, OriginPin } from "./MapMarkers";
 import { CREAM, DEFAULT_ZOOM, NAVY, project } from "./engine";
+import { useI18n } from "@/lib/i18n";
 
 export type LatLng = { lat: number; lng: number };
 
@@ -56,6 +57,44 @@ export type CareLinkMapViewProps = {
   progressIdx?: number;
   /** Search radius circle (km) around the patient. 0 hides it. */
   radiusKm?: number;
+  /**
+   * Zoom to settle on when framing `center` (no route to fit).
+   *
+   * Defaults to a wide district view, which is the right frame for "somewhere
+   * in your city" — and the wrong one the moment the patient's own GPS has
+   * been acquired, because then the map knows the actual doorstep and should
+   * show it. Screens pass a street-level value once they have a real fix.
+   */
+  focusZoom?: number;
+  /**
+   * Height in px of whatever covers the BOTTOM of the map — a bottom sheet,
+   * usually.
+   *
+   * The map view is normally `absoluteFill`, so its geometric centre is the
+   * middle of the whole screen even when the lower half is hidden under a
+   * sheet. Centring the patient there puts them behind it: the camera flies to
+   * the right coordinate and the user sees an anonymous patch of street with no
+   * marker on it, which reads as "the map didn't do anything".
+   *
+   * Passing the covered height moves the optical centre into the strip that is
+   * actually visible.
+   */
+  paddingBottomPx?: number;
+  /**
+   * GPS accuracy of `patient`, in metres. Draws a soft halo at that radius.
+   * Null/omitted draws nothing — an unknown accuracy is not a zero one.
+   */
+  accuracyM?: number | null;
+  /**
+   * Where to put the native compass. The SDK's default corner sits under the
+   * top chrome on screens that overlay a search bar, which both hides it and
+   * eats its taps.
+   */
+  compassPosition?:
+    | { top: number; left: number }
+    | { top: number; right: number }
+    | { bottom: number; right: number }
+    | { bottom: number; left: number };
   primaryColor?: string;
   selectedProId?: string | null;
   onSelectPro?: (id: string) => void;
@@ -178,8 +217,10 @@ function FallbackMap({
   primaryColor = "#0D0870",
   selectedProId,
   onSelectPro,
+  trackingVariant,
   style,
 }: CareLinkMapViewProps) {
+  const { t } = useI18n();
   const [size, setSize] = useState({ w: Dimensions.get("window").width, h: 320 });
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
@@ -239,9 +280,18 @@ function FallbackMap({
         </View>
       ) : null}
 
+      {/* Same rule as the native map: label both ends of a drawn route, except
+          in the professional's own navigation view. Kept in sync deliberately —
+          a trip must not read differently depending on which map rendered it. */}
+      {trackingVariant !== "self" && route && route.length >= 2 ? (
+        <View pointerEvents="none" style={[fb.pin, { left: toXY(route[0]).x - 37, top: toXY(route[0]).y - 10 }]}>
+          <OriginPin label={t("map_departure")} />
+        </View>
+      ) : null}
+
       {destination ? (
         <View pointerEvents="none" style={[fb.pin, { left: toXY(destination).x - 17, top: toXY(destination).y - 42 }]}>
-          <DestinationPin />
+          <DestinationPin label={t("map_arrival")} />
         </View>
       ) : null}
     </View>

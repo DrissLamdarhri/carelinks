@@ -112,6 +112,10 @@ export function ProAvatarMarker({
       ) : null}
 
       <View style={[styles.shadow, { width: size, height: size, borderRadius: size / 2 }]}>
+        {/* Selected: the same pulse the driver marker uses, so "this is the one
+            you picked" and "this one is moving" read as one visual language. */}
+        {selected && !driver ? <DriverPulse size={size} color={accent} maxScale={1.4} /> : null}
+
         {/* driver: rotating pointer around the circle + soft active pulse */}
         {driver ? (
           <>
@@ -137,18 +141,35 @@ export function ProAvatarMarker({
           {source ? (
             <Image
               source={source}
-              style={{ width: size, height: size }}
+              // Rounded on the child as well as the clipping parent. Android
+              // does not reliably apply a parent's `overflow: hidden` to a
+              // rounded box, which is what turned these markers into squares.
+              style={{ width: size, height: size, borderRadius: size / 2 }}
               resizeMode="cover"
               onError={() => setImgError(true)}
             />
           ) : (
-            <View style={[styles.fallback, { backgroundColor: accent }]}>
+            // Same reason: the initials chip carries its own radius instead of
+            // trusting the parent to clip it. Without this it paints as a
+            // purple SQUARE behind the white border — the reported "cut" pin.
+            <View
+              style={[
+                styles.fallback,
+                { backgroundColor: accent, width: size, height: size, borderRadius: size / 2 },
+              ]}
+            >
               <Text style={[styles.initials, { fontSize: size * 0.36 }]}>{pro.initials}</Text>
             </View>
           )}
           <View
             pointerEvents="none"
-            style={[styles.accentRing, { width: size, height: size, borderRadius: size / 2, borderColor: accent }]}
+            style={[
+              styles.accentRing,
+              // Concentric: drawn 3px outside a `size` box, so it must be
+              // size + 6 across. At `size` it sat 3px off to the top-left,
+              // which is the asymmetry that made the ring look broken.
+              { width: size + 6, height: size + 6, borderRadius: (size + 6) / 2, borderColor: accent },
+            ]}
           />
           <View style={[styles.badge, { backgroundColor: driver ? "#0EA5E9" : GREEN }]} />
         </View>
@@ -158,7 +179,11 @@ export function ProAvatarMarker({
 }
 
 /** Soft pulsing ring behind the moving driver — reads as "active / en route". */
-function DriverPulse({ size, color }: { size: number; color: string }) {
+function DriverPulse({
+  size,
+  color,
+  maxScale = 1.9,
+}: { size: number; color: string; maxScale?: number }) {
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -172,7 +197,7 @@ function DriverPulse({ size, color }: { size: number; color: string }) {
     loop.start();
     return () => loop.stop();
   }, [v, reduced]);
-  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.9] });
+  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.9, maxScale] });
   const opacity = v.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.28, 0] });
   const d = size + 8;
   return (
@@ -268,8 +293,62 @@ export function DestinationPin({ label }: { label?: string } = {}) {
   );
 }
 
+/**
+ * Where the trip began.
+ *
+ * A route drawn with a pin on one end only is ambiguous: both ends look like
+ * ordinary map features, and on a finished trip in the history there is
+ * nothing to say which end was the start. Navigation products solve this the
+ * same way every time — a small filled disc at the origin, a planted pin at
+ * the destination — because the two shapes stay distinguishable at any zoom
+ * and in either theme.
+ *
+ * Anchored at its CENTRE (the disc sits on the coordinate), where
+ * `DestinationPin` is anchored at its tip. That asymmetry is deliberate: a
+ * teardrop points at a place, a dot IS the place.
+ */
+export function OriginPin({ label }: { label?: string } = {}) {
+  return (
+    <View style={styles.originWrap} pointerEvents="none">
+      <View style={styles.originRing}>
+        <View style={styles.originDot} />
+      </View>
+      {label ? <Text style={styles.originLabel}>{label}</Text> : null}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
+  // ── Origin dot ────────────────────────────────────────────────────────────
+  originWrap: { alignItems: "center", width: 74 },
+  originRing: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 3,
+    borderColor: NAVY,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 10,
+  },
+  originDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: NAVY },
+  originLabel: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: NAVY,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
+    overflow: "hidden",
+  },
+
   // ── Destination pin ───────────────────────────────────────────────────────
   // Anchored at the TIP: the coordinate is the point of the stem, so the route
   // ends inside the marker instead of alongside it.
@@ -319,7 +398,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     overflow: "hidden",
   },
-  wrap: { alignItems: "center", justifyContent: "flex-end" },
+  // Padding, not decoration: the accent ring and the selected pulse are drawn
+  // OUTSIDE the avatar box, and a ViewAnnotation clips to the size it measures.
+  // Without this the ring loses its top and left edges.
+  wrap: { alignItems: "center", justifyContent: "flex-end", padding: 18 },
 
   cardHolder: { position: "absolute", bottom: "100%", marginBottom: 8, alignItems: "center" },
 
@@ -341,7 +423,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   accentRing: { position: "absolute", top: -3, left: -3, borderWidth: 2 },
-  fallback: { flex: 1, width: "100%", alignItems: "center", justifyContent: "center" },
+  fallback: { alignItems: "center", justifyContent: "center" },
   initials: { color: "#FFFFFF", fontWeight: "800", letterSpacing: 0.3 },
   badge: {
     position: "absolute",

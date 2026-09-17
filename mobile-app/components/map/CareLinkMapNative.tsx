@@ -21,12 +21,13 @@ import {
   type PressEventWithFeatures,
   ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
-import { ProAvatarMarker, MeMarker, DestinationPin } from "./MapMarkers";
+import { ProAvatarMarker, MeMarker, DestinationPin, OriginPin } from "./MapMarkers";
 import { LiveProMarker } from "./LiveProMarker";
 import { TrackingCamera, type TrackingCameraHandle } from "./TrackingCamera";
 import { creamMapStyle, autoMapStyle } from "./maplibreStyle";
 import type { CareLinkMapViewProps, LatLng } from "./CareLinkMapView";
 import type { ProPinData } from "./Pins";
+import { useI18n } from "@/lib/i18n";
 
 const NAVY = "#0D0870";
 
@@ -68,6 +69,10 @@ export default function CareLinkMapNative({
   route,
   progressIdx = 0,
   radiusKm = 5,
+  focusZoom,
+  paddingBottomPx = 0,
+  accuracyM,
+  compassPosition,
   primaryColor = NAVY,
   selectedProId,
   onSelectPro,
@@ -88,7 +93,50 @@ export default function CareLinkMapNative({
   trackingZoomBoost,
   style,
 }: CareLinkMapViewProps) {
+  const { t } = useI18n();
+
+  // The zoom used whenever we fly to `center` with no route to frame. The
+  // radius-driven default (14) frames a 5 km circle — a whole district, which
+  // is why locating the patient appeared to do nothing: the camera moved to
+  // their street and then showed the entire quarter around it.
+  const settleZoom = focusZoom ?? (radiusKm > 0 ? 14 : 15);
+  const settlePitch = focusZoom != null ? 0 : radiusKm > 0 ? 30 : 0;
+  // Same shape TrackingCamera already passes to easeTo — keep the two cameras
+  // describing the viewport the same way.
+  const settlePadding = { top: 0, left: 0, right: 0, bottom: paddingBottomPx };
+
+  /**
+   * The GPS uncertainty halo around the patient's own dot.
+   *
+   * Clamped at the bottom because a 3 m circle is a hairline nobody can see,
+   * and at the top because a 2 km circle from a cell-tower fix would wash the
+   * whole screen and say nothing useful.
+   */
+  const accuracyData = useMemo(() => {
+    if (!patient || accuracyM == null || !Number.isFinite(accuracyM)) return null;
+    const m = Math.max(12, Math.min(400, accuracyM));
+    return circleFeature(patient, m / 1000);
+  }, [patient?.lat, patient?.lng, accuracyM]);
+
   const mapStyleSpec = useMemo(() => (nightAuto ? autoMapStyle() : creamMapStyle()), [nightAuto]);
+
+  /**
+   * The two ends of the drawn route, labelled.
+   *
+   * Taken from the route itself rather than from a prop, so every screen that
+   * already draws a route gets them without a call-site change — including the
+   * finished trips in the history, which was the complaint: a line with one pin
+   * on it does not say which end the professional set off from.
+   *
+   * Suppressed in the professional's own turn-by-turn view (`self`): they are
+   * standing at the origin, their own marker is already there, and a second
+   * symbol under it would only add clutter to the screen they drive with.
+   */
+  const endpoints = useMemo(() => {
+    if (trackingVariant === "self") return null;
+    if (!route || route.length < 2) return null;
+    return { from: route[0], to: route[route.length - 1] };
+  }, [route, trackingVariant]);
 
   // Driver heading (deg) for the marker pointer — prefer the pro's real GPS
   // course (reported live, only valid while actually moving) over the
@@ -235,10 +283,10 @@ export default function CareLinkMapNative({
       didFit.current = true;
     } else {
       // Booking: slight 3-D tilt for a premium feel.
-      cam.flyTo({ center: [center.lng, center.lat], zoom: radiusKm > 0 ? 14 : 15, pitch: radiusKm > 0 ? 30 : 0, duration: 500 });
+      cam.flyTo({ center: [center.lng, center.lat], zoom: settleZoom, pitch: settlePitch, padding: settlePadding, duration: 500 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRoute, center.lat, center.lng, radiusKm, follow, liveCamera]);
+  }, [hasRoute, center.lat, center.lng, radiusKm, follow, liveCamera, settleZoom, settlePitch, paddingBottomPx]);
 
   // Re-center FAB → re-frame the route (tracking) or fly back to the patient (booking).
   useEffect(() => {
@@ -257,7 +305,15 @@ export default function CareLinkMapNative({
         { padding: { top: 80, bottom: 280, left: 48, right: 48 }, duration: 600 },
       );
     } else {
-      cam.flyTo({ center: [center.lng, center.lat], zoom: radiusKm > 0 ? 14 : 15, pitch: radiusKm > 0 ? 30 : 0, duration: 600 });
+      /**
+       * The "find me" flight.
+       *
+       * `flyTo` is deliberate here rather than `easeTo`: it flies a curved
+       * path that pulls back, travels, and descends into the target, which is
+       * what makes the move legible as "the map went and got you" instead of a
+       * cut. Long enough to read as motion, short enough not to be waited on.
+       */
+      cam.flyTo({ center: [center.lng, center.lat], zoom: settleZoom, pitch: settlePitch, padding: settlePadding, duration: 1400 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recenterKey]);
@@ -291,6 +347,7 @@ export default function CareLinkMapNative({
       attributionPosition={{ bottom: 8, left: 8 }}
       logo={false}
       compass
+      compassPosition={compassPosition}
       compassHiddenFacingNorth
       touchRotate
       touchPitch
@@ -342,6 +399,17 @@ export default function CareLinkMapNative({
         <Camera ref={cameraRef} />
       )}
 
+      {accuracyData ? (
+        <GeoJSONSource id="accuracy" data={accuracyData}>
+          <Layer id="accuracy-fill" type="fill" paint={{ "fill-color": "#22B8CF", "fill-opacity": 0.14 }} />
+          <Layer
+            id="accuracy-line"
+            type="line"
+            paint={{ "line-color": "#22B8CF", "line-width": 1, "line-opacity": 0.5 }}
+          />
+        </GeoJSONSource>
+      ) : null}
+
       {radiusData ? (
         <GeoJSONSource id="radius" data={radiusData}>
           <Layer id="radius-fill" type="fill" paint={{ "fill-color": primaryColor, "fill-opacity": 0.08 }} />
@@ -392,9 +460,23 @@ export default function CareLinkMapNative({
         </ViewAnnotation>
       ) : null}
 
+      {endpoints ? (
+        <ViewAnnotation lngLat={[endpoints.from.lng, endpoints.from.lat]} anchor="center">
+          <OriginPin label={t("map_departure")} />
+        </ViewAnnotation>
+      ) : null}
+
       {destination ? (
         <ViewAnnotation lngLat={[destination.lng, destination.lat]} anchor="bottom">
-          <DestinationPin />
+          <DestinationPin label={t("map_arrival")} />
+        </ViewAnnotation>
+      ) : null}
+
+      {/* A route whose end is not the destination pin still needs an arrival
+          marker — otherwise the line just stops in open country. */}
+      {endpoints && !destination ? (
+        <ViewAnnotation lngLat={[endpoints.to.lng, endpoints.to.lat]} anchor="bottom">
+          <DestinationPin label={t("map_arrival")} />
         </ViewAnnotation>
       ) : null}
 

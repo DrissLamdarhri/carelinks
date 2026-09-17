@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Calendar, Clock3, Flower2, Heart, MapPin, Star, Users } from "lucide-react-native";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { intlLocale } from "@/lib/date-utils";
 import { useAuth } from "@/lib/auth-context";
 import { useYogaCatalog, createYogaReservation, findExistingYogaReservation } from "@/lib/db/yoga";
 import { showAppAlert } from "@/lib/app-alert";
@@ -29,7 +30,7 @@ const LEVEL_KEY: Record<string, string> = {
 };
 
 export default function YogaCatalogScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const { sessions: yogaSessions, loading, error } = useYogaCatalog();
@@ -45,7 +46,7 @@ export default function YogaCatalogScreen() {
     instructorId: s.instructor_id,
     duration: `${s.duration_min} min`,
     price: s.price_mad,
-    date: new Date(s.starts_at).toLocaleDateString("fr-FR", {
+    date: new Date(s.starts_at).toLocaleDateString(intlLocale(locale), {
       day: "2-digit",
       month: "short",
       hour: "2-digit",

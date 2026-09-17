@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Activity, ArrowLeft, ChevronsUp, Clock, Droplets, HeartPulse, LocateFixed, MapPin, MoreHorizontal, PersonStanding, Phone, Thermometer } from "lucide-react-native";
+import { Activity, ArrowLeft, Clock, Droplets, HeartPulse, LocateFixed, MapPin, MoreHorizontal, PersonStanding, Phone, Thermometer } from "lucide-react-native";
 import { Colors, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -14,8 +14,21 @@ import { useIdentityGate } from "@/lib/hooks/useIdentityVerification";
 
 const RED = "#E24B4A";
 const RED_DARK = "#B91C1C";
-const AMBER = "#F59E0B";
-const AMBER_DARK = "#D97706";
+
+/**
+ * There is exactly one urgency here, and it is the fastest one.
+ *
+ * The screen used to open on a two-card choice — "Urgent ~30 min" against
+ * "Urgence ~10 min" — and default to the slower of the two. Field feedback was
+ * blunt about it: in a real emergency nobody reads two cards and weighs an ETA,
+ * they hit the button. A chooser at the top of an emergency screen costs time
+ * at the exact moment time is the thing the user has least of, and defaulting
+ * to the SLOWER tier meant the panicked tap bought the worst option.
+ *
+ * So the level is now a constant. Every request from this screen is dispatched
+ * as an emergency: broadcast to every online nurse, first to claim wins.
+ */
+const LEVEL: Extract<UrgencyLevel, "emergency"> = "emergency";
 
 const SYMPTOMS = [
   { key: "sym_bleeding", icon: Droplets },
@@ -31,7 +44,6 @@ export default function UrgentScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
-  const [level, setLevel] = useState<Extract<UrgencyLevel, "urgent" | "emergency">>("urgent");
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [address, setAddress] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -50,9 +62,8 @@ export default function UrgentScreen() {
     return () => { active = false; clearInterval(iv); };
   }, []);
 
-  const isEmergency = level === "emergency";
-  const accent = isEmergency ? RED : AMBER;
-  const accentDark = isEmergency ? RED_DARK : AMBER_DARK;
+  const accent = RED;
+  const accentDark = RED_DARK;
   const canSubmit = address.trim().length > 3 || coords !== null;
 
   // ── Pulsing SOS emblem ──────────────────────────────────────────────────────
@@ -100,9 +111,9 @@ export default function UrgentScreen() {
       const symptomText = symptoms.map((k) => t(k)).join(", ");
       const fullNote = [symptomText, note.trim()].filter(Boolean).join(" — ") || null;
       const booking = await db.bookings.create({
-        patient_id: user.id, specialty: "nurse", urgency: level, status: "open",
+        patient_id: user.id, specialty: "nurse", urgency: LEVEL, status: "open",
         address: address.trim() || t("your_location"), notes: fullNote,
-        budget_min_mad: isEmergency ? 150 : 100, budget_max_mad: isEmergency ? 300 : 200,
+        budget_min_mad: 150, budget_max_mad: 300,
       });
       if (gps) { try { await geo.setBookingLocation(booking.id, gps.lat, gps.lng); } catch { /* ignore */ } }
       toastSuccess(t("urgent_sent"));
@@ -118,7 +129,7 @@ export default function UrgentScreen() {
   return (
     <View style={s.root}>
       {/* ── Pulsing danger hero ── */}
-      <LinearGradient colors={isEmergency ? [RED, RED_DARK] : [AMBER, AMBER_DARK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+      <LinearGradient colors={[RED, RED_DARK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
         <TouchableOpacity onPress={() => router.back()} style={s.back}><ArrowLeft size={20} color="#fff" /></TouchableOpacity>
         <View style={s.emblemWrap}>
           <Animated.View style={[s.ring, ring(0)]} />
@@ -135,30 +146,12 @@ export default function UrgentScreen() {
         ) : null}
       </LinearGradient>
 
-      <ScrollView style={s.sheet} contentContainerStyle={{ padding: 20, paddingBottom: 30 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
-        {/* Level */}
-        <View style={s.levelRow}>
-          {([["urgent", Clock, AMBER, "eta_urgent"], ["emergency", ChevronsUp, RED, "eta_emergency"]] as const).map(([key, Icon, col, eta]) => {
-            const on = level === key;
-            return (
-              <TouchableOpacity key={key} activeOpacity={0.9} onPress={() => setLevel(key)}
-                style={[s.levelCard, { borderColor: on ? col : "#ECECEC", backgroundColor: on ? col + "12" : "#fff" }]}>
-                <View style={[s.levelIcon, { backgroundColor: on ? col : "#F3F3F5" }]}>
-                  <Icon size={17} color={on ? "#fff" : Colors.textMuted} strokeWidth={2.4} />
-                </View>
-                <Text style={[s.levelTitle, { color: on ? col : Colors.textPrimary }]}>{t(key === "urgent" ? "urg_urgent" : "urg_emergency")}</Text>
-                <Text style={s.levelEta}>{t("estimated_arrival")} {t(eta)}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* SAMU for life-threatening */}
-        {isEmergency ? (
-          <TouchableOpacity style={s.samu} onPress={() => Linking.openURL("tel:141")}>
-            <Phone size={16} color="#fff" /><Text style={s.samuTxt}>{t("call_141")}</Text>
-          </TouchableOpacity>
-        ) : null}
+      <ScrollView style={s.sheet} contentContainerStyle={s.sheetBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
+        {/* SAMU first. CareLink dispatches a nurse; it is not an ambulance, and
+            for a life-threatening call the right action is the one at the top. */}
+        <TouchableOpacity style={s.samu} onPress={() => Linking.openURL("tel:141")}>
+          <Phone size={16} color="#fff" /><Text style={s.samuTxt}>{t("call_141")}</Text>
+        </TouchableOpacity>
 
         {/* Quick triage — what's happening */}
         <Text style={s.label}>{t("whats_happening")}</Text>
@@ -193,12 +186,12 @@ export default function UrgentScreen() {
       {/* Sticky CTA */}
       <View style={s.footer}>
         <TouchableOpacity disabled={!canSubmit || submitting} onPress={submit} activeOpacity={0.9} style={[s.cta, (!canSubmit || submitting) && { opacity: 0.5 }]}>
-          <LinearGradient colors={isEmergency ? [RED, RED_DARK] : [AMBER, AMBER_DARK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaBg}>
+          <LinearGradient colors={[RED, RED_DARK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaBg}>
             {submitting ? <ActivityIndicator color="#fff" /> : (
               <>
                 <HeartPulse size={19} color="#fff" strokeWidth={2.4} />
                 <Text style={s.ctaTxt}>{t("request_now")}</Text>
-                <View style={s.ctaEta}><Clock size={12} color="#fff" /><Text style={s.ctaEtaTxt}>{t(isEmergency ? "eta_emergency" : "eta_urgent")}</Text></View>
+                <View style={s.ctaEta}><Clock size={12} color="#fff" /><Text style={s.ctaEtaTxt}>{t("eta_emergency")}</Text></View>
               </>
             )}
           </LinearGradient>
@@ -221,12 +214,10 @@ const s = StyleSheet.create({
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#4ADE80" },
   liveTxt: { color: "#fff", fontSize: 12, fontWeight: "700" },
   sheet: { flex: 1, marginTop: -4 },
-  levelRow: { flexDirection: "row", gap: 10 },
-  levelCard: { flex: 1, borderRadius: 18, borderWidth: 2, padding: 14, alignItems: "center", gap: 7, ...Shadows.sm },
-  levelIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  levelTitle: { fontSize: 14.5, fontWeight: "800" },
-  levelEta: { color: Colors.textMuted, fontSize: 10.5, textAlign: "center" },
-  samu: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: RED, height: 50, borderRadius: 15, marginTop: 14, ...Shadows.md },
+  // Generous, even gutters. The previous 20px felt tight against the cards and
+  // inputs, which is what the field feedback called out.
+  sheetBody: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 34 },
+  samu: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: RED, height: 52, borderRadius: 15, ...Shadows.md },
   samuTxt: { color: "#fff", fontSize: 15, fontWeight: "800" },
   label: { color: Colors.textPrimary, fontSize: 14, fontWeight: "800", marginTop: 20, marginBottom: 10 },
   symGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

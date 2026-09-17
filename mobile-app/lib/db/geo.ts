@@ -183,7 +183,7 @@ export const geo = {
     return (data ?? []) as NearbyPro[];
   },
 
-  async getCurrentPosition(): Promise<{ lat: number; lng: number }> {
+  async getCurrentPosition(): Promise<{ lat: number; lng: number; accuracyM: number | null }> {
     // Read before asking. This is called on a 3-minute timer while a pro is
     // online, and an unconditional request there is how a permission dialog
     // ends up reappearing long after the user answered it.
@@ -200,6 +200,11 @@ export const geo = {
     return {
       lat: current.coords.latitude,
       lng: current.coords.longitude,
+      // How sure the device is, in metres. Drawn as a soft halo so the user can
+      // see whether the dot means "this doorway" or "somewhere on this block" —
+      // a position shown without its uncertainty claims a precision GPS does
+      // not have, especially indoors.
+      accuracyM: typeof current.coords.accuracy === "number" ? current.coords.accuracy : null,
     };
   },
 

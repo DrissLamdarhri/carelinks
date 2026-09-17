@@ -29,6 +29,34 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 
 const DICT: Record<Locale, Record<string, string>> = {
   en: {
+    map_updating: "The map is updating…",
+    // ── Explorer tab ──
+    explore_search_ph: "Search a professional",
+    explore_available_now: "Available now",
+    explore_filter_all: "All",
+    // ── Account security (change password + biometric unlock) ──
+    change_password: "Change password",
+    change_password_sub: "Choose a new password for your CareLink account.",
+    current_password: "Current password",
+    confirm_new_password: "Confirm new password",
+    password_changed: "Password updated \u2713",
+    passwords_dont_match: "The two passwords do not match.",
+    password_same_as_old: "The new password must be different from the current one.",
+    current_password_wrong: "The current password is incorrect.",
+    biometric_title: "Fingerprint unlock",
+    biometric_sub: "Ask for your fingerprint each time CareLink opens.",
+    biometric_unavailable: "No fingerprint or face unlock is set up on this device.",
+    biometric_prompt: "Confirm your identity",
+    biometric_enabled: "Fingerprint unlock enabled \u2713",
+    biometric_disabled: "Fingerprint unlock disabled",
+    biometric_failed: "Identity not confirmed.",
+    account_security: "Security",
+    // ── Civility ──
+    gender_mr: "Mr",
+    gender_mrs: "Mrs",
+    // ── Route endpoints on the map ──
+    map_departure: "Departure",
+    map_arrival: "Arrival",
     confirm_email_title: "Confirm your email",
     confirm_email_sub: "We sent a confirmation link to %s. Tap it to activate your account, then come back and sign in.",
     confirm_email_resent: "Confirmation email resent ✓",
@@ -242,7 +270,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     urgent_claimed: "Claimed ✓ — head there now",
     urgent_claim_failed: "Someone else already claimed this request",
     urgent_subtitle: "A professional as soon as possible",
-    urgent_title: "Urgent response",
+    urgent_title: "Immediate emergency",
     use_authenticator: "Use the authenticator",
     use_backup_code: "Use a backup code",
     use_my_location: "Use my location",
@@ -317,7 +345,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     official_docs: "Official documents",
     onb_s1_sub: "Nurses, physiotherapists and health professionals come to you within minutes.",
     onb_s1_title: "Care at home",
-    onb_s2_sub: "Like InDrive, name your price. Professionals accept or make a counter-offer.",
+    onb_s2_sub: "You name your price. Professionals accept it or make a counter-offer.",
     onb_s2_title: "You set the price",
     onb_s3_sub: "All our professionals are verified: diploma, ID and patient reviews checked.",
     onb_s3_title: "Verified & certified",
@@ -402,7 +430,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     pros_reviewing: "Professionals are reviewing your request…",
     psy_appointment: "Psychologist appointment",
     psychologists: "Psychologists",
-    psychologists_map_hint: "Tap a psychologist on the map",
+    psychologists_map_hint: "Choose a psychologist on the map",
     psychologists_subtitle: "Choose your therapist",
     psychologists_title: "Psychologists",
     publish_request: "Publish my request",
@@ -875,7 +903,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     payment_wallet: "Payment & Wallet", patient_policy: "Patient policy", help_faq: "Help & FAQ", online: "Online", offline: "Offline",
     login: "Log in", signup: "Sign up", email: "Email", password: "Password", forgot_password: "Forgot password?",
     continue_google: "Continue with Google", continue_apple: "Continue with Apple", or_with_email: "or with email",
-    welcome_back: "Welcome back!", login_subtitle: "Log in to access your care", saved: "Saved",
+    welcome_back: "Glad to have you with us", login_subtitle: "Log in to access your care", saved: "Saved",
     request_sent: "Request sent", offer_accepted: "Offer accepted", payment_confirmed: "Payment confirmed",
     mad: "MAD",
     // Referenced by screens but never defined — the raw key was rendering on screen.
@@ -1199,7 +1227,7 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     terms_accept: "I accept the terms",
-    terms_governing_law: "These terms are governed by Moroccan law. Version of 8 August 2026.",
+    terms_governing_law: "These terms are governed by Moroccan law. Version of 17 September 2026.",
     terms_quit: "Leave",
     terms_read_again: "Read again",
     terms_refuse: "I decline",
@@ -1271,6 +1299,31 @@ const DICT: Record<Locale, Record<string, string>> = {
     previous_month: "Previous month",
   },
   ar: {
+    map_updating: "جارٍ تحديث الخريطة…",
+    explore_search_ph: "ابحث عن مهني",
+    explore_available_now: "متاحون الآن",
+    explore_filter_all: "الكل",
+    // ── أمان الحساب ──
+    change_password: "تغيير كلمة المرور",
+    change_password_sub: "اختر كلمة مرور جديدة لحسابك على CareLink.",
+    current_password: "كلمة المرور الحالية",
+    confirm_new_password: "تأكيد كلمة المرور الجديدة",
+    password_changed: "تم تحديث كلمة المرور \u2713",
+    passwords_dont_match: "كلمتا المرور غير متطابقتين.",
+    password_same_as_old: "يجب أن تختلف كلمة المرور الجديدة عن الحالية.",
+    current_password_wrong: "كلمة المرور الحالية غير صحيحة.",
+    biometric_title: "الفتح ببصمة الإصبع",
+    biometric_sub: "اطلب بصمة إصبعك في كل مرة يُفتح فيها التطبيق.",
+    biometric_unavailable: "لا توجد بصمة إصبع أو تعرّف على الوجه مُفعّل على هذا الجهاز.",
+    biometric_prompt: "أكّد هويتك",
+    biometric_enabled: "تم تفعيل الفتح بالبصمة \u2713",
+    biometric_disabled: "تم إيقاف الفتح بالبصمة",
+    biometric_failed: "لم يتم تأكيد الهوية.",
+    account_security: "الأمان",
+    gender_mr: "السيد",
+    gender_mrs: "السيدة",
+    map_departure: "الانطلاق",
+    map_arrival: "الوصول",
     confirm_email_title: "أكّد بريدك الإلكتروني",
     confirm_email_sub: "أرسلنا رابط تأكيد إلى %s. اضغط عليه لتفعيل حسابك، ثم عد لتسجيل الدخول.",
     confirm_email_resent: "تم إعادة إرسال بريد التأكيد ✓",
@@ -1346,7 +1399,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     physio: "أخصائي علاج طبيعي", home: "الرئيسية", earnings: "الأرباح", documents: "الوثائق", submit_bid: "تقديم عرض",
     my_bids: "عروضي", available: "متاح", unavailable: "غير متاح", bid_accepted: "تم قبول العرض", bid_rejected: "تم رفض العرض",
     loading: "جار التحميل…", error: "خطأ", retry: "إعادة المحاولة", budget: "الميزانية", address: "العنوان", notes: "ملاحظات",
-    schedule: "جدولة", urgency: "الأولوية", normal: "عادي", urgent: "عاجل", emergency: "طارئ", confirm: "تأكيد", send: "إرسال",
+    schedule: "جدولة", urgency: "طوارئ", normal: "عادي", urgent: "عاجل", emergency: "طارئ", confirm: "تأكيد", send: "إرسال",
     message_placeholder: "رسالتك…", no_bids_yet: "لا توجد عروض بعد", waiting_for_bids: "في انتظار العروض…",
     missions: "المهام", revenue: "المداخيل", requests: "الطلبات", explore: "استكشاف", my_appointments: "مواعيدي",
     settings: "الإعدادات", account: "الحساب", preferences: "التفضيلات", support: "الدعم", language: "اللغة",
@@ -1354,11 +1407,11 @@ const DICT: Record<Locale, Record<string, string>> = {
     payment_wallet: "الدفع والمحفظة", patient_policy: "سياسة المريض", help_faq: "المساعدة والأسئلة", online: "متصل", offline: "غير متصل",
     login: "تسجيل الدخول", signup: "إنشاء حساب", email: "البريد الإلكتروني", password: "كلمة المرور", forgot_password: "نسيت كلمة المرور؟",
     continue_google: "المتابعة مع جوجل", continue_apple: "المتابعة مع آبل", or_with_email: "أو بالبريد الإلكتروني",
-    welcome_back: "مرحبا بعودتك!", login_subtitle: "سجّل الدخول للوصول إلى خدماتك", saved: "تم الحفظ",
+    welcome_back: "سعداء بانضمامك إلينا", login_subtitle: "سجّل الدخول للوصول إلى خدماتك", saved: "تم الحفظ",
     request_sent: "تم إرسال الطلب", offer_accepted: "تم قبول العرض", payment_confirmed: "تم تأكيد الدفع",
     skip: "تخطّي", continue_btn: "متابعة", i_am_patient: "أنا مريض", i_am_pro: "أنا مهني صحّي",
     onb_s1_title: "رعاية في المنزل", onb_s1_sub: "ممرضون ومختصون في العلاج الطبيعي ومهنيو الصحة يأتون إليك في دقائق.",
-    onb_s2_title: "أنت تحدّد السعر", onb_s2_sub: "مثل InDrive، اقترح سعرك. يقبل المهنيون أو يقدّمون عرضًا مضادًا.",
+    onb_s2_title: "أنت تحدّد السعر", onb_s2_sub: "اقترح سعرك. يقبل المهنيون أو يقدّمون عرضًا مضادًا.",
     onb_s3_title: "موثّقون ومعتمدون", onb_s3_sub: "جميع مهنيينا موثّقون: الشهادة والبطاقة الوطنية وآراء المرضى مُراقَبة.",
     pro_login_lead: "سجّل الدخول إلى حسابك المهني",
     pro_email_hint: "يسجّل المهنيون الدخول بالبريد الإلكتروني لحسابهم الموثّق (بدون تسجيل عبر جوجل).",
@@ -1376,7 +1429,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     view_map: "عرض الخريطة", directions: "المسار", nearby_requests: "الطلبات القريبة", configure: "إعداد",
     setup_specialty_hint: "اختر تخصصك وموقعك لتصلك الطلبات.",
     no_appointments: "لا توجد مواعيد حاليًا.", patient: "المريض", navigate_to_patient: "التوجّه إلى المريض",
-    your_request: "طلبك", home_rehab: "إعادة التأهيل في المنزل", pros_available_now: "مهنيون متاحون", whats_happening: "ماذا يحدث؟", sym_bleeding: "جرح / نزيف", sym_pain: "ألم شديد", sym_fall: "سقوط", sym_fever: "حمّى مرتفعة", sym_faint: "إغماء / دوخة", sym_other: "أخرى", eta_urgent: "~30 دقيقة", eta_emergency: "~10 دقائق", estimated_arrival: "الوصول المتوقّع", urgent_title: "تدخّل عاجل", urgent_subtitle: "مهني في أسرع وقت", use_my_location: "استخدام موقعي", describe_situation: "صف الحالة", request_now: "اطلب الآن", call_141: "اتصل بـ 141 (الإسعاف)", urgent_sent: "تم إرسال الطلب العاجل ✓", urgent_hold_notice: "هذا المبلغ محجوز الآن فقط — لن يُخصم إلا عند قبول مهني للطلب. إذا لم يقبله أحد خلال 5 دقائق، سيُلغى الحجز تلقائيًا ولن تُخصم أي رسوم.", urgent_no_pro_refunded: "لم يقبل أي مهني الطلب في الوقت المحدد. لم يتم خصم أي مبلغ — تم إلغاء الحجز.", urgent_claim_now: "اقبل الآن — أولوية", urgent_claimed: "تم القبول ✓ — توجّه الآن", urgent_claim_failed: "تم قبول هذا الطلب من طرف مهني آخر", sos_banner_title: "حالة طارئة؟", sos_banner_sub: "تدخّل سريع، 24/24", urgency_title: "مستوى الاستعجال", urg_normal: "مُجدوَل", urg_normal_desc: "في الوقت المختار", urg_urgent: "عاجل", urg_urgent_desc: "اليوم، بأسرع وقت", urg_emergency: "طارئ", urg_emergency_desc: "تدخّل فوري", urg_normal_banner: "خدمة مجدولة في الموعد المختار — سعر عادي.", urg_urgent_banner: "استجابة سريعة (~30 دقيقة) · إضافة استعجال بسيطة.", urg_emergency_banner: "تدخّل ذو أولوية (~10 دقائق) · إضافة استعجال. للحالات الحرجة اتصل بـ 141.", care_type: "نوع الرعاية", date: "التاريخ", time_lbl: "الوقت", time_now: "الآن", reservation_cancelled_title: "تم إلغاء الحجز", reservation_cancelled_refund_msg: "تم إلغاء هذا الحجز للتو. تم استرجاع %d درهم.", reservation_cancelled_msg: "تم إلغاء هذا الحجز للتو.", waiting_payment_title: "في انتظار الدفع", waiting_payment_msg: "قبِل المريض عرضك لكنه لم ينهِ عملية الدفع بعد. ستظهر الخريطة والمسار بمجرد تأكيد الدفع.", report_problem_title: "الإبلاغ عن مشكلة", report_patient_title: "الإبلاغ عن المريض", report_problem_link: "الإبلاغ عن مشكلة", report_patient_link: "الإبلاغ عن المريض", report_problem_short: "إبلاغ", report_category_label: "ماذا حدث؟", report_description_label: "صف ما حدث", report_description_ph: "أعطِ أكبر قدر ممكن من التفاصيل — الوقت، ما رأيته، من كان متورطًا…", report_min_chars: "10 أحرف على الأقل.", report_evidence_label: "صور (اختياري)", add_photo: "إضافة", send_report: "إرسال البلاغ", report_sent_title: "تم إرسال البلاغ", report_sent_msg: "تم إخطار فريقنا وسيقوم بمراجعته. سيتم إعلامك عند معالجته.", dispute_cat_late_arrival: "تأخّر", dispute_cat_no_show: "عدم حضور", dispute_cat_safety_incident: "حادثة سلامة", dispute_cat_poor_conduct: "سلوك غير لائق", dispute_cat_quality_issue: "جودة الرعاية", dispute_cat_price_dispute: "نزاع على السعر", dispute_cat_property_damage: "ضرر مادي", dispute_cat_harassment: "تحرّش", dispute_cat_identity_mismatch: "شخص غير مطابق", dispute_cat_payment_issue: "مشكلة في الدفع", dispute_cat_other: "أخرى", too_far_to_arrive: "ما زلت بعيدًا عن المريض لتأكيد الوصول. اقترب أكثر ثم أعد المحاولة.",
+    your_request: "طلبك", home_rehab: "إعادة التأهيل في المنزل", pros_available_now: "مهنيون متاحون", whats_happening: "ماذا يحدث؟", sym_bleeding: "جرح / نزيف", sym_pain: "ألم شديد", sym_fall: "سقوط", sym_fever: "حمّى مرتفعة", sym_faint: "إغماء / دوخة", sym_other: "أخرى", eta_urgent: "~30 دقيقة", eta_emergency: "~10 دقائق", estimated_arrival: "الوصول المتوقّع", urgent_title: "حالة طارئة فورية", urgent_subtitle: "مهني في أسرع وقت", use_my_location: "استخدام موقعي", describe_situation: "صف الحالة", request_now: "اطلب الآن", call_141: "اتصل بـ 141 (الإسعاف)", urgent_sent: "تم إرسال الطلب العاجل ✓", urgent_hold_notice: "هذا المبلغ محجوز الآن فقط — لن يُخصم إلا عند قبول مهني للطلب. إذا لم يقبله أحد خلال 5 دقائق، سيُلغى الحجز تلقائيًا ولن تُخصم أي رسوم.", urgent_no_pro_refunded: "لم يقبل أي مهني الطلب في الوقت المحدد. لم يتم خصم أي مبلغ — تم إلغاء الحجز.", urgent_claim_now: "اقبل الآن — أولوية", urgent_claimed: "تم القبول ✓ — توجّه الآن", urgent_claim_failed: "تم قبول هذا الطلب من طرف مهني آخر", sos_banner_title: "حالة طارئة؟", sos_banner_sub: "تدخّل سريع، 24/24", urgency_title: "مستوى الاستعجال", urg_normal: "مُجدوَل", urg_normal_desc: "في الوقت المختار", urg_urgent: "عاجل", urg_urgent_desc: "اليوم، بأسرع وقت", urg_emergency: "طارئ", urg_emergency_desc: "تدخّل فوري", urg_normal_banner: "خدمة مجدولة في الموعد المختار — سعر عادي.", urg_urgent_banner: "استجابة سريعة (~30 دقيقة) · إضافة استعجال بسيطة.", urg_emergency_banner: "تدخّل ذو أولوية (~10 دقائق) · إضافة استعجال. للحالات الحرجة اتصل بـ 141.", care_type: "نوع الرعاية", date: "التاريخ", time_lbl: "الوقت", time_now: "الآن", reservation_cancelled_title: "تم إلغاء الحجز", reservation_cancelled_refund_msg: "تم إلغاء هذا الحجز للتو. تم استرجاع %d درهم.", reservation_cancelled_msg: "تم إلغاء هذا الحجز للتو.", waiting_payment_title: "في انتظار الدفع", waiting_payment_msg: "قبِل المريض عرضك لكنه لم ينهِ عملية الدفع بعد. ستظهر الخريطة والمسار بمجرد تأكيد الدفع.", report_problem_title: "الإبلاغ عن مشكلة", report_patient_title: "الإبلاغ عن المريض", report_problem_link: "الإبلاغ عن مشكلة", report_patient_link: "الإبلاغ عن المريض", report_problem_short: "إبلاغ", report_category_label: "ماذا حدث؟", report_description_label: "صف ما حدث", report_description_ph: "أعطِ أكبر قدر ممكن من التفاصيل — الوقت، ما رأيته، من كان متورطًا…", report_min_chars: "10 أحرف على الأقل.", report_evidence_label: "صور (اختياري)", add_photo: "إضافة", send_report: "إرسال البلاغ", report_sent_title: "تم إرسال البلاغ", report_sent_msg: "تم إخطار فريقنا وسيقوم بمراجعته. سيتم إعلامك عند معالجته.", dispute_cat_late_arrival: "تأخّر", dispute_cat_no_show: "عدم حضور", dispute_cat_safety_incident: "حادثة سلامة", dispute_cat_poor_conduct: "سلوك غير لائق", dispute_cat_quality_issue: "جودة الرعاية", dispute_cat_price_dispute: "نزاع على السعر", dispute_cat_property_damage: "ضرر مادي", dispute_cat_harassment: "تحرّش", dispute_cat_identity_mismatch: "شخص غير مطابق", dispute_cat_payment_issue: "مشكلة في الدفع", dispute_cat_other: "أخرى", too_far_to_arrive: "ما زلت بعيدًا عن المريض لتأكيد الوصول. اقترب أكثر ثم أعد المحاولة.",
     publish_request: "نشر طلبي", my_appointments_full: "مواعيدي", book_appointment: "حجز موعد",
     status_open: "قيد الانتظار", status_matched: "مؤكد", status_en_route: "في الطريق", status_in_progress: "قيد التنفيذ", status_completed: "منتهي", status_expired: "منتهية الصلاحية", status_cancelled: "ملغى",
     tab_upcoming: "قادمة", tab_history: "السجل", no_upcoming: "لا مواعيد قادمة", no_history: "لا يوجد سجل",
@@ -1522,7 +1575,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     level_beginner: "مبتدئ", level_intermediate: "متوسط", level_advanced: "متقدم", level_all: "جميع المستويات",
     please_login_book: "يرجى تسجيل الدخول للحجز", already_enrolled: "مسجّل بالفعل", already_enrolled_msg: "أنت مسجّل بالفعل في حصة اليوغا هذه",
     yoga_class: "حصة يوغا", in_person: "حضوريًا", booking_sent_admin: "تم إرسال الحجز إلى المشرف.",
-    cannot_create_booking: "تعذّر إنشاء الحجز. حاول لاحقًا.", reviews_word: "تقييم", sessions_label: "جلسة", about_label: "نبذة", specialties_label: "التخصصات", consultation_modes: "أنماط الاستشارة", psychologists_title: "الأخصائيون النفسيون", psychologists_subtitle: "اختر معالجك", psychologists_map_hint: "المس أخصائيًا نفسيًا على الخريطة", no_psychologists: "لا يوجد أخصائيون نفسيون متاحون", kine_subtitle: "جلسة واحدة أو برنامج إعادة تأهيل", plan_program: "برنامج (متابعة)", single_desc: "اعثر على أخصائي علاج طبيعي قربك، الآن", find_kine: "ابحث عن أخصائي", choose_kine: "اختر أخصائيك", reeducation_type: "نوع إعادة التأهيل", focus_motor: "إعادة تأهيل حركي", focus_resp: "إعادة تأهيل تنفّسي", focus_drainage: "تصريف لمفاوي", focus_massage: "تدليك علاجي", focus_mobil: "تحريك المفاصل", focus_postop: "رعاية بعد العملية", recurrence_daily: "كل يوم", start_date: "تاريخ البداية", program_summary: "ملخّص البرنامج", first_session_charged: "الجلسة 1 تُدفع عند الحجز · والباقي قبل كل جلسة", reserve_program: "حجز البرنامج", appointment_type: "نوع الموعد", plan_single: "جلسة واحدة", plan_recurring: "متكرر", plan_subscription: "اشتراك", recurrence_label: "التكرار", recurrence_weekly: "أسبوعي", recurrence_biweekly: "كل أسبوعين", recurrence_monthly: "شهري", sessions_count: "عدد الجلسات", session_mode_label: "نمط الاستشارة", mode_in_person: "حضوري", mode_remote: "عن بُعد", per_session: "جلسة", remote_session_note: "جلسة عن بُعد — استخدم أحد الروابط أدناه في وقت الموعد.", first_session_date: "تاريخ الجلسة الأولى", pay_and_book: "ادفع واحجز", session_short: "جلسة", session_paid: "مدفوعة ✓", pay_session: "ادفع", appointment_confirmed: "تم تأكيد الموعد", join_session: "الانضمام إلى الجلسة", link_not_set: "لم يُعدّ المهني هذا الرابط بعد.", link_open_failed: "تعذّر فتح الرابط.", join_google_meet: "الانضمام عبر Google Meet", join_zoom: "الانضمام عبر Zoom", upcoming_sessions: "الجلسات القادمة", series_payment_note: "تُدفع كل جلسة قبل موعدها.", view_appointment: "عرض الموعد", meet_link_label: "رابط Google Meet", zoom_link_label: "رابط Zoom", remote_links_hint: "ستُقترح هذه الروابط على مرضاك للجلسات عن بُعد.", book_appointment_short: "حجز موعد",
+    cannot_create_booking: "تعذّر إنشاء الحجز. حاول لاحقًا.", reviews_word: "تقييم", sessions_label: "جلسة", about_label: "نبذة", specialties_label: "التخصصات", consultation_modes: "أنماط الاستشارة", psychologists_title: "الأخصائيون النفسيون", psychologists_subtitle: "اختر معالجك", psychologists_map_hint: "اختر أخصائيا نفسيا على الخريطة", no_psychologists: "لا يوجد أخصائيون نفسيون متاحون", kine_subtitle: "جلسة واحدة أو برنامج إعادة تأهيل", plan_program: "برنامج (متابعة)", single_desc: "اعثر على أخصائي علاج طبيعي قربك، الآن", find_kine: "ابحث عن أخصائي", choose_kine: "اختر أخصائيك", reeducation_type: "نوع إعادة التأهيل", focus_motor: "إعادة تأهيل حركي", focus_resp: "إعادة تأهيل تنفّسي", focus_drainage: "تصريف لمفاوي", focus_massage: "تدليك علاجي", focus_mobil: "تحريك المفاصل", focus_postop: "رعاية بعد العملية", recurrence_daily: "كل يوم", start_date: "تاريخ البداية", program_summary: "ملخّص البرنامج", first_session_charged: "الجلسة 1 تُدفع عند الحجز · والباقي قبل كل جلسة", reserve_program: "حجز البرنامج", appointment_type: "نوع الموعد", plan_single: "جلسة واحدة", plan_recurring: "متكرر", plan_subscription: "اشتراك", recurrence_label: "التكرار", recurrence_weekly: "أسبوعي", recurrence_biweekly: "كل أسبوعين", recurrence_monthly: "شهري", sessions_count: "عدد الجلسات", session_mode_label: "نمط الاستشارة", mode_in_person: "حضوري", mode_remote: "عن بُعد", per_session: "جلسة", remote_session_note: "جلسة عن بُعد — استخدم أحد الروابط أدناه في وقت الموعد.", first_session_date: "تاريخ الجلسة الأولى", pay_and_book: "ادفع واحجز", session_short: "جلسة", session_paid: "مدفوعة ✓", pay_session: "ادفع", appointment_confirmed: "تم تأكيد الموعد", join_session: "الانضمام إلى الجلسة", link_not_set: "لم يُعدّ المهني هذا الرابط بعد.", link_open_failed: "تعذّر فتح الرابط.", join_google_meet: "الانضمام عبر Google Meet", join_zoom: "الانضمام عبر Zoom", upcoming_sessions: "الجلسات القادمة", series_payment_note: "تُدفع كل جلسة قبل موعدها.", view_appointment: "عرض الموعد", meet_link_label: "رابط Google Meet", zoom_link_label: "رابط Zoom", remote_links_hint: "ستُقترح هذه الروابط على مرضاك للجلسات عن بُعد.", book_appointment_short: "حجز موعد",
     clinical_psychologist: "أخصائية نفسية سريرية", consultation: "استشارة", consultation_type: "نوع الاستشارة",
     choose_date: "اختر تاريخًا", available_slots: "المواعيد المتاحة", video: "فيديو",
     nav_on: "في", nav_take: "اسلك", nav_start: "انطلق", nav_roundabout: "اسلك الدوّار", nav_turn_left: "انعطف يسارًا", nav_turn_right: "انعطف يمينًا", nav_straight: "تابع مباشرة",
@@ -1851,7 +1904,7 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     terms_accept: "أوافق على الشروط",
-    terms_governing_law: "تخضع هذه الشروط للقانون المغربي. نسخة 8 غشت 2026.",
+    terms_governing_law: "تخضع هذه الشروط للقانون المغربي. نسخة 17 شتنبر 2026.",
     terms_quit: "مغادرة",
     terms_read_again: "إعادة القراءة",
     terms_refuse: "أرفض",
@@ -1923,6 +1976,31 @@ const DICT: Record<Locale, Record<string, string>> = {
     previous_month: "الشهر السابق",
   },
   fr: {
+    map_updating: "La carte se met à jour…",
+    explore_search_ph: "Rechercher un professionnel",
+    explore_available_now: "Disponibles maintenant",
+    explore_filter_all: "Tout",
+    // ── Sécurité du compte ──
+    change_password: "Changer le mot de passe",
+    change_password_sub: "Choisissez un nouveau mot de passe pour votre compte CareLink.",
+    current_password: "Mot de passe actuel",
+    confirm_new_password: "Confirmer le nouveau mot de passe",
+    password_changed: "Mot de passe mis \u00e0 jour \u2713",
+    passwords_dont_match: "Les deux mots de passe ne correspondent pas.",
+    password_same_as_old: "Le nouveau mot de passe doit \u00eatre diff\u00e9rent de l'actuel.",
+    current_password_wrong: "Le mot de passe actuel est incorrect.",
+    biometric_title: "D\u00e9verrouillage par empreinte",
+    biometric_sub: "Demander votre empreinte \u00e0 chaque ouverture de CareLink.",
+    biometric_unavailable: "Aucune empreinte ni reconnaissance faciale n'est configur\u00e9e sur cet appareil.",
+    biometric_prompt: "Confirmez votre identit\u00e9",
+    biometric_enabled: "D\u00e9verrouillage par empreinte activ\u00e9 \u2713",
+    biometric_disabled: "D\u00e9verrouillage par empreinte d\u00e9sactiv\u00e9",
+    biometric_failed: "Identit\u00e9 non confirm\u00e9e.",
+    account_security: "S\u00e9curit\u00e9",
+    gender_mr: "M.",
+    gender_mrs: "Mme",
+    map_departure: "D\u00e9part",
+    map_arrival: "Arriv\u00e9e",
     confirm_email_title: "Confirmez votre email",
     confirm_email_sub: "Nous avons envoyé un lien de confirmation à %s. Cliquez dessus pour activer votre compte, puis revenez vous connecter.",
     confirm_email_resent: "Email de confirmation renvoyé ✓",
@@ -2007,12 +2085,12 @@ const DICT: Record<Locale, Record<string, string>> = {
     payment_wallet: "Paiement & Portefeuille", patient_policy: "Politique patient", help_faq: "Aide & FAQ", online: "En ligne", offline: "Hors ligne",
     login: "Connexion", signup: "Inscription", email: "Email", password: "Mot de passe", forgot_password: "Mot de passe oublié ?",
     continue_google: "Continuer avec Google", continue_apple: "Continuer avec Apple", or_with_email: "ou avec email",
-    welcome_back: "Bon retour !", login_subtitle: "Connectez-vous pour accéder à vos soins", saved: "Enregistré",
+    welcome_back: "Heureux de vous compter parmi nous", login_subtitle: "Connectez-vous pour accéder à vos soins", saved: "Enregistré",
     request_sent: "Demande envoyée", offer_accepted: "Offre acceptée", payment_confirmed: "Paiement confirmé",
     // onboarding + auth
     skip: "Passer", continue_btn: "Continuer", i_am_patient: "Je suis patient", i_am_pro: "Je suis professionnel",
     onb_s1_title: "Soins à domicile", onb_s1_sub: "Infirmiers, kinés, et professionnels de santé viennent chez vous en quelques minutes.",
-    onb_s2_title: "Vous fixez le prix", onb_s2_sub: "Comme InDrive, proposez votre tarif. Les professionnels acceptent ou font une contre-offre.",
+    onb_s2_title: "Vous fixez le prix", onb_s2_sub: "Proposez votre tarif. Les professionnels l'acceptent ou font une contre-offre.",
     onb_s3_title: "Vérifiés & certifiés", onb_s3_sub: "Tous nos professionnels sont vérifiés : diplôme, CIN et avis patients contrôlés.",
     pro_login_lead: "Connectez-vous à votre compte professionnel",
     pro_email_hint: "Les professionnels se connectent avec l'email de leur compte vérifié (pas de connexion Google).",
@@ -2030,7 +2108,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     view_map: "Voir la carte", directions: "Itinéraire", nearby_requests: "Demandes proches", configure: "Configurer",
     setup_specialty_hint: "Choisissez votre spécialité et votre position pour recevoir les demandes.",
     no_appointments: "Aucun rendez-vous pour le moment.", patient: "Patient", navigate_to_patient: "Naviguer vers le patient",
-    your_request: "Votre demande", home_rehab: "Rééducation à domicile", pros_available_now: "professionnels disponibles", whats_happening: "Que se passe-t-il ?", sym_bleeding: "Blessure / saignement", sym_pain: "Douleur intense", sym_fall: "Chute", sym_fever: "Fièvre élevée", sym_faint: "Malaise / vertige", sym_other: "Autre", eta_urgent: "~30 min", eta_emergency: "~10 min", estimated_arrival: "Arrivée estimée", urgent_title: "Intervention urgente", urgent_subtitle: "Un professionnel au plus vite", use_my_location: "Utiliser ma position", describe_situation: "Décrivez la situation", request_now: "Demander maintenant", call_141: "Appeler le 141 (SAMU)", urgent_sent: "Demande urgente envoyée ✓", urgent_hold_notice: "Ce montant est seulement autorisé pour l'instant — vous ne serez débité que si un professionnel accepte. Personne ne répond en 5 minutes ? Vous êtes remboursé automatiquement.", urgent_no_pro_refunded: "Aucun professionnel n'a accepté à temps. Vous n'avez pas été débité — la réservation a été annulée.", urgent_claim_now: "Accepter maintenant — prioritaire", urgent_claimed: "Accepté ✓ — rendez-vous sur place", urgent_claim_failed: "Cette demande vient d'être prise par un autre professionnel", sos_banner_title: "Urgence ?", sos_banner_sub: "Intervention rapide, 24h/24", urgency_title: "Niveau d'urgence", urg_normal: "Planifié", urg_normal_desc: "À l'heure choisie", urg_urgent: "Urgent", urg_urgent_desc: "Aujourd'hui, au plus vite", urg_emergency: "Urgence", urg_emergency_desc: "Intervention immédiate", urg_normal_banner: "Prestation planifiée au créneau choisi — tarif standard.", urg_urgent_banner: "Réponse rapide (~30 min) · léger supplément d'urgence.", urg_emergency_banner: "Intervention prioritaire (~10 min) · supplément d'urgence. Pour une urgence vitale, appelez le 141 (SAMU).", care_type: "Type de soin", date: "Date", time_lbl: "Heure", time_now: "Maintenant", reservation_cancelled_title: "Réservation annulée", reservation_cancelled_refund_msg: "Cette réservation vient d'être annulée. %d MAD ont été remboursés.", reservation_cancelled_msg: "Cette réservation vient d'être annulée.", waiting_payment_title: "En attente du paiement", waiting_payment_msg: "Le patient a accepté votre offre mais n'a pas encore terminé le paiement. La carte et l'itinéraire apparaîtront dès que le paiement sera confirmé.", report_problem_title: "Signaler un problème", report_patient_title: "Signaler le patient", report_problem_link: "Signaler un problème", report_patient_link: "Signaler le patient", report_problem_short: "Signaler", report_category_label: "Que s'est-il passé ?", report_description_label: "Décrivez ce qui s'est passé", report_description_ph: "Donnez le plus de détails possible — l'heure, ce que vous avez constaté, qui était impliqué…", report_min_chars: "10 caractères minimum.", report_evidence_label: "Photos (optionnel)", add_photo: "Ajouter", send_report: "Envoyer le signalement", report_sent_title: "Signalement envoyé", report_sent_msg: "Notre équipe a été notifiée et va l'examiner. Vous serez informé(e) une fois traité.", dispute_cat_late_arrival: "Retard", dispute_cat_no_show: "Absence", dispute_cat_safety_incident: "Incident de sécurité", dispute_cat_poor_conduct: "Comportement", dispute_cat_quality_issue: "Qualité du service", dispute_cat_price_dispute: "Litige de prix", dispute_cat_property_damage: "Dommage matériel", dispute_cat_harassment: "Harcèlement", dispute_cat_identity_mismatch: "Mauvaise personne", dispute_cat_payment_issue: "Problème de paiement", dispute_cat_other: "Autre", too_far_to_arrive: "Vous êtes encore trop loin du patient pour confirmer votre arrivée. Rapprochez-vous et réessayez.",
+    your_request: "Votre demande", home_rehab: "Rééducation à domicile", pros_available_now: "professionnels disponibles", whats_happening: "Que se passe-t-il ?", sym_bleeding: "Blessure / saignement", sym_pain: "Douleur intense", sym_fall: "Chute", sym_fever: "Fièvre élevée", sym_faint: "Malaise / vertige", sym_other: "Autre", eta_urgent: "~30 min", eta_emergency: "~10 min", estimated_arrival: "Arrivée estimée", urgent_title: "Urgence immédiate", urgent_subtitle: "Un professionnel au plus vite", use_my_location: "Utiliser ma position", describe_situation: "Décrivez la situation", request_now: "Demander maintenant", call_141: "Appeler le 141 (SAMU)", urgent_sent: "Demande urgente envoyée ✓", urgent_hold_notice: "Ce montant est seulement autorisé pour l'instant — vous ne serez débité que si un professionnel accepte. Personne ne répond en 5 minutes ? Vous êtes remboursé automatiquement.", urgent_no_pro_refunded: "Aucun professionnel n'a accepté à temps. Vous n'avez pas été débité — la réservation a été annulée.", urgent_claim_now: "Accepter maintenant — prioritaire", urgent_claimed: "Accepté ✓ — rendez-vous sur place", urgent_claim_failed: "Cette demande vient d'être prise par un autre professionnel", sos_banner_title: "Urgence ?", sos_banner_sub: "Intervention rapide, 24h/24", urgency_title: "Niveau d'urgence", urg_normal: "Planifié", urg_normal_desc: "À l'heure choisie", urg_urgent: "Urgent", urg_urgent_desc: "Aujourd'hui, au plus vite", urg_emergency: "Urgence", urg_emergency_desc: "Intervention immédiate", urg_normal_banner: "Prestation planifiée au créneau choisi — tarif standard.", urg_urgent_banner: "Réponse rapide (~30 min) · léger supplément d'urgence.", urg_emergency_banner: "Intervention prioritaire (~10 min) · supplément d'urgence. Pour une urgence vitale, appelez le 141 (SAMU).", care_type: "Type de soin", date: "Date", time_lbl: "Heure", time_now: "Maintenant", reservation_cancelled_title: "Réservation annulée", reservation_cancelled_refund_msg: "Cette réservation vient d'être annulée. %d MAD ont été remboursés.", reservation_cancelled_msg: "Cette réservation vient d'être annulée.", waiting_payment_title: "En attente du paiement", waiting_payment_msg: "Le patient a accepté votre offre mais n'a pas encore terminé le paiement. La carte et l'itinéraire apparaîtront dès que le paiement sera confirmé.", report_problem_title: "Signaler un problème", report_patient_title: "Signaler le patient", report_problem_link: "Signaler un problème", report_patient_link: "Signaler le patient", report_problem_short: "Signaler", report_category_label: "Que s'est-il passé ?", report_description_label: "Décrivez ce qui s'est passé", report_description_ph: "Donnez le plus de détails possible — l'heure, ce que vous avez constaté, qui était impliqué…", report_min_chars: "10 caractères minimum.", report_evidence_label: "Photos (optionnel)", add_photo: "Ajouter", send_report: "Envoyer le signalement", report_sent_title: "Signalement envoyé", report_sent_msg: "Notre équipe a été notifiée et va l'examiner. Vous serez informé(e) une fois traité.", dispute_cat_late_arrival: "Retard", dispute_cat_no_show: "Absence", dispute_cat_safety_incident: "Incident de sécurité", dispute_cat_poor_conduct: "Comportement", dispute_cat_quality_issue: "Qualité du service", dispute_cat_price_dispute: "Litige de prix", dispute_cat_property_damage: "Dommage matériel", dispute_cat_harassment: "Harcèlement", dispute_cat_identity_mismatch: "Mauvaise personne", dispute_cat_payment_issue: "Problème de paiement", dispute_cat_other: "Autre", too_far_to_arrive: "Vous êtes encore trop loin du patient pour confirmer votre arrivée. Rapprochez-vous et réessayez.",
     publish_request: "Publier ma demande", my_appointments_full: "Mes rendez-vous", book_appointment: "Prendre un rendez-vous",
     status_open: "En attente", status_matched: "Confirmé", status_en_route: "En route", status_in_progress: "En cours", status_completed: "Terminé", status_expired: "Expiré", status_cancelled: "Annulé",
     tab_upcoming: "À venir", tab_history: "Historique", no_upcoming: "Aucun rendez-vous à venir", no_history: "Aucun historique",
@@ -2176,7 +2254,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     level_beginner: "Débutant", level_intermediate: "Intermédiaire", level_advanced: "Avancé", level_all: "Tous niveaux",
     please_login_book: "Veuillez vous connecter pour réserver", already_enrolled: "Déjà inscrit", already_enrolled_msg: "Vous êtes déjà inscrit à cette séance de yoga",
     yoga_class: "Classe de yoga", in_person: "En personne", booking_sent_admin: "La réservation a été envoyée à l'administrateur.",
-    cannot_create_booking: "Impossible de créer la réservation. Essayez plus tard.", reviews_word: "avis", sessions_label: "séances", about_label: "À propos", specialties_label: "Spécialités", consultation_modes: "Modes de consultation", psychologists_title: "Psychologues", psychologists_subtitle: "Choisissez votre thérapeute", psychologists_map_hint: "Touchez un psychologue sur la carte", no_psychologists: "Aucun psychologue disponible", kine_subtitle: "Séance unique ou programme de rééducation", plan_program: "Programme (suivi)", single_desc: "Trouvez un kiné près de vous, maintenant", find_kine: "Trouver un kiné", choose_kine: "Choisissez votre kiné", reeducation_type: "Type de rééducation", focus_motor: "Rééducation motrice", focus_resp: "Rééducation respiratoire", focus_drainage: "Drainage lymphatique", focus_massage: "Massage thérapeutique", focus_mobil: "Mobilisation articulaire", focus_postop: "Soins post-opératoires", recurrence_daily: "Chaque jour", start_date: "Date de début", program_summary: "Récapitulatif du programme", first_session_charged: "Séance 1 réglée à la réservation · les suivantes avant chaque séance", reserve_program: "Réserver le programme", appointment_type: "Type de rendez-vous", plan_single: "Séance unique", plan_recurring: "Récurrent", plan_subscription: "Abonnement", recurrence_label: "Fréquence", recurrence_weekly: "Hebdomadaire", recurrence_biweekly: "Toutes les 2 sem.", recurrence_monthly: "Mensuel", sessions_count: "Nombre de séances", session_mode_label: "Mode de consultation", mode_in_person: "Présentiel", mode_remote: "À distance", per_session: "séance", remote_session_note: "Séance à distance — utilisez l'un des liens ci-dessous à l'heure du rendez-vous.", first_session_date: "Date de la 1ʳᵉ séance", pay_and_book: "Payer et réserver", session_short: "Séance", session_paid: "Payée ✓", pay_session: "Payer", appointment_confirmed: "Rendez-vous confirmé", join_session: "Rejoindre la séance", link_not_set: "Le professionnel n'a pas encore configuré ce lien.", link_open_failed: "Impossible d'ouvrir le lien.", join_google_meet: "Rejoindre Google Meet", join_zoom: "Rejoindre Zoom", upcoming_sessions: "Prochaines séances", series_payment_note: "Chaque séance est réglée avant le rendez-vous.", view_appointment: "Voir le rendez-vous", meet_link_label: "Lien Google Meet", zoom_link_label: "Lien Zoom", remote_links_hint: "Ces liens seront proposés à vos patients pour les séances à distance.", book_appointment_short: "Prendre un RDV",
+    cannot_create_booking: "Impossible de créer la réservation. Essayez plus tard.", reviews_word: "avis", sessions_label: "séances", about_label: "À propos", specialties_label: "Spécialités", consultation_modes: "Modes de consultation", psychologists_title: "Psychologues", psychologists_subtitle: "Choisissez votre thérapeute", psychologists_map_hint: "Choisissez un psychologue sur la carte", no_psychologists: "Aucun psychologue disponible", kine_subtitle: "Séance unique ou programme de rééducation", plan_program: "Programme (suivi)", single_desc: "Trouvez un kiné près de vous, maintenant", find_kine: "Trouver un kiné", choose_kine: "Choisissez votre kiné", reeducation_type: "Type de rééducation", focus_motor: "Rééducation motrice", focus_resp: "Rééducation respiratoire", focus_drainage: "Drainage lymphatique", focus_massage: "Massage thérapeutique", focus_mobil: "Mobilisation articulaire", focus_postop: "Soins post-opératoires", recurrence_daily: "Chaque jour", start_date: "Date de début", program_summary: "Récapitulatif du programme", first_session_charged: "Séance 1 réglée à la réservation · les suivantes avant chaque séance", reserve_program: "Réserver le programme", appointment_type: "Type de rendez-vous", plan_single: "Séance unique", plan_recurring: "Récurrent", plan_subscription: "Abonnement", recurrence_label: "Fréquence", recurrence_weekly: "Hebdomadaire", recurrence_biweekly: "Toutes les 2 sem.", recurrence_monthly: "Mensuel", sessions_count: "Nombre de séances", session_mode_label: "Mode de consultation", mode_in_person: "Présentiel", mode_remote: "À distance", per_session: "séance", remote_session_note: "Séance à distance — utilisez l'un des liens ci-dessous à l'heure du rendez-vous.", first_session_date: "Date de la 1ʳᵉ séance", pay_and_book: "Payer et réserver", session_short: "Séance", session_paid: "Payée ✓", pay_session: "Payer", appointment_confirmed: "Rendez-vous confirmé", join_session: "Rejoindre la séance", link_not_set: "Le professionnel n'a pas encore configuré ce lien.", link_open_failed: "Impossible d'ouvrir le lien.", join_google_meet: "Rejoindre Google Meet", join_zoom: "Rejoindre Zoom", upcoming_sessions: "Prochaines séances", series_payment_note: "Chaque séance est réglée avant le rendez-vous.", view_appointment: "Voir le rendez-vous", meet_link_label: "Lien Google Meet", zoom_link_label: "Lien Zoom", remote_links_hint: "Ces liens seront proposés à vos patients pour les séances à distance.", book_appointment_short: "Prendre un RDV",
     clinical_psychologist: "Psychologue Clinicienne", consultation: "Consultation", consultation_type: "Type de consultation",
     choose_date: "Choisir une date", available_slots: "Créneaux disponibles", video: "Vidéo",
     nav_on: "sur", nav_take: "Prenez", nav_start: "C'est parti", nav_roundabout: "Prenez le rond-point", nav_turn_left: "Tournez à gauche", nav_turn_right: "Tournez à droite", nav_straight: "Continuez tout droit",
@@ -2505,7 +2583,7 @@ const DICT: Record<Locale, Record<string, string>> = {
   
     // --- extracted from hardcoded strings ---
     terms_accept: "J'accepte les conditions",
-    terms_governing_law: "Ces conditions sont régies par le droit marocain. Version du 8 août 2026.",
+    terms_governing_law: "Ces conditions sont régies par le droit marocain. Version du 17 septembre 2026.",
     terms_quit: "Quitter",
     terms_read_again: "Relire",
     terms_refuse: "Je refuse",
@@ -2577,6 +2655,18 @@ const DICT: Record<Locale, Record<string, string>> = {
     previous_month: "Mois précédent",
   },
   dar: {
+    map_updating: "L'kharita katt7ayed…",
+    explore_search_ph: "9alleb 3la pro", explore_available_now: "Mwjoudin daba", explore_filter_all: "Kollchi",
+    change_password: "Bedel l'mot de passe", change_password_sub: "Khtar mot de passe jdid l'compte dyalek.",
+    current_password: "Mot de passe daba", confirm_new_password: "3awed ktbo",
+    password_changed: "Tbedel l'mot de passe \u2713", passwords_dont_match: "Jouj mots de passe machi kif kif.",
+    password_same_as_old: "Khass ykoun mokhtalef 3la l'qdim.", current_password_wrong: "Mot de passe daba machi s7i7.",
+    biometric_title: "L'fet7 b l'basma", biometric_sub: "Tlab l'basma kol mrra tfte7 CareLink.",
+    biometric_unavailable: "Ma kayna 7tta basma m3ayra f had l'telephone.",
+    biometric_prompt: "Akked chkoun nta", biometric_enabled: "Tfe33el l'fet7 b l'basma \u2713",
+    biometric_disabled: "Tw9ef l'fet7 b l'basma", biometric_failed: "Ma tkedatch l'identite.",
+    account_security: "L'amane", gender_mr: "Si", gender_mrs: "Lalla",
+    map_departure: "Bdaya", map_arrival: "Wsoul",
     welcome: "Mer7ba", booking: "Reservation", bookings_mine: "Reservations dyali", new_request: "Talab jdid", accept: "Qbal",
     cancel: "Sale", chat: "Hadra", profile: "Profil dyali", notifications: "Tanbihat", sign_out: "Khrouj", pay_now: "Khelles daba",
     rate_pro: "Qaiyem l'pro", yoga: "Yoga", nurse: "Mmared", psychologist: "Psy", physio: "Kiné", home: "L'accueil",
@@ -2590,7 +2680,7 @@ const DICT: Record<Locale, Record<string, string>> = {
     security_privacy: "L'aman", personal_info: "Ma3loumat", saved_addresses: "L'3anawin", payment_wallet: "Khlass",
     patient_policy: "Siyasat l mrid", help_faq: "Musa3ada", online: "Online", offline: "Offline", login: "Dkhoul", signup: "Tsjil", email: "Email",
     password: "L'password", forgot_password: "Nsiti l'password?", continue_google: "Kmml m3a Google", continue_apple: "Kmml m3a Apple",
-    or_with_email: "wla b l'email", welcome_back: "Mer7ba bik!", login_subtitle: "Dkhol bach t'wsel l'services dyalek", saved: "Tsjjel",
+    or_with_email: "wla b l'email", welcome_back: "Fer7anin bik m3ana", login_subtitle: "Dkhol bach t'wsel l'services dyalek", saved: "Tsjjel",
     request_sent: "Tsifet t'talab", offer_accepted: "L3ard tqbel", payment_confirmed: "Khlass t'akked",
   },
 };
@@ -2618,6 +2708,15 @@ const I18nContext = createContext<Ctx>({
 let activeLocale: Locale = "fr";
 export function tr(k: string): string {
   return DICT[activeLocale]?.[k] ?? DICT.en[k] ?? DICT.fr[k] ?? k;
+}
+
+/**
+ * The active locale, for non-React code that formats rather than translates —
+ * `Intl`/`toLocaleDateString` callers living at module scope, which cannot read
+ * the context but must not fall back to French while the app is in Arabic.
+ */
+export function activeLocaleTag(): Locale {
+  return activeLocale;
 }
 
 /**

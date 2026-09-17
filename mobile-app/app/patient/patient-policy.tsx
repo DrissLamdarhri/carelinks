@@ -12,6 +12,7 @@ import { ArrowLeft, FileText, Shield } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { intlLocale } from "@/lib/date-utils";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
 import { showToast } from "@/lib/toast";
@@ -21,7 +22,7 @@ const POLICY_VERSION = "2026-05-30";
 const POLICY_KEYS = ["policy_p1", "policy_p2", "policy_p3"];
 
 export default function PatientPolicyScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,7 @@ export default function PatientPolicyScreen() {
   };
 
   const acceptedLabel = acceptedAt
-    ? t("pay_accepted_on").replace("%s", new Date(acceptedAt).toLocaleDateString("fr-MA"))
+    ? t("pay_accepted_on").replace("%s", new Date(acceptedAt).toLocaleDateString(intlLocale(locale)))
     : t("not_accepted");
   const versionLabel = t("pay_version").replace("%s", acceptedVersion ?? POLICY_VERSION);
 

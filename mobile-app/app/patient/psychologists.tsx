@@ -1,22 +1,76 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Dimensions, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, ChevronRight, MapPin, Star, Video } from "lucide-react-native";
+import { ArrowLeft, ChevronRight, MapPin, MousePointerClick, Star, Video } from "lucide-react-native";
 import { Colors, Shadows } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { CareLinkMapView } from "@/components/map/CareLinkMapView";
 import type { ProPinData } from "@/components/map/Pins";
+import { RefreshOrb, RefreshingPill, type RefreshState } from "@/components/RefreshOrb";
 
 const PSY = "#7C3AED";
 const PSY_DARK = "#5B21B6";
 const CENTER = { lat: 33.8935, lng: -5.5473 }; // Meknès
 const SCREEN_W = Dimensions.get("window").width;
-const CARD_W = SCREEN_W - 56;
-const GAP = 12;
+const CARD_PAD = 28;
+const CARD_W = SCREEN_W - CARD_PAD * 2;
+/**
+ * Equal to the side padding, deliberately.
+ *
+ * The next card starts at `CARD_PAD + CARD_W + GAP`. With GAP < CARD_PAD that
+ * lands inside the screen and leaks a strip of the following card — which in
+ * an RTL layout is the purple avatar, since the avatar sits on the card's
+ * trailing edge. A 16px band of purple at the screen edge reads as a rendering
+ * fault, not as "there is another card". At GAP === CARD_PAD the next card
+ * begins exactly at the screen edge: still one swipe away, never half-shown.
+ */
+const GAP = CARD_PAD;
+
+/** Height the card strip occupies, so the camera can centre above it. */
+const CARD_BOTTOM_SPACE = 150;
 
 type Psy = { id: string; name: string; focus: string; price: number; rating: number; reviews: number; lat: number; lng: number };
+
+/**
+ * The "what do I do here" line.
+ *
+ * Fades and lifts in rather than being painted on, so it reads as guidance
+ * offered to you rather than another label stuck to the chrome. Compact and
+ * high on the map, where it cannot cover the pins it is talking about.
+ */
+function MapHint({ text }: { text: string }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const id = setTimeout(
+      () =>
+        Animated.timing(v, {
+          toValue: 1,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(),
+      260,
+    );
+    return () => clearTimeout(id);
+  }, [v]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        s.hintWrap,
+        { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }] },
+      ]}
+    >
+      <View style={s.hintIcon}>
+        <MousePointerClick size={12} color={PSY} strokeWidth={2.6} />
+      </View>
+      <Text style={s.hintTxt}>{text}</Text>
+    </Animated.View>
+  );
+}
 const initials = (n: string) => n.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
 const shortOf = (n: string) => n.replace(/^Dr\.?\s*/i, "").split(" ")[0] ?? n;
 
@@ -32,35 +86,52 @@ export default function PsychologistsMapScreen() {
   const [extra, setExtra] = useState<Psy[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Camera target — the chosen specialist, or the city centre before a choice. */
+  const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
+  const [recenterKey, setRecenterKey] = useState(0);
+  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
   const scrollRef = useRef<ScrollView>(null);
+
+  /**
+   * Pulled out of the mount effect so the refresh control can re-run exactly
+   * the same query. It throws on failure rather than swallowing: the orb needs
+   * a rejection to know not to show a success tick for a refresh that failed.
+   */
+  const load = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("v_pros_public")
+      .select("id, full_name, rating_avg, rating_count, hourly_rate_mad, lat, lng")
+      .eq("specialty", "psychologist");
+    if (error) throw error;
+    setExtra(
+      (data ?? [])
+        .filter((p: any) => p.lat != null && p.lng != null)
+        .map((p: any) => ({
+          id: p.id,
+          name: p.full_name ?? t("clinical_psychologist"),
+          focus: t("clinical_psychologist"),
+          price: p.hourly_rate_mad ?? 0,
+          rating: p.rating_avg ?? 0,
+          reviews: p.rating_count ?? 0,
+          lat: p.lat,
+          lng: p.lng,
+        })),
+    );
+  }, [t]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const { data } = await supabase
-          .from("v_pros_public")
-          .select("id, full_name, rating_avg, rating_count, hourly_rate_mad, lat, lng")
-          .eq("specialty", "psychologist");
-        const mapped: Psy[] = (data ?? [])
-          .filter((p: any) => p.lat != null && p.lng != null)
-          .map((p: any) => ({
-            id: p.id,
-            name: p.full_name ?? t("clinical_psychologist"),
-            focus: t("clinical_psychologist"),
-            price: p.hourly_rate_mad ?? 0,
-            rating: p.rating_avg ?? 0,
-            reviews: p.rating_count ?? 0,
-            lat: p.lat,
-            lng: p.lng,
-          }));
-        if (active) setExtra(mapped);
+        await load();
+      } catch {
+        if (active) setExtra([]);
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [load]);
 
   const all = extra;
   const pins: ProPinData[] = useMemo(
@@ -73,11 +144,21 @@ export default function PsychologistsMapScreen() {
     [all]
   );
 
-  const selectAt = (id: string) => {
+  /**
+   * Picking a specialist moves three things together: the marker's active
+   * state, the camera, and the card. Previously only the card moved, so a tap
+   * on a pin at the edge of the map left the pin where it was and silently
+   * changed a card at the bottom of the screen.
+   */
+  const selectAt = useCallback((id: string) => {
     setSelectedId(id);
     const idx = all.findIndex((p) => p.id === id);
-    if (idx >= 0) scrollRef.current?.scrollTo({ x: idx * (CARD_W + GAP), animated: true });
-  };
+    if (idx < 0) return;
+    scrollRef.current?.scrollTo({ x: idx * (CARD_W + GAP), animated: true });
+    const p = all[idx];
+    setFocus({ lat: p.lat, lng: p.lng });
+    setRecenterKey((k) => k + 1);
+  }, [all]);
 
   const openProfile = (p: Psy) =>
     router.push(`/patient/psychologist-profile?id=${encodeURIComponent(p.id)}&name=${encodeURIComponent(p.name)}&price=${p.price}&focus=${encodeURIComponent(p.focus)}&rating=${p.rating}&reviews=${p.reviews}`);
@@ -85,12 +166,18 @@ export default function PsychologistsMapScreen() {
   return (
     <View style={s.root}>
       <CareLinkMapView
-        center={CENTER}
+        center={focus ?? CENTER}
         pros={pins}
         radiusKm={9}
         primaryColor={PSY}
         selectedProId={selectedId}
-        onSelectPro={(id) => selectAt(id)}
+        onSelectPro={selectAt}
+        recenterKey={recenterKey}
+        // Close enough to read the neighbourhood, wide enough to keep the other
+        // specialists in view — picking one should not hide the alternatives.
+        focusZoom={focus ? 12.5 : undefined}
+        // The card strip owns the bottom of the screen; centre above it.
+        paddingBottomPx={CARD_BOTTOM_SPACE}
       />
 
       {/* Floating glass top bar */}
@@ -103,7 +190,27 @@ export default function PsychologistsMapScreen() {
           <View style={s.countDot}><Text style={s.countTxt}>{all.length}</Text></View>
         </LinearGradient>
       </View>
-      <Text style={s.hint}>{t("psychologists_map_hint")}</Text>
+      <MapHint text={t("psychologists_map_hint")} />
+
+      {/* Sits on the map rather than in the chrome: it refreshes what the map
+          shows, and it is placed clear of the title pill and the card strip so
+          it never covers a specialist. */}
+      <RefreshOrb
+        onRefresh={load}
+        accent={PSY}
+        accentDark={PSY_DARK}
+        label={t("refresh")}
+        onStateChange={setRefreshState}
+        style={s.refresh}
+      />
+
+      <RefreshingPill
+        text={t("map_updating")}
+        accent={PSY}
+        accentDark={PSY_DARK}
+        visible={refreshState === "loading"}
+        style={s.refreshPill}
+      />
 
       {/* Bottom carousel synced with pins */}
       <ScrollView
@@ -117,7 +224,10 @@ export default function PsychologistsMapScreen() {
         onMomentumScrollEnd={(e) => {
           const idx = Math.round(e.nativeEvent.contentOffset.x / (CARD_W + GAP));
           const p = all[idx];
-          if (p) setSelectedId(p.id);
+          // Swiping the strip is the same act as tapping the pin, so it moves
+          // the map and the marker's active state too — otherwise the card and
+          // the map disagree about who is selected.
+          if (p && p.id !== selectedId) selectAt(p.id);
         }}
       >
         {/* An empty carousel with an empty map used to be impossible, because
@@ -170,9 +280,25 @@ const s = StyleSheet.create({
   titlePillTxt: { color: "#fff", fontSize: 15, fontWeight: "800" },
   countDot: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   countTxt: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  hint: { position: "absolute", top: 100, alignSelf: "center", color: PSY_DARK, backgroundColor: "rgba(255,255,255,0.9)", overflow: "hidden", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, fontSize: 11.5, fontWeight: "700", zIndex: 20 },
+  hintWrap: {
+    position: "absolute", top: 104, alignSelf: "center", zIndex: 20,
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "#FFFFFF", borderRadius: 999,
+    paddingLeft: 7, paddingRight: 14, paddingVertical: 6,
+    maxWidth: SCREEN_W - 48,
+    ...Shadows.md,
+  },
+  hintIcon: {
+    width: 22, height: 22, borderRadius: 11, backgroundColor: "#F3EEFE",
+    alignItems: "center", justifyContent: "center",
+  },
+  hintTxt: { color: PSY_DARK, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  refresh: { position: "absolute", top: 146, right: 14, zIndex: 25 },
+  // Above the card strip, on the opposite side to the refresh control so the
+  // caption and the button it describes are both readable at once.
+  refreshPill: { position: "absolute", bottom: CARD_BOTTOM_SPACE + 14, left: 20, zIndex: 25 },
   carousel: { position: "absolute", bottom: 28, left: 0, right: 0, zIndex: 20 },
-  carouselContent: { paddingHorizontal: 28, gap: GAP },
+  carouselContent: { paddingHorizontal: CARD_PAD, gap: GAP },
   card: { width: CARD_W, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 20, padding: 14, borderWidth: 2, borderColor: "transparent", ...Shadows.lg },
   cardOn: { borderColor: PSY },
   cardAvatar: { width: 54, height: 54, borderRadius: 17, alignItems: "center", justifyContent: "center" },

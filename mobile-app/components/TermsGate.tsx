@@ -17,6 +17,18 @@
  *    a choice and ignores one of the answers has not obtained consent, it has
  *    obtained a click — and that is exactly the argument that would be made
  *    against it later.
+ *
+ *  • This screen is ALWAYS in Arabic, whatever language the rest of the app
+ *    is set to. Arabic is the official language of Morocco and the language
+ *    these terms are binding in; a user who set the interface to French or
+ *    English has expressed a preference about menus, not a waiver of the
+ *    language their contract is written in. Rendering it in the UI locale also
+ *    meant the agreement a patient accepted depended on a settings toggle,
+ *    which is not a property a contract should have.
+ *
+ *    This is why there is no language picker here even though every string on
+ *    the screen exists in three languages: a chooser would reintroduce exactly
+ *    the ambiguity the rule removes.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -36,7 +48,7 @@ import {
 } from "react-native";
 import { ArrowDown, ShieldCheck } from "lucide-react-native";
 import { Colors, Shadows } from "@/lib/colors";
-import { useI18n } from "@/lib/i18n";
+import { trFor } from "@/lib/i18n";
 import { hasAcceptedLocally, markAcceptedLocally, recordAcceptance } from "@/lib/terms";
 
 const SECTIONS = [
@@ -49,8 +61,18 @@ const SECTIONS = [
   "terms_s7", // your data
 ] as const;
 
+/**
+ * The language this gate is written in, fixed.
+ *
+ * `trFor` is the existing helper for rendering text in a locale other than the
+ * active one — it was built so a device could write a message another user
+ * would read. The same need applies here: the contract has its own language,
+ * independent of whoever is holding the phone.
+ */
+const TERMS_LOCALE = "ar";
+
 export function TermsGate({ children }: { children: React.ReactNode }) {
-  const { t, locale } = useI18n();
+  const t = (k: string) => trFor(TERMS_LOCALE, k);
   const [checked, setChecked] = useState(false);
   const [visible, setVisible] = useState(false);
   const [readToEnd, setReadToEnd] = useState(false);
@@ -76,9 +98,18 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [visible]);
 
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  /**
+   * Did this scroll position reach the end?
+   *
+   * The tolerance is generous on purpose. Sub-pixel layout, the bottom padding
+   * and Android's overscroll all mean the arithmetic can sit a few points short
+   * of `contentSize.height` at the visual bottom, and every one of those points
+   * is a user staring at the end of the document with the button still greyed
+   * out — which is exactly what the field recording shows.
+   */
+  const checkEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 24) setReadToEnd(true);
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 48) setReadToEnd(true);
   }, []);
 
   const onContentSize = useCallback((_w: number, h: number) => {
@@ -97,10 +128,13 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     // Local first: the durable write needs a session, which usually does not
     // exist yet at first launch. syncPendingAcceptance() reconciles at sign-in.
     await markAcceptedLocally();
-    await recordAcceptance(locale);
+    // The locale that goes in the record is the one the text was SHOWN in, not
+    // the app's UI language — that is the version of the document this person
+    // actually read and agreed to.
+    await recordAcceptance(TERMS_LOCALE);
     setVisible(false);
     setSaving(false);
-  }, [locale, saving]);
+  }, [saving]);
 
   const refuse = useCallback(() => {
     Alert.alert(t("terms_refuse_title"), t("terms_refuse_body"), [
@@ -117,6 +151,11 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     ]);
   }, [t]);
 
+  // Arabic, so right-to-left — unconditionally, and set here rather than
+  // inherited, because the gate is mounted above the router and outside
+  // whatever direction the app shell is applying to itself.
+  const rtl = { textAlign: "right", writingDirection: "rtl" } as const;
+
   // Don't flash the app underneath before we know whether to block it.
   if (!checked) {
     return (
@@ -131,30 +170,35 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
       {children}
       <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={() => {}}>
         <View style={s.root}>
-          <View style={s.header}>
+          <View style={[s.header, s.rtlBlock]}>
             <View style={s.iconWrap}>
               <ShieldCheck size={22} color={Colors.primary} />
             </View>
-            <Text style={s.title}>{t("terms_title")}</Text>
-            <Text style={s.sub}>{t("terms_sub")}</Text>
+            <Text style={[s.title, rtl]}>{t("terms_title")}</Text>
+            <Text style={[s.sub, rtl]}>{t("terms_sub")}</Text>
           </View>
 
           <ScrollView
             style={s.scroll}
             contentContainerStyle={s.scrollBody}
-            onScroll={onScroll}
-            scrollEventThrottle={64}
+            onScroll={checkEnd}
+            // The two events that are guaranteed to fire at the FINAL resting
+            // offset. Without them a fling that coasts to the bottom can leave
+            // the gate shut until the user scrolls again — the reported bug.
+            onMomentumScrollEnd={checkEnd}
+            onScrollEndDrag={checkEnd}
+            scrollEventThrottle={16}
             onContentSizeChange={onContentSize}
             onLayout={onViewportLayout}
             showsVerticalScrollIndicator
           >
             {SECTIONS.map((k) => (
               <View key={k} style={s.section}>
-                <Text style={s.sectionTitle}>{t(`${k}_title`)}</Text>
-                <Text style={s.sectionBody}>{t(`${k}_body`)}</Text>
+                <Text style={[s.sectionTitle, rtl]}>{t(`${k}_title`)}</Text>
+                <Text style={[s.sectionBody, rtl]}>{t(`${k}_body`)}</Text>
               </View>
             ))}
-            <Text style={s.lastUpdated}>{t("terms_governing_law")}</Text>
+            <Text style={[s.lastUpdated, rtl]}>{t("terms_governing_law")}</Text>
           </ScrollView>
 
           <View style={s.footer}>
@@ -198,12 +242,26 @@ const s = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: "800", color: Colors.textPrimary },
   sub: { fontSize: 13.5, color: Colors.textMuted, marginTop: 5, lineHeight: 19 },
+  // Arabic reads right-to-left, so the block starts on the right too — the
+  // shield icon included. Text alignment alone would leave it stranded left.
+  rtlBlock: { alignItems: "flex-end" },
   scroll: { flex: 1 },
   scrollBody: { padding: 22, paddingBottom: 30 },
   section: { marginBottom: 18 },
-  sectionTitle: { fontSize: 14.5, fontWeight: "800", color: Colors.textPrimary, marginBottom: 6 },
-  sectionBody: { fontSize: 13.5, color: Colors.textMuted, lineHeight: 20 },
-  lastUpdated: { fontSize: 12, color: Colors.textSubtle, marginTop: 6, lineHeight: 18 },
+  // Deliberately quiet.
+  //
+  // These clauses have to say "danger vital", "hémorragie", "perte de
+  // conscience" and "CareLink n'est pas un service d'urgence" — necessary
+  // wording that, set at full contrast, reads to a patient as a warning about
+  // the app they are one tap from using. Dropping the weight lets the page be
+  // skimmed calmly and read closely by whoever wants to.
+  //
+  // Not faded to the point of being hard to read: consent that cannot be read
+  // is not consent, and this screen's whole purpose is to be able to show that
+  // the text was legible and was scrolled. 0.75 is the floor for that.
+  sectionTitle: { fontSize: 14.5, fontWeight: "700", color: Colors.textMuted, marginBottom: 6, opacity: 0.9 },
+  sectionBody: { fontSize: 13.5, color: Colors.textMuted, lineHeight: 20, opacity: 0.75 },
+  lastUpdated: { fontSize: 12, color: Colors.textSubtle, marginTop: 6, lineHeight: 18, opacity: 0.75 },
   footer: {
     backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: Colors.border,
     paddingHorizontal: 22, paddingTop: 12, paddingBottom: 28, gap: 10,

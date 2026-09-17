@@ -44,6 +44,11 @@ export default function PatientAuthFlowScreen() {
   const [resending, setResending] = useState(false);
 
   // Registration form state
+  // Civility, stored as female | male — the vocabulary patients.gender already
+  // uses in the profile editor, so signup and the profile screen agree.
+  // Presented as Mme / M., which is how a Moroccan patient expects to be
+  // addressed.
+  const [gender, setGender] = useState<"female" | "male" | "">("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -70,6 +75,7 @@ export default function PatientAuthFlowScreen() {
   }, [password]);
 
   const regValid =
+    gender !== "" &&
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
     phone.trim().length > 0 &&
@@ -140,7 +146,7 @@ export default function PatientAuthFlowScreen() {
         password,
         fullName,
         "patient",
-        { phone, city }
+        { phone, city, gender }
       );
       if (needsEmailConfirmation) {
         setNeedsConfirmation(true);
@@ -419,6 +425,30 @@ export default function PatientAuthFlowScreen() {
             <View style={styles.sepLine} />
           </View>
 
+          {/* Civility */}
+          <View style={styles.field}>
+            <Text style={styles.label}>{t("gender")}</Text>
+            <View style={styles.genderRow}>
+              {([["female", "gender_mrs"], ["male", "gender_mr"]] as const).map(([value, key]) => {
+                const active = gender === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => setGender(value)}
+                    activeOpacity={0.85}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    style={[styles.genderChip, active && styles.genderChipActive]}
+                  >
+                    <Text style={[styles.genderText, active && styles.genderTextActive]}>
+                      {t(key)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Name fields */}
           <View style={{ flexDirection: "row", gap: 12 }}>
             <View style={[styles.field, { flex: 1 }]}>
@@ -664,6 +694,17 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   cityTagActive: { backgroundColor: Colors.primary },
+  // Two wide targets rather than city-sized tags: there are only ever two
+  // answers, and it is the first thing the form asks for.
+  genderRow: { flexDirection: "row", gap: 10 },
+  genderChip: {
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: "white",
+    alignItems: "center",
+  },
+  genderChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  genderText: { fontSize: 14, fontWeight: "600", color: Colors.textMuted },
+  genderTextActive: { color: "white", fontWeight: "700" },
   cityTagText: { fontSize: 12, color: Colors.textMuted },
   cityTagTextActive: { color: "white", fontWeight: "600" },
   forgot: { textAlign: "right", marginBottom: 14, color: Colors.primary, fontSize: 13, fontWeight: "500" },

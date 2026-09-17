@@ -35,6 +35,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
+import { intlLocale } from "@/lib/date-utils";
+import { haptics } from "@/lib/haptics";
 import { getServiceTheme, isKineService } from "@/lib/service-theme";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/db/dal";
@@ -142,7 +144,7 @@ const times = [NOW_SLOT, "08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "
 
 export default function PatientRequestScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const params = useLocalSearchParams<{ service?: string; care?: string }>();
   const { user } = useAuth();
   const { ensureVerified } = useIdentityGate();
@@ -196,6 +198,17 @@ export default function PatientRequestScreen() {
   const [selectedProId, setSelectedProId] = useState<string | null>(null);
   const [fitAllKey, setFitAllKey] = useState(0);
   const [locating, setLocating] = useState(false);
+  /** GPS uncertainty of the last fix, for the halo under the dot. */
+  const [accuracyM, setAccuracyM] = useState<number | null>(null);
+  /**
+   * Bumped on every successful locate.
+   *
+   * The camera's framing effect keys off the centre coordinate, so a second tap
+   * from the same spot changed nothing and the map sat still — the user tapped
+   * "find me", the app found them, and nothing moved. This gives the camera an
+   * explicit "go there again" signal independent of whether the position did.
+   */
+  const [recenterKey, setRecenterKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -205,7 +218,7 @@ export default function PatientRequestScreen() {
     for (const d of dates) {
       const dt = new Date(d.isoDate);
       const key = `${dt.getFullYear()}-${dt.getMonth()}`;
-      const label = dt.toLocaleString("fr-MA", { month: "long", year: "numeric" });
+      const label = dt.toLocaleString(intlLocale(locale), { month: "long", year: "numeric" });
       if (!map.has(key)) map.set(key, { key, label, dates: [] as any });
       map.get(key)!.dates.push(d);
     }
@@ -276,6 +289,9 @@ export default function PatientRequestScreen() {
   const handleLocate = async () => {
     if (locating) return;
     setErrorMessage(null);
+    // Immediate acknowledgement — the GPS fix can take a second or two, and a
+    // button that does nothing until it returns feels broken.
+    haptics.light();
 
     // Permission gate with rationale + denied CTA (Play Store requirement).
     const status = await geo.getPermissionStatus();
@@ -306,7 +322,10 @@ export default function PatientRequestScreen() {
     setLocating(true);
     try {
       const current = await geo.getCurrentPosition();
-      setCoords(current);
+      setCoords({ lat: current.lat, lng: current.lng });
+      setAccuracyM(current.accuracyM);
+      // Fly even when the coordinate is unchanged.
+      setRecenterKey((k) => k + 1);
       await syncAddressFromCoords(current.lat, current.lng);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t("pat_gps_unavailable"));
@@ -459,6 +478,20 @@ export default function PatientRequestScreen() {
             patient={coords ?? undefined}
             pros={effectivePros}
             radiusKm={5}
+            // Once the patient's real position is known, frame the street they
+            // are standing on. Without this the camera settles at the zoom that
+            // fits the 5 km search radius, so "Position GPS détectée" moved the
+            // map to their district and looked like it had not zoomed at all.
+            focusZoom={coords ? 16.2 : undefined}
+            // The sheet covers everything below SHEET_EXPANDED_TOP, so without
+            // this the camera centres the patient underneath it.
+            paddingBottomPx={SCREEN_H - SHEET_EXPANDED_TOP}
+            accuracyM={accuracyM}
+            recenterKey={recenterKey}
+            // Clear of the search bar (top: 14, height 44). Underneath it the
+            // compass was both invisible and untappable, because the bar is an
+            // absolutely-positioned view that swallows the touch.
+            compassPosition={{ top: 72, left: 16 }}
             primaryColor={theme.primary}
             selectedProId={selectedProId}
             onSelectPro={(id) => setSelectedProId((prev) => (prev === id ? null : id))}
