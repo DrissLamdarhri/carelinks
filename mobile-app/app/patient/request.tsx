@@ -32,7 +32,15 @@ import {
 } from "lucide-react-native";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { Colors, KineColors, DEFAULT_AVATAR } from "@/lib/colors";
 import { useI18n } from "@/lib/i18n";
 import { intlLocale } from "@/lib/date-utils";
@@ -177,15 +185,49 @@ export default function PatientRequestScreen() {
   // Coming from the home screen's "Pansement" / "Injection" quick chips: jump
   // straight to that care type instead of leaving the picker on its default.
   const careParamAppliedRef = useRef(false);
+  /** Pulses the care field once, so the pre-selection is seen rather than assumed. */
+  const carePulse = useSharedValue(0);
+
   useEffect(() => {
-    if (careParamAppliedRef.current || !params.care || careTypes.length === 0) return;
+    if (careParamAppliedRef.current || !params.care) return;
+    /**
+     * Wait for the real list.
+     *
+     * `careTypes` serves a hardcoded fallback while the query is in flight, and
+     * that fallback starts with "Pansement" — so tapping the Pansement chip
+     * matched index 0, latched, and then the database list arrived sorted
+     * alphabetically, where index 0 is something else entirely. The user tapped
+     * Pansement and the picker showed "Prise de sang".
+     *
+     * The index is only meaningful against the list that will actually be
+     * rendered, so nothing is applied until that list is the real one. If the
+     * query fails, `loading` still clears and the fallback is then genuinely
+     * what is on screen, so the match is correct again.
+     */
+    if (loading || careTypes.length === 0) return;
     const wanted = params.care.toLowerCase();
     const idx = careTypes.findIndex((c) => c.toLowerCase().includes(wanted));
-    if (idx >= 0) {
-      setCareType(idx);
-      careParamAppliedRef.current = true;
-    }
-  }, [params.care, careTypes]);
+    if (idx < 0) return;
+    careParamAppliedRef.current = true;
+    setCareType(idx);
+    // Arriving on a form with a field already filled in is disorienting unless
+    // the form shows you it did it. One soft pulse, then never again.
+    carePulse.value = withSequence(
+      withTiming(1, { duration: 260 }),
+      withDelay(420, withTiming(0, { duration: 520 })),
+    );
+  }, [params.care, careTypes, loading, carePulse]);
+  const carePulseStyle = useAnimatedStyle(() => ({
+    borderRadius: 14,
+    borderWidth: carePulse.value * 2,
+    borderColor: theme.primary,
+    backgroundColor: interpolateColor(
+      carePulse.value,
+      [0, 1],
+      ["rgba(255,255,255,0)", theme.surfaceStrong],
+    ),
+  }));
+
   const [showCareMenu, setShowCareMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
@@ -687,13 +729,15 @@ export default function PatientRequestScreen() {
         ) : (
           /* Nurse: dropdown */
           <>
-            <TouchableOpacity
-              style={styles.selector}
-              onPress={() => setShowCareMenu((v) => !v)}
-            >
-              <Text style={styles.selectorText}>{careTypeLabel(careTypes[careType], t)}</Text>
-              <ChevronDown size={18} color={Colors.textMuted} />
-            </TouchableOpacity>
+            <Animated.View style={carePulseStyle}>
+              <TouchableOpacity
+                style={styles.selector}
+                onPress={() => setShowCareMenu((v) => !v)}
+              >
+                <Text style={styles.selectorText}>{careTypeLabel(careTypes[careType], t)}</Text>
+                <ChevronDown size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </Animated.View>
             {showCareMenu ? (
               <View style={styles.menu}>
                 {careTypes.map((item, index) => (

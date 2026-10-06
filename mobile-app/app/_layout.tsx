@@ -55,6 +55,30 @@ function DeepLinkHandler() {
           pathname: "/auth/callback",
           params: { oauthUrl: encodeURIComponent(url) },
         });
+        return;
+      }
+      /**
+       * Password recovery, warm start.
+       *
+       * This branch did not exist, and that is why "forgot password" appeared
+       * to do nothing: the email arrived and the link fired, but if the app was
+       * already running, the URL reached this listener, matched nothing, and
+       * was dropped. The app came to the foreground on whatever screen it was
+       * last on and the user saw no reset form at all.
+       *
+       * Cold start happened to work, because Expo Router resolves the initial
+       * URL to the route itself and the screen reads it with getInitialURL().
+       * That is exactly the kind of difference that makes a bug read as
+       * "sometimes it works" — it depended on whether the app was already open.
+       *
+       * The recovery code is passed through rather than relying on the screen
+       * to re-read the URL: a warm start never fires getInitialURL() again.
+       */
+      if (url.includes("auth/reset-password")) {
+        router.push({
+          pathname: "/auth/reset-password",
+          params: { recoveryUrl: encodeURIComponent(url) },
+        });
       }
     });
 

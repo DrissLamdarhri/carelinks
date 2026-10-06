@@ -9,6 +9,7 @@ import {
   MapPin,
   Clock,
   Bell,
+  Lock,
   Shield,
   LogOut,
   Star,
@@ -35,6 +36,7 @@ const menuItems: { icon: typeof User; labelKey: string; color: string; route?: s
   { icon: CreditCard, labelKey: "pro_bank_account", color: "#6BB8C8" },
   { icon: MapPin, labelKey: "coverage_zone", color: "#8B5CF6" },
   { icon: Clock, labelKey: "availability", color: "#6BB8C8" },
+  { icon: Lock, labelKey: "account_security", color: "#16A34A", route: "/pro/security" },
   { icon: Bell, labelKey: "notifications", color: "#0D0870", route: "/pro/notifications" },
   { icon: Shield, labelKey: "pro_verification_menu", color: "#0D0870", route: "/pro/kyc" },
 ];

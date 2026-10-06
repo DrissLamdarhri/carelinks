@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { CheckCircle2, Eye, EyeOff, Lock } from "lucide-react-native";
 import { supabase } from "@/lib/supabase";
@@ -26,6 +26,10 @@ import { useI18n } from "@/lib/i18n";
 export default function ResetPasswordScreen() {
   const { t } = useI18n();
   const router = useRouter();
+  // Handed over by the root deep-link handler on a WARM start, where
+  // getInitialURL() returns the link the app was originally launched with (or
+  // nothing) rather than the recovery link that just arrived.
+  const { recoveryUrl } = useLocalSearchParams<{ recoveryUrl?: string }>();
   const { updatePassword } = useAuth();
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
@@ -67,6 +71,9 @@ export default function ResetPasswordScreen() {
     void (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session && active) setReady(true);
+      if (typeof recoveryUrl === "string" && recoveryUrl) {
+        await handleUrl(decodeURIComponent(recoveryUrl));
+      }
       await handleUrl(await Linking.getInitialURL());
       if (active) setChecking(false);
     })();
@@ -75,7 +82,7 @@ export default function ResetPasswordScreen() {
       active = false;
       sub.remove();
     };
-  }, []);
+  }, [recoveryUrl]);
 
   const valid = password.length >= 6 && password === confirm;
 
