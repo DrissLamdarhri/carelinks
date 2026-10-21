@@ -18,8 +18,32 @@ carelinks/
 ```
 
 **Supabase project ref:** `wjhzrovmktekfcjohhrw`. `make-server-aa5d1aa6` (the retired KV backend's Edge
-Function, referenced below as historical context) was undeployed on 2026-07-26 — the only Edge Function
-running today is `notify-pro-status`.
+Function, referenced below as historical context) was undeployed on 2026-07-26. Edge Functions today:
+`notify-pro-status` (approval/rejection notifications) and `analyze-pro-document` (Claude-vision KYC
+OCR — deployed but unused since 0057, see below).
+
+### KYC OCR (CIN + diploma) — free, in the admin's browser
+
+```
+pro uploads CIN / diploma ─▶ insert pro_documents
+   └─ trigger trg_analyze_pro_document (0057) ─▶ pro_document_ocr row 'pending'
+web admin opens the file (ProfessionalsManager)
+   ├─ pending / never analysed / "Relancer l'analyse"
+   │    └─ src/lib/browserOcr.ts: download (admin session) ─▶ pdf.js (PDF) ─▶ grayscale/contrast
+   │       ─▶ Tesseract.js fra+ara ─▶ kycOcrParse.ts (CIN n°, dates, diploma title, school, year, raw text)
+   │       ─▶ upsert pro_document_ocr 'done' | 'error' (admin write policy, 0057)
+   ├─ Realtime on pro_document_ocr (+ 3 s polling while another admin is analysing)
+   └─ crossCheckKyc() (src/lib/kycCrossCheck.ts ≡ mobile-app/lib/kycCrossCheck.ts): profile name found
+      in the CIN / diploma text, CIN expiry, CIN n° CIN ↔ diploma, diploma ↔ specialty → ✅ / ⚠️ / ✗
+mobile admin (app/admin/kyc.tsx): displays the same results (Tesseract can't run in React Native)
+```
+
+Approval stays a human click. Tesseract reads raw text, so names are *searched* in it (fuzzy, one OCR
+slip tolerated) rather than parsed; "not found" is a ⚠️, never a ✗. `pro_document_ocr` is a separate,
+admin-only table on purpose (the pro can update their own `pro_documents` rows). The Claude path
+(0056 trigger + `analyze-pro-document`, needs `ANTHROPIC_API_KEY` with credit) reads names in Latin and
+Arabic properly; re-enable it by re-running 0056's trigger function. Data-protection notes:
+[tech-debt-and-security.md](tech-debt-and-security.md).
 
 > The ~30 markdown files at the repo root (`ADMIN_*`, `PROFESSIONAL_*`, `DOCUMENT_UPLOAD_*`, `*_FIX*.md`,
 > etc.) are point-in-time implementation notes from prior work. They are historical, sometimes stale, and

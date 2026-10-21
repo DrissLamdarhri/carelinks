@@ -33,10 +33,20 @@ The **entire product runs on direct Postgres tables** under RLS + Realtime: the
 The old **Figma-Make KV edge function** (`make-server-aa5d1aa6`) + its
 `kv_store_aa5d1aa6` blob table + the web "iPhone preview" patient/pro demo have
 been **retired** — there is no second backend. The deployed leftover function was
-undeployed and the table-drop migration (`0033`) shipped on 2026-07-26; there is
-now exactly one Edge Function, **`notify-pro-status`** — approval/rejection
-notifications (in-app + email + WhatsApp), called by every admin approve/reject
-action. Details: [`docs/architecture.md`](docs/architecture.md).
+undeployed and the table-drop migration (`0033`) shipped on 2026-07-26. Edge
+Functions: **`notify-pro-status`** — approval/rejection notifications (in-app +
+email + WhatsApp), called by every admin approve/reject action; and
+**`analyze-pro-document`** — Claude-vision OCR of a pro's CIN + diploma; deployed but
+**unused since migration `0057`**: the KYC OCR now runs for free in the web admin's
+browser (Tesseract.js + pdf.js, `src/lib/browserOcr.ts` → `kycOcrParse.ts`) when a
+professional's file is opened, and is saved in the admin-only `pro_document_ocr` table
+(the upload trigger just marks documents `pending`). The mobile admin only displays
+results. Cross-check: the pure `kycCrossCheck.ts` (same file in `src/lib/` and
+`mobile-app/lib/` — edit both). Details: [`docs/architecture.md`](docs/architecture.md).
+
+**Never add a `pnpm-workspace.yaml` (or lockfile) inside `mobile-app/`**: it makes
+`mobile-app` its own workspace, so any pnpm command run there installs a second
+dependency tree and the app crashes ("two views with the same name DebuggingOverlay").
 
 ## Commands
 

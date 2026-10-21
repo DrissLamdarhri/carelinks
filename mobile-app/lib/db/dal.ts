@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { tracking } from "./tracking";
+import type { KycOcrRow } from "@/lib/kycCrossCheck";
 import type {
   Address,
   Bid,
@@ -124,6 +125,23 @@ export const proDocuments = {
   },
   async create(input: Omit<ProDocument, "id" | "uploaded_at" | "is_verified">): Promise<ProDocument> {
     return unwrap(await supabase.from("pro_documents").insert(input).select("*").single());
+  },
+};
+
+/**
+ * OCR of KYC documents (pro_document_ocr, migrations 0056 + 0057) — admin
+ * only. The analysis runs in the web admin's browser (Tesseract.js); the
+ * mobile admin only reads the results.
+ */
+export const kycOcr = {
+  async listForPros(proIds: UUID[]): Promise<KycOcrRow[]> {
+    if (!proIds.length) return [];
+    return unwrap(
+      await supabase
+        .from("pro_document_ocr")
+        .select("document_id,professional_id,ocr_status,ocr_data,ocr_error,ocr_model,requested_at,ocr_at")
+        .in("professional_id", proIds)
+    ) as KycOcrRow[];
   },
 };
 
@@ -688,6 +706,7 @@ export const db = {
   patients,
   pros,
   proDocuments,
+  kycOcr,
   bookings,
   bids,
   messages,
