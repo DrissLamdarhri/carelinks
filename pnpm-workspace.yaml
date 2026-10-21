@@ -2,6 +2,23 @@ packages:
   - '.'
   - 'shared'
   - 'mobile-app'
+  - 'ocr-app'
 allowBuilds:
   '@tailwindcss/oxide': true
   esbuild: true
+  # Its only script is an opencollective donation banner.
+  tesseract.js: false
+  # Moved from mobile-app/pnpm-workspace.yaml — that file made mobile-app its
+  # own workspace root, so any pnpm command run there (even
+  # `pnpm -C mobile-app type-check`) installed a second, private dependency
+  # tree, which crashed the app ("two views with the same name DebuggingOverlay").
+  unrs-resolver: true
+overrides:
+  '@react-native/metro-config': '0.81.5'
+  # expo@54 declares @expo/dom-webview as an optional '*' peer, so an install
+  # can pull the latest (SDK 56+) build, whose native code needs a newer
+  # expo-modules-core and crashes the dev client at startup
+  # (NoClassDefFoundError: expo/modules/kotlin/types/AnyTypeCache).
+  # 0.2.x is the SDK 54 line.
+  '@expo/dom-webview': '~0.2.8'
+virtualStoreDir: 'C:\carelinks\s'

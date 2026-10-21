@@ -39,6 +39,7 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { usePickDocument, uploadDocumentToSupabase } from "@/lib/hooks/useDocumentPicker";
 import { useTakePhoto, uploadSelfieToSupabase } from "@/lib/hooks/useCameraPicker";
+import { shrinkImageForUpload } from "@/lib/image-resize";
 import { showToast } from "@/lib/toast";
 import { careTypeLabel } from "@/lib/care-label";
 
@@ -142,8 +143,6 @@ export default function ProRegistrationScreen() {
   const [selfie, setSelfie] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [selfiePath, setSelfiePath] = useState<string | null>(null);
-  const [ocrRunning, setOcrRunning] = useState(false);
-  const [ocrDone, setOcrDone] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
 
   // Pending uploads picked before sign-up; actual upload happens AFTER sign-up (when user id is available)
@@ -183,37 +182,33 @@ export default function ProRegistrationScreen() {
     // Actual upload to Supabase Storage will happen after successful sign-up (so we have the user id).
     setUploading(type);
     try {
+      // Photos are shrunk to ~1600 px before upload (faster upload and OCR).
+      // The real OCR runs server-side once the documents are uploaded, which
+      // happens after sign-up (see analyze-pro-document).
       if (type === "selfie") {
         const photo = await useTakePhoto();
         if (!photo) { setUploading(null); return; }
+        const small = await shrinkImageForUpload(photo.uri, "image/jpeg");
         const fileName = `selfie-${Date.now()}.jpg`;
-        setPendingUploads((p) => [...p, { type: "selfie", uri: photo.uri, name: fileName, mimeType: "image/jpeg" }]);
+        setPendingUploads((p) => [...p.filter((u) => u.type !== "selfie"), { type: "selfie", uri: small.uri, name: fileName, mimeType: small.mimeType }]);
         setSelfie(true);
-        setSelfieUrl(photo.uri);
+        setSelfieUrl(small.uri);
         showToast(t("selfie_added"));
       } else {
         const doc = await usePickDocument();
         if (!doc) { setUploading(null); return; }
-        setPendingUploads((p) => [...p, { type, uri: doc.uri, name: doc.name, mimeType: doc.type }]);
+        const small = await shrinkImageForUpload(doc.uri, doc.type);
+        const name = small.uri === doc.uri ? doc.name : `${doc.name.replace(/\.[^.]+$/, "")}.jpg`;
+        // A re-pick replaces the earlier file of the same type
+        setPendingUploads((p) => [...p.filter((u) => u.type !== type), { type, uri: small.uri, name, mimeType: small.mimeType }]);
         if (type === "diploma") {
           setDiploma(true);
-          setDiplomaUrl(doc.uri);
+          setDiplomaUrl(small.uri);
         } else if (type === "cin") {
           setCin(true);
-          setCinUrl(doc.uri);
+          setCinUrl(small.uri);
         }
         showToast(t("document_added"));
-      }
-
-      // Trigger OCR check if diploma and CIN are both present locally
-      const nextDiploma = type === "diploma" ? true : diploma;
-      const nextCin = type === "cin" ? true : cin;
-      if (nextDiploma && nextCin) {
-        setOcrRunning(true);
-        setTimeout(() => {
-          setOcrRunning(false);
-          setOcrDone(true);
-        }, 1700);
       }
     } catch (error) {
       console.error("handleUpload error:", error);
@@ -305,7 +300,9 @@ export default function ProRegistrationScreen() {
           formData.append("file", {
             uri: pending.uri,
             name: pending.name,
-            type: pending.type === "selfie" ? "image/jpeg" : "image/jpeg",
+            // The picked file's real type — hardcoding image/jpeg stored PDFs
+            // as images, and they then opened blank in the admin panel.
+            type: pending.mimeType || "image/jpeg",
           } as any);
 
           const storageUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${storagePath}`;
@@ -667,22 +664,11 @@ export default function ProRegistrationScreen() {
               onPress={() => handleUpload("selfie")}
             />
 
-            {ocrRunning ? (
-              <View style={styles.ocrCard}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <View>
-                  <Text style={styles.ocrTitle}>{t("analyzing")}</Text>
-                  <Text style={styles.ocrText}>{t("ocr_verification")}</Text>
-                </View>
-              </View>
-            ) : null}
-
-            {ocrDone ? (
+            {diploma && cin ? (
               <View style={styles.verifiedCard}>
                 <CheckCircle2 size={18} color={Colors.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.verifiedTitle}>{t("docs_auto_verified")}</Text>
-                  <Text style={styles.verifiedText}>{t("info_matches")}</Text>
+                  <Text style={styles.verifiedText}>{t("reg_docs_received_review")}</Text>
                 </View>
               </View>
             ) : null}
@@ -813,7 +799,6 @@ export default function ProRegistrationScreen() {
               <DocStatus label={getDiplomaTitle()} ok={diploma} />
               <DocStatus label={t("id_card")} ok={cin} />
               <DocStatus label={t("verification_selfie")} ok={selfie} />
-              <DocStatus label={t("ocr_verification_short")} ok={ocrDone} />
             </View>
 
             <TouchableOpacity style={styles.termsCard} onPress={() => setAgreed((v) => !v)}>

@@ -4,6 +4,7 @@
  * the old web patient/pro preview demo).
  */
 import { supabase } from "./supabase";
+import type { KycOcrRow } from "./kycCrossCheck";
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,40 @@ export async function getProDocumentsAdmin(proId: string) {
     .order("uploaded_at", { ascending: false });
   if (error) throw new Error(error.message);
   return { documents: data ?? [] };
+}
+
+// OCR of a pro's CIN + diploma. Since migration 0057 it runs in the admin's
+// browser (Tesseract.js, src/lib/browserOcr.ts) and the result is saved here;
+// the upload trigger only marks documents 'pending'. pro_document_ocr is
+// admin-only (read + write), keyed by document id.
+export const KYC_OCR_COLUMNS =
+  "document_id,professional_id,ocr_status,ocr_data,ocr_error,ocr_model,requested_at,ocr_at";
+
+export async function getKycOcr(proIds: string[]): Promise<KycOcrRow[]> {
+  if (!proIds.length) return [];
+  const { data, error } = await supabase
+    .from("pro_document_ocr")
+    .select(KYC_OCR_COLUMNS)
+    .in("professional_id", proIds);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as KycOcrRow[];
+}
+
+/** Save an OCR result computed in the browser (admin write policy, 0057). */
+export async function saveKycOcr(row: KycOcrRow): Promise<KycOcrRow> {
+  const { data, error } = await supabase
+    .from("pro_document_ocr")
+    .upsert(row, { onConflict: "document_id" })
+    .select(KYC_OCR_COLUMNS)
+    .single();
+  if (error) {
+    throw new Error(
+      /row-level security|permission/i.test(error.message)
+        ? "Résultat non enregistré : appliquez la migration 0057_pro_documents_ocr_browser.sql dans Supabase."
+        : error.message,
+    );
+  }
+  return data as KycOcrRow;
 }
 
 export async function getAdminSignedUrl(path: string, bucket = "pro-documents", expires = 60) {

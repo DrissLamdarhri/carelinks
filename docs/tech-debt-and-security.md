@@ -37,6 +37,33 @@ fallback means a misconfigured env var fails silently instead of loudly. A MapTi
 committed in plaintext across every profile in `mobile-app/eas.json` — low severity (map tiles, not user
 data), worth rotating once usage/billing matters since anyone with repo access can spend the quota.
 
+## 🔴 Personal data: KYC OCR of national ID cards (CIN)
+
+Since migrations `0056` + `0057`, every CIN and diploma a pro uploads is read by OCR when an admin opens
+the file, and the fields read (CIN number, dates, diploma title, **the full raw text of the card**) are
+stored in `public.pro_document_ocr.ocr_data`. That is identity data under **Moroccan law 09-08**. Since
+`0057` the OCR runs in the admin's browser (Tesseract.js): the documents are **not** sent to a third
+party (only Tesseract's engine/language files are fetched from a CDN). If the Claude path
+(`analyze-pro-document`) is ever re-enabled, the documents go to Anthropic (US) — a **transfer abroad**
+to a processor, see "Provider side" below. Before production:
+
+- **Consent / information** — the pro sign-up (step "documents") and the privacy policy must say that the
+  documents are read automatically by a third-party AI provider to help the KYC review, and why. Check
+  whether the processing needs a **CNDP declaration/authorisation** (identity data + transfer outside
+  Morocco) and record the legal basis.
+- **Retention** — nothing deletes these rows or files today. Decide a duration (e.g. delete `ocr_data` once
+  the pro is approved or rejected + N months, and the files in `pro-documents` when an account is closed)
+  and implement it (scheduled SQL job, like `0053`). `on delete cascade` already removes the OCR row when the
+  `pro_documents` row goes.
+- **Access** — `pro_document_ocr` is admin-only (RLS select/insert/update for `current_role() = 'admin'`,
+  nothing for pros); the upload trigger (security definer) only inserts `pending`. Keep it that way: OCR
+  columns on `pro_documents` would be writable by the pro (`prodocs_owner_all`). `ANTHROPIC_API_KEY` and
+  the service role key live only in Edge Function secrets — never in the app or the web bundle.
+- **Provider side (only if the Claude path is re-enabled)** — check Anthropic's data-retention terms for
+  API inputs on the account used (and a DPA), and use a dedicated API key for this function so it can be
+  revoked on its own.
+- **Logs** — the function logs document ids and error messages, never the fields read; keep it that way.
+
 ## 🟠 Architectural debt
 
 - **Two unsynchronized backends / data models** — KV Edge Function (Path A, web/demo) vs. relational tables
